@@ -189,6 +189,24 @@ tbody tr.active {
   background: var(--accent-soft);
 }
 
+.row-file {
+  align-items: center;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 76px minmax(0, 1fr);
+}
+
+.row-thumb,
+.card-thumb {
+  aspect-ratio: 16 / 9;
+  background: #d0d5dd;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  display: block;
+  object-fit: cover;
+  width: 100%;
+}
+
 .caption-cell {
   font-weight: 650;
 }
@@ -282,6 +300,52 @@ h2 {
   width: 100%;
 }
 
+.poster {
+  display: grid;
+  min-height: 220px;
+  position: relative;
+  width: 100%;
+}
+
+.poster img {
+  filter: brightness(0.72);
+  height: 100%;
+  inset: 0;
+  object-fit: cover;
+  position: absolute;
+  width: 100%;
+}
+
+.poster-actions {
+  align-content: center;
+  display: grid;
+  gap: 10px;
+  justify-items: center;
+  padding: 24px;
+  position: relative;
+  text-align: center;
+  z-index: 1;
+}
+
+.poster-actions a,
+.load-preview {
+  background: rgb(255 255 255 / 92%);
+  border: 1px solid rgb(255 255 255 / 70%);
+  border-radius: 7px;
+  color: var(--ink);
+  cursor: pointer;
+  font: inherit;
+  min-height: 40px;
+  min-width: 190px;
+  padding: 8px 12px;
+}
+
+.poster-actions a {
+  align-items: center;
+  display: inline-flex;
+  justify-content: center;
+}
+
 .preview .empty {
   color: #d0d5dd;
   padding: 24px;
@@ -362,12 +426,17 @@ dd {
     border-bottom: 1px solid var(--line);
     cursor: pointer;
     display: grid;
-    gap: 6px;
+    gap: 8px;
+    grid-template-columns: 96px minmax(0, 1fr);
     padding: 12px;
   }
 
   .recording-card.active {
     background: var(--accent-soft);
+  }
+
+  .card-thumb {
+    grid-row: span 3;
   }
 
   .card-main {
@@ -383,6 +452,10 @@ dd {
 
   .preview iframe {
     height: 260px;
+  }
+
+  .poster {
+    min-height: 210px;
   }
 
   .meta-grid,

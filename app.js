@@ -5,6 +5,7 @@ const state = {
   visible: [],
   selectedFile: "",
   mediaMode: "video",
+  previewLoaded: false,
 };
 
 const els = {
@@ -78,6 +79,14 @@ function drivePreview(fileId) {
   return `https://drive.google.com/file/d/${fileId}/preview`;
 }
 
+function escapeHtml(value) {
+  return String(value || "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+}
+
 function formatTotal(seconds) {
   const total = Math.round(seconds);
   const hours = Math.floor(total / 3600);
@@ -135,14 +144,23 @@ function mediaTags(row) {
   return `<div class="media-tags">${tags.join("")}</div>`;
 }
 
+function thumbnail(row) {
+  return row.thumbnail || `thumbs/${row.file.replace(/\.MOV$/i, "")}.jpg`;
+}
+
 function renderList() {
   els.table.innerHTML = state.visible
     .map(
       (row) => `
         <tr class="${row.file === state.selectedFile ? "active" : ""}" data-file="${row.file}">
-          <td><strong>${row.file}</strong><br><span class="muted">${row.recorded_create_date}</span></td>
-          <td class="caption-cell">${row.caption}</td>
-          <td>${row.length}</td>
+          <td>
+            <div class="row-file">
+              <img class="row-thumb" src="${escapeHtml(thumbnail(row))}" alt="">
+              <div><strong>${escapeHtml(row.file)}</strong><br><span class="muted">${escapeHtml(row.recorded_create_date)}</span></div>
+            </div>
+          </td>
+          <td class="caption-cell">${escapeHtml(row.caption)}</td>
+          <td>${escapeHtml(row.length)}</td>
           <td>${mediaTags(row)}</td>
         </tr>
       `,
@@ -153,11 +171,12 @@ function renderList() {
     .map(
       (row) => `
         <article class="recording-card ${row.file === state.selectedFile ? "active" : ""}" data-file="${row.file}">
+          <img class="card-thumb" src="${escapeHtml(thumbnail(row))}" alt="">
           <div class="card-main">
-            <strong>${row.caption}</strong>
-            <span class="pill">${row.length}</span>
+            <strong>${escapeHtml(row.caption)}</strong>
+            <span class="pill">${escapeHtml(row.length)}</span>
           </div>
-          <span class="muted">${row.file} · ${row.recorded_create_date}</span>
+          <span class="muted">${escapeHtml(row.file)} · ${escapeHtml(row.recorded_create_date)}</span>
           ${mediaTags(row)}
         </article>
       `,
@@ -174,6 +193,23 @@ function renderPreview(row) {
 
   if (!fileId) {
     els.preview.innerHTML = `<div class="empty">No ${label} file is available for this row.</div>`;
+    return;
+  }
+
+  if (!state.previewLoaded) {
+    els.preview.innerHTML = `
+      <div class="poster">
+        <img src="${escapeHtml(thumbnail(row))}" alt="">
+        <div class="poster-actions">
+          <button class="load-preview" type="button" data-load-preview>
+            Load embedded ${label} player
+          </button>
+          <a href="${escapeHtml(state.mediaMode === "video" ? row.video_url : row.audio_url)}" target="_blank" rel="noopener">
+            Open in Drive
+          </a>
+        </div>
+      </div>
+    `;
     return;
   }
 
@@ -234,11 +270,18 @@ function render() {
 }
 
 function selectFile(file) {
+  if (state.selectedFile !== file) state.previewLoaded = false;
   state.selectedFile = file;
   render();
 }
 
 document.addEventListener("click", (event) => {
+  if (event.target.closest("[data-load-preview]")) {
+    state.previewLoaded = true;
+    renderDetail();
+    return;
+  }
+
   const row = event.target.closest("[data-file]");
   if (row) selectFile(row.dataset.file);
 });
@@ -249,11 +292,13 @@ document.addEventListener("click", (event) => {
 
 els.videoTab.addEventListener("click", () => {
   state.mediaMode = "video";
+  state.previewLoaded = false;
   renderDetail();
 });
 
 els.audioTab.addEventListener("click", () => {
   state.mediaMode = "audio";
+  state.previewLoaded = false;
   renderDetail();
 });
 
