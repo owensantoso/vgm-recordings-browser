@@ -5,8 +5,13 @@ const state = {
   visible: [],
   selectedFile: "",
   mediaMode: "video",
-  previewLoaded: false,
+  audioFile: "",
+  isPlaying: false,
+  selectedDownloads: new Set(),
+  selectMode: false,
 };
+
+const audio = new Audio();
 
 const els = {
   search: document.querySelector("#search"),
@@ -33,6 +38,12 @@ const els = {
   audioTab: document.querySelector("#audio-tab"),
   videoLink: document.querySelector("#video-link"),
   audioLink: document.querySelector("#audio-link"),
+  videoDownload: document.querySelector("#video-download"),
+  audioDownload: document.querySelector("#audio-download"),
+  selectMode: document.querySelector("#select-mode"),
+  selectVisible: document.querySelector("#select-visible"),
+  downloadSelected: document.querySelector("#download-selected"),
+  selectedCount: document.querySelector("#selected-count"),
 };
 
 function parseCsv(text) {
@@ -77,6 +88,10 @@ function parseCsv(text) {
 
 function drivePreview(fileId) {
   return `https://drive.google.com/file/d/${fileId}/preview`;
+}
+
+function driveDownload(fileId) {
+  return `https://drive.google.com/uc?export=download&id=${fileId}`;
 }
 
 function escapeHtml(value) {
@@ -128,6 +143,10 @@ function applyFilters() {
     caption: (a, b) => a.caption.localeCompare(b.caption),
   };
   state.visible.sort(sorters[els.sort.value]);
+  const visibleFiles = new Set(state.visible.map((row) => row.file));
+  state.selectedDownloads.forEach((file) => {
+    if (!visibleFiles.has(file)) state.selectedDownloads.delete(file);
+  });
 
   if (!state.visible.some((row) => row.file === state.selectedFile)) {
     state.selectedFile = state.visible[0]?.file || "";
@@ -148,16 +167,63 @@ function thumbnail(row) {
   return row.thumbnail || `thumbs/${row.file.replace(/\.MOV$/i, "")}.jpg`;
 }
 
+function rowForFile(file) {
+  return state.rows.find((row) => row.file === file);
+}
+
+function audioSource(row) {
+  return row.audio_file_id ? driveDownload(row.audio_file_id) : "";
+}
+
+function mediaDownload(row) {
+  return driveDownload(row.video_file_id || row.audio_file_id);
+}
+
+function playerMarkup(row) {
+  if (state.audioFile !== row.file || row.has_audio !== "yes") return "";
+  const current = Number.isFinite(audio.currentTime) ? audio.currentTime : 0;
+  const duration = Number(row.duration_seconds || audio.duration || 0);
+  const remaining = Math.max(0, duration - current);
+  return `
+    <div class="inline-player" data-player="${escapeHtml(row.file)}">
+      <input class="seek" type="range" min="0" max="${duration || 0}" step="0.1" value="${current}" aria-label="Seek ${escapeHtml(row.caption)}">
+      <div class="player-times">
+        <span>${formatTotal(current)}</span>
+        <span>-${formatTotal(remaining)}</span>
+      </div>
+      <div class="player-actions">
+        <button class="icon-button" type="button" data-skip="-15" aria-label="Back 15 seconds">-15</button>
+        <button class="play-button" type="button" data-play="${escapeHtml(row.file)}" aria-label="${state.isPlaying ? "Pause" : "Play"} ${escapeHtml(row.caption)}">
+          ${state.isPlaying ? "Pause" : "Play"}
+        </button>
+        <button class="icon-button" type="button" data-skip="15" aria-label="Forward 15 seconds">+15</button>
+        <a class="download-link" href="${escapeHtml(driveDownload(row.audio_file_id))}" download target="_blank" rel="noopener">Download audio</a>
+      </div>
+    </div>
+  `;
+}
+
 function renderList() {
   els.table.innerHTML = state.visible
     .map(
       (row) => `
         <tr class="${row.file === state.selectedFile ? "active" : ""}" data-file="${row.file}">
+          <td class="select-col">
+            ${state.selectMode ? `<input class="select-box" type="checkbox" data-select-file="${escapeHtml(row.file)}" ${state.selectedDownloads.has(row.file) ? "checked" : ""} aria-label="Select ${escapeHtml(row.caption)}">` : ""}
+          </td>
           <td>
             <div class="row-file">
               <img class="row-thumb" src="${escapeHtml(thumbnail(row))}" alt="">
-              <div><strong>${escapeHtml(row.file)}</strong><br><span class="muted">${escapeHtml(row.recorded_create_date)}</span></div>
+              <div>
+                <strong>${escapeHtml(row.file)}</strong><br>
+                <span class="muted">${escapeHtml(row.recorded_create_date)}</span>
+                <div class="row-links">
+                  ${row.has_audio === "yes" ? `<button type="button" data-play="${escapeHtml(row.file)}">${state.audioFile === row.file && state.isPlaying ? "Pause audio" : "Play audio"}</button>` : ""}
+                  <a href="${escapeHtml(mediaDownload(row))}" download target="_blank" rel="noopener">Download</a>
+                </div>
+              </div>
             </div>
+            ${playerMarkup(row)}
           </td>
           <td class="caption-cell">${escapeHtml(row.caption)}</td>
           <td>${escapeHtml(row.length)}</td>
@@ -171,6 +237,7 @@ function renderList() {
     .map(
       (row) => `
         <article class="recording-card ${row.file === state.selectedFile ? "active" : ""}" data-file="${row.file}">
+          ${state.selectMode ? `<input class="select-box card-select" type="checkbox" data-select-file="${escapeHtml(row.file)}" ${state.selectedDownloads.has(row.file) ? "checked" : ""} aria-label="Select ${escapeHtml(row.caption)}">` : ""}
           <img class="card-thumb" src="${escapeHtml(thumbnail(row))}" alt="">
           <div class="card-main">
             <strong>${escapeHtml(row.caption)}</strong>
@@ -178,10 +245,17 @@ function renderList() {
           </div>
           <span class="muted">${escapeHtml(row.file)} · ${escapeHtml(row.recorded_create_date)}</span>
           ${mediaTags(row)}
+          <div class="card-actions">
+            ${row.has_audio === "yes" ? `<button type="button" data-play="${escapeHtml(row.file)}">${state.audioFile === row.file && state.isPlaying ? "Pause" : "Play audio"}</button>` : ""}
+            <a href="${escapeHtml(mediaDownload(row))}" download target="_blank" rel="noopener">Download</a>
+          </div>
+          ${playerMarkup(row)}
         </article>
       `,
     )
     .join("");
+
+  renderSelection();
 }
 
 function renderPreview(row) {
@@ -193,23 +267,6 @@ function renderPreview(row) {
 
   if (!fileId) {
     els.preview.innerHTML = `<div class="empty">No ${label} file is available for this row.</div>`;
-    return;
-  }
-
-  if (!state.previewLoaded) {
-    els.preview.innerHTML = `
-      <div class="poster">
-        <img src="${escapeHtml(thumbnail(row))}" alt="">
-        <div class="poster-actions">
-          <button class="load-preview" type="button" data-load-preview>
-            Load embedded ${label} player
-          </button>
-          <a href="${escapeHtml(state.mediaMode === "video" ? row.video_url : row.audio_url)}" target="_blank" rel="noopener">
-            Open in Drive
-          </a>
-        </div>
-      </div>
-    `;
     return;
   }
 
@@ -248,9 +305,15 @@ function renderDetail() {
   els.selectedDevice.textContent = row.device;
 
   els.videoLink.href = row.video_url || "#";
+  els.videoLink.textContent = row.video_file_id ? "Open video" : "Open video";
   els.videoLink.classList.toggle("disabled", !row.video_url);
   els.audioLink.href = row.audio_url || "#";
+  els.audioLink.textContent = row.audio_file_id ? "Open audio" : "Open audio";
   els.audioLink.classList.toggle("disabled", !row.audio_url);
+  els.videoDownload.href = row.video_file_id ? driveDownload(row.video_file_id) : "#";
+  els.videoDownload.classList.toggle("disabled", !row.video_file_id);
+  els.audioDownload.href = row.audio_file_id ? driveDownload(row.audio_file_id) : "#";
+  els.audioDownload.classList.toggle("disabled", !row.audio_file_id);
 
   renderPreview(row);
 }
@@ -270,20 +333,105 @@ function render() {
 }
 
 function selectFile(file) {
-  if (state.selectedFile !== file) state.previewLoaded = false;
   state.selectedFile = file;
+  if (!state.audioFile) state.audioFile = file;
   render();
 }
 
+function renderSelection() {
+  const count = state.selectedDownloads.size;
+  const allVisibleSelected = state.visible.length > 0 && state.visible.every((row) => state.selectedDownloads.has(row.file));
+  els.selectMode.textContent = state.selectMode ? "Done" : "Select";
+  els.selectVisible.textContent = allVisibleSelected ? "Clear shown" : "Select all shown";
+  els.selectVisible.hidden = !state.selectMode;
+  els.downloadSelected.hidden = !state.selectMode;
+  els.selectedCount.hidden = !state.selectMode;
+  els.selectedCount.textContent = `${count} selected`;
+  els.downloadSelected.disabled = count === 0;
+}
+
+function togglePlay(file) {
+  const row = rowForFile(file);
+  if (!row || row.has_audio !== "yes") return;
+
+  if (state.audioFile === file && state.isPlaying) {
+    audio.pause();
+    return;
+  }
+
+  if (state.audioFile !== file || audio.src !== audioSource(row)) {
+    audio.src = audioSource(row);
+    audio.currentTime = 0;
+  }
+
+  state.audioFile = file;
+  state.selectedFile = file;
+  audio.play().catch(() => {
+    state.isPlaying = false;
+    render();
+  });
+  render();
+}
+
+function skipAudio(seconds) {
+  audio.currentTime = Math.max(0, Math.min(audio.duration || Number.MAX_SAFE_INTEGER, audio.currentTime + seconds));
+  renderList();
+}
+
+function downloadSelected() {
+  [...state.selectedDownloads]
+    .map(rowForFile)
+    .filter(Boolean)
+    .forEach((row) => {
+      const link = document.createElement("a");
+      link.href = mediaDownload(row);
+      link.target = "_blank";
+      link.rel = "noopener";
+      link.download = "";
+      document.body.append(link);
+      link.click();
+      link.remove();
+    });
+}
+
 document.addEventListener("click", (event) => {
-  if (event.target.closest("[data-load-preview]")) {
-    state.previewLoaded = true;
-    renderDetail();
+  if (event.target.closest("[data-select-file]")) {
+    event.stopPropagation();
+    return;
+  }
+
+  const playButton = event.target.closest("[data-play]");
+  if (playButton) {
+    event.stopPropagation();
+    togglePlay(playButton.dataset.play);
+    return;
+  }
+
+  const skipButton = event.target.closest("[data-skip]");
+  if (skipButton) {
+    event.stopPropagation();
+    skipAudio(Number(skipButton.dataset.skip));
     return;
   }
 
   const row = event.target.closest("[data-file]");
   if (row) selectFile(row.dataset.file);
+});
+
+document.addEventListener("input", (event) => {
+  const checkbox = event.target.closest("[data-select-file]");
+  if (checkbox) {
+    if (checkbox.checked) state.selectedDownloads.add(checkbox.dataset.selectFile);
+    else state.selectedDownloads.delete(checkbox.dataset.selectFile);
+    renderList();
+    return;
+  }
+
+  const seek = event.target.closest(".seek");
+  if (seek) {
+    audio.currentTime = Number(seek.value);
+    renderList();
+  }
 });
 
 [els.search, els.mediaFilter, els.captionFilter, els.sort].forEach((input) => {
@@ -292,14 +440,56 @@ document.addEventListener("click", (event) => {
 
 els.videoTab.addEventListener("click", () => {
   state.mediaMode = "video";
-  state.previewLoaded = false;
   renderDetail();
 });
 
 els.audioTab.addEventListener("click", () => {
   state.mediaMode = "audio";
-  state.previewLoaded = false;
   renderDetail();
+});
+
+els.selectMode.addEventListener("click", () => {
+  state.selectMode = !state.selectMode;
+  if (!state.selectMode) state.selectedDownloads.clear();
+  renderList();
+});
+
+els.selectVisible.addEventListener("click", () => {
+  const allVisibleSelected = state.visible.every((row) => state.selectedDownloads.has(row.file));
+  state.visible.forEach((row) => {
+    if (allVisibleSelected) state.selectedDownloads.delete(row.file);
+    else state.selectedDownloads.add(row.file);
+  });
+  renderList();
+});
+
+els.downloadSelected.addEventListener("click", downloadSelected);
+
+audio.addEventListener("play", () => {
+  state.isPlaying = true;
+  renderList();
+});
+
+audio.addEventListener("pause", () => {
+  state.isPlaying = false;
+  renderList();
+});
+
+audio.addEventListener("ended", () => {
+  state.isPlaying = false;
+  renderList();
+});
+
+audio.addEventListener("timeupdate", () => {
+  const player = document.querySelector(`[data-player="${CSS.escape(state.audioFile)}"]`);
+  if (!player) return;
+  const seek = player.querySelector(".seek");
+  const times = player.querySelectorAll(".player-times span");
+  const duration = Number(rowForFile(state.audioFile)?.duration_seconds || audio.duration || 0);
+  const current = audio.currentTime || 0;
+  if (seek) seek.value = current;
+  if (times[0]) times[0].textContent = formatTotal(current);
+  if (times[1]) times[1].textContent = `-${formatTotal(Math.max(0, duration - current))}`;
 });
 
 fetch(csvUrl)
@@ -310,6 +500,7 @@ fetch(csvUrl)
   .then((text) => {
     state.rows = parseCsv(text);
     state.selectedFile = state.rows[0]?.file || "";
+    state.audioFile = state.selectedFile;
     applyFilters();
   })
   .catch((error) => {

@@ -62,9 +62,16 @@
 
       <section class="browser">
         <div class="list-wrap" aria-label="Recordings">
+          <div class="selection-bar">
+            <button id="select-mode" type="button">Select</button>
+            <button id="select-visible" type="button" hidden>Select all shown</button>
+            <button id="download-selected" type="button" hidden>Download selected</button>
+            <span id="selected-count" class="muted" hidden>0 selected</span>
+          </div>
           <table>
             <thead>
               <tr>
+                <th class="select-col"></th>
                 <th>File</th>
                 <th>Caption</th>
                 <th>Length</th>
@@ -104,6 +111,8 @@
           <div class="actions">
             <a id="video-link" href="#" target="_blank" rel="noopener">Open video</a>
             <a id="audio-link" href="#" target="_blank" rel="noopener">Open audio</a>
+            <a id="video-download" href="#" download target="_blank" rel="noopener">Download video</a>
+            <a id="audio-download" href="#" download target="_blank" rel="noopener">Download audio</a>
           </div>
         </aside>
       </section>

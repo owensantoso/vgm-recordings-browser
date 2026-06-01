@@ -16,6 +16,10 @@
   box-sizing: border-box;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 body {
   margin: 0;
   background: var(--bg);
@@ -63,7 +67,15 @@ h1 {
 
 .csv-link,
 .actions a,
-.tab {
+.tab,
+.selection-bar button,
+.row-links button,
+.row-links a,
+.card-actions button,
+.card-actions a,
+.download-link,
+.icon-button,
+.play-button {
   border: 1px solid var(--line-strong);
   border-radius: 7px;
   color: var(--ink);
@@ -73,6 +85,9 @@ h1 {
   min-height: 36px;
   padding: 7px 10px;
   background: var(--panel);
+  cursor: pointer;
+  font: inherit;
+  text-decoration: none;
 }
 
 .layout {
@@ -161,6 +176,19 @@ select {
   overflow: hidden;
 }
 
+.selection-bar {
+  align-items: center;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  gap: 8px;
+  padding: 10px 12px;
+}
+
+.selection-bar button:disabled {
+  color: var(--muted);
+  cursor: default;
+}
+
 table {
   border-collapse: collapse;
   width: 100%;
@@ -172,6 +200,18 @@ td {
   padding: 10px 12px;
   text-align: left;
   vertical-align: top;
+}
+
+.select-col {
+  text-align: center;
+  width: 42px;
+}
+
+.select-box {
+  accent-color: var(--accent);
+  min-height: auto;
+  width: 18px;
+  height: 18px;
 }
 
 th {
@@ -205,6 +245,74 @@ tbody tr.active {
   display: block;
   object-fit: cover;
   width: 100%;
+}
+
+.row-links,
+.card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.row-links button,
+.row-links a,
+.card-actions button,
+.card-actions a {
+  font-size: 12px;
+  min-height: 30px;
+  padding: 5px 8px;
+}
+
+.inline-player {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+  max-width: 520px;
+}
+
+.seek {
+  accent-color: var(--accent);
+  min-height: auto;
+  padding: 0;
+}
+
+.player-times,
+.player-actions {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+.player-times {
+  color: var(--muted);
+  font-size: 12px;
+  justify-content: space-between;
+}
+
+.player-actions {
+  justify-content: center;
+}
+
+.icon-button {
+  border-radius: 999px;
+  min-height: 34px;
+  min-width: 42px;
+  padding: 6px 8px;
+}
+
+.play-button {
+  background: var(--ink);
+  border-color: var(--ink);
+  border-radius: 999px;
+  color: #fff;
+  min-height: 40px;
+  min-width: 74px;
+  padding: 7px 14px;
+}
+
+.download-link {
+  min-height: 34px;
 }
 
 .caption-cell {
@@ -300,52 +408,6 @@ h2 {
   width: 100%;
 }
 
-.poster {
-  display: grid;
-  min-height: 220px;
-  position: relative;
-  width: 100%;
-}
-
-.poster img {
-  filter: brightness(0.72);
-  height: 100%;
-  inset: 0;
-  object-fit: cover;
-  position: absolute;
-  width: 100%;
-}
-
-.poster-actions {
-  align-content: center;
-  display: grid;
-  gap: 10px;
-  justify-items: center;
-  padding: 24px;
-  position: relative;
-  text-align: center;
-  z-index: 1;
-}
-
-.poster-actions a,
-.load-preview {
-  background: rgb(255 255 255 / 92%);
-  border: 1px solid rgb(255 255 255 / 70%);
-  border-radius: 7px;
-  color: var(--ink);
-  cursor: pointer;
-  font: inherit;
-  min-height: 40px;
-  min-width: 190px;
-  padding: 8px 12px;
-}
-
-.poster-actions a {
-  align-items: center;
-  display: inline-flex;
-  justify-content: center;
-}
-
 .preview .empty {
   color: #d0d5dd;
   padding: 24px;
@@ -439,6 +501,25 @@ dd {
     grid-row: span 3;
   }
 
+  .card-select {
+    align-self: start;
+    grid-column: 1;
+    grid-row: 1;
+    justify-self: start;
+    position: relative;
+    z-index: 1;
+  }
+
+  .card-select + .card-thumb {
+    filter: brightness(0.92);
+  }
+
+  .card-actions,
+  .media-tags,
+  .recording-card > .muted {
+    grid-column: 2;
+  }
+
   .card-main {
     align-items: baseline;
     display: flex;
@@ -454,8 +535,13 @@ dd {
     height: 260px;
   }
 
-  .poster {
-    min-height: 210px;
+  .inline-player {
+    grid-column: 1 / -1;
+    max-width: none;
+  }
+
+  .player-actions {
+    justify-content: space-between;
   }
 
   .meta-grid,
