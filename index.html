@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>2026 VGM Recordings</title>
+    <link rel="icon" href="data:,">
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <h1>2026 VGM Recordings</h1>
+        <p class="subhead">iPhone rehearsal videos and high-quality audio extracts</p>
+      </div>
+      <a class="csv-link" href="data/recordings.csv">CSV</a>
+    </header>
+
+    <main class="layout">
+      <section class="controls" aria-label="Filters">
+        <label class="search-label">
+          <span>Search</span>
+          <input id="search" type="search" placeholder="caption, filename, device">
+        </label>
+        <div class="control-row">
+          <label>
+            <span>Media</span>
+            <select id="media-filter">
+              <option value="all">All</option>
+              <option value="video">Has video</option>
+              <option value="audio">Has audio</option>
+              <option value="audio-only">Audio only</option>
+            </select>
+          </label>
+          <label>
+            <span>Caption</span>
+            <select id="caption-filter">
+              <option value="all">All</option>
+              <option value="named">Named</option>
+              <option value="missing">No embedded caption</option>
+            </select>
+          </label>
+          <label>
+            <span>Sort</span>
+            <select id="sort">
+              <option value="newest">Newest first</option>
+              <option value="oldest">Oldest first</option>
+              <option value="longest">Longest</option>
+              <option value="shortest">Shortest</option>
+              <option value="caption">Caption A-Z</option>
+            </select>
+          </label>
+        </div>
+      </section>
+
+      <section class="summary" aria-label="Collection summary">
+        <div><strong id="visible-count">0</strong><span>shown</span></div>
+        <div><strong id="total-duration">0:00</strong><span>visible length</span></div>
+        <div><strong id="video-count">0</strong><span>videos</span></div>
+        <div><strong id="audio-count">0</strong><span>audio files</span></div>
+      </section>
+
+      <section class="browser">
+        <div class="list-wrap" aria-label="Recordings">
+          <table>
+            <thead>
+              <tr>
+                <th>File</th>
+                <th>Caption</th>
+                <th>Length</th>
+                <th>Media</th>
+              </tr>
+            </thead>
+            <tbody id="recording-table"></tbody>
+          </table>
+          <div id="card-list" class="card-list"></div>
+        </div>
+
+        <aside class="detail" aria-label="Selected recording">
+          <div class="detail-head">
+            <div>
+              <p id="selected-file" class="file-name"></p>
+              <h2 id="selected-caption"></h2>
+            </div>
+            <span id="selected-length" class="pill"></span>
+          </div>
+
+          <div class="tabs" role="tablist" aria-label="Media preview">
+            <button id="video-tab" class="tab active" type="button">Video</button>
+            <button id="audio-tab" class="tab" type="button">Audio</button>
+          </div>
+
+          <div id="preview" class="preview"></div>
+
+          <dl class="meta-grid">
+            <div><dt>Recorded</dt><dd id="selected-recorded"></dd></div>
+            <div><dt>Size</dt><dd id="selected-size"></dd></div>
+            <div><dt>Resolution</dt><dd id="selected-resolution"></dd></div>
+            <div><dt>Rotation</dt><dd id="selected-rotation"></dd></div>
+            <div><dt>Audio</dt><dd id="selected-audio"></dd></div>
+            <div><dt>Device</dt><dd id="selected-device"></dd></div>
+          </dl>
+
+          <div class="actions">
+            <a id="video-link" href="#" target="_blank" rel="noopener">Open video</a>
+            <a id="audio-link" href="#" target="_blank" rel="noopener">Open audio</a>
+          </div>
+        </aside>
+      </section>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>
