@@ -8,3 +8,4 @@ Static GitHub Pages browser for the 2026 VGM recording files.
 - The list supports inline audio playback controls and filtered multi-select downloads.
 - `data/recordings.csv` is the public CSV export used by the site.
 - `thumbs/` contains ffmpeg-extracted thumbnails for each source video.
+- `audio/` contains the static AAC/M4A files used by the inline web player.

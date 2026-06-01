@@ -73,9 +73,7 @@ h1 {
 .row-links a,
 .card-actions button,
 .card-actions a,
-.download-link,
-.icon-button,
-.play-button {
+.download-link {
   border: 1px solid var(--line-strong);
   border-radius: 7px;
   color: var(--ink);
@@ -271,44 +269,15 @@ tbody tr.active {
   max-width: 520px;
 }
 
-.seek {
-  accent-color: var(--accent);
-  min-height: auto;
-  padding: 0;
+.native-audio {
+  width: 100%;
 }
 
-.player-times,
 .player-actions {
   align-items: center;
   display: flex;
   gap: 8px;
-}
-
-.player-times {
-  color: var(--muted);
-  font-size: 12px;
-  justify-content: space-between;
-}
-
-.player-actions {
   justify-content: center;
-}
-
-.icon-button {
-  border-radius: 999px;
-  min-height: 34px;
-  min-width: 42px;
-  padding: 6px 8px;
-}
-
-.play-button {
-  background: var(--ink);
-  border-color: var(--ink);
-  border-radius: 999px;
-  color: #fff;
-  min-height: 40px;
-  min-width: 74px;
-  padding: 7px 14px;
 }
 
 .download-link {

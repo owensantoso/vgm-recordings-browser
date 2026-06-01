@@ -6,12 +6,9 @@ const state = {
   selectedFile: "",
   mediaMode: "video",
   audioFile: "",
-  isPlaying: false,
   selectedDownloads: new Set(),
   selectMode: false,
 };
-
-const audio = new Audio();
 
 const els = {
   search: document.querySelector("#search"),
@@ -172,7 +169,7 @@ function rowForFile(file) {
 }
 
 function audioSource(row) {
-  return row.audio_file_id ? driveDownload(row.audio_file_id) : "";
+  return row.audio_file ? `audio/${row.audio_file}` : "";
 }
 
 function mediaDownload(row) {
@@ -181,22 +178,10 @@ function mediaDownload(row) {
 
 function playerMarkup(row) {
   if (state.audioFile !== row.file || row.has_audio !== "yes") return "";
-  const current = Number.isFinite(audio.currentTime) ? audio.currentTime : 0;
-  const duration = Number(row.duration_seconds || audio.duration || 0);
-  const remaining = Math.max(0, duration - current);
   return `
     <div class="inline-player" data-player="${escapeHtml(row.file)}">
-      <input class="seek" type="range" min="0" max="${duration || 0}" step="0.1" value="${current}" aria-label="Seek ${escapeHtml(row.caption)}">
-      <div class="player-times">
-        <span>${formatTotal(current)}</span>
-        <span>-${formatTotal(remaining)}</span>
-      </div>
+      <audio class="native-audio" controls preload="metadata" src="${escapeHtml(audioSource(row))}"></audio>
       <div class="player-actions">
-        <button class="icon-button" type="button" data-skip="-15" aria-label="Back 15 seconds">-15</button>
-        <button class="play-button" type="button" data-play="${escapeHtml(row.file)}" aria-label="${state.isPlaying ? "Pause" : "Play"} ${escapeHtml(row.caption)}">
-          ${state.isPlaying ? "Pause" : "Play"}
-        </button>
-        <button class="icon-button" type="button" data-skip="15" aria-label="Forward 15 seconds">+15</button>
         <a class="download-link" href="${escapeHtml(driveDownload(row.audio_file_id))}" download target="_blank" rel="noopener">Download audio</a>
       </div>
     </div>
@@ -218,7 +203,7 @@ function renderList() {
                 <strong>${escapeHtml(row.file)}</strong><br>
                 <span class="muted">${escapeHtml(row.recorded_create_date)}</span>
                 <div class="row-links">
-                  ${row.has_audio === "yes" ? `<button type="button" data-play="${escapeHtml(row.file)}">${state.audioFile === row.file && state.isPlaying ? "Pause audio" : "Play audio"}</button>` : ""}
+                  ${row.has_audio === "yes" ? `<button type="button" data-show-player="${escapeHtml(row.file)}">Audio player</button>` : ""}
                   <a href="${escapeHtml(mediaDownload(row))}" download target="_blank" rel="noopener">Download</a>
                 </div>
               </div>
@@ -246,7 +231,7 @@ function renderList() {
           <span class="muted">${escapeHtml(row.file)} · ${escapeHtml(row.recorded_create_date)}</span>
           ${mediaTags(row)}
           <div class="card-actions">
-            ${row.has_audio === "yes" ? `<button type="button" data-play="${escapeHtml(row.file)}">${state.audioFile === row.file && state.isPlaying ? "Pause" : "Play audio"}</button>` : ""}
+            ${row.has_audio === "yes" ? `<button type="button" data-show-player="${escapeHtml(row.file)}">Audio player</button>` : ""}
             <a href="${escapeHtml(mediaDownload(row))}" download target="_blank" rel="noopener">Download</a>
           </div>
           ${playerMarkup(row)}
@@ -334,7 +319,7 @@ function render() {
 
 function selectFile(file) {
   state.selectedFile = file;
-  if (!state.audioFile) state.audioFile = file;
+  state.audioFile = file;
   render();
 }
 
@@ -350,32 +335,12 @@ function renderSelection() {
   els.downloadSelected.disabled = count === 0;
 }
 
-function togglePlay(file) {
+function showPlayer(file) {
   const row = rowForFile(file);
   if (!row || row.has_audio !== "yes") return;
-
-  if (state.audioFile === file && state.isPlaying) {
-    audio.pause();
-    return;
-  }
-
-  if (state.audioFile !== file || audio.src !== audioSource(row)) {
-    audio.src = audioSource(row);
-    audio.currentTime = 0;
-  }
-
   state.audioFile = file;
   state.selectedFile = file;
-  audio.play().catch(() => {
-    state.isPlaying = false;
-    render();
-  });
   render();
-}
-
-function skipAudio(seconds) {
-  audio.currentTime = Math.max(0, Math.min(audio.duration || Number.MAX_SAFE_INTEGER, audio.currentTime + seconds));
-  renderList();
 }
 
 function downloadSelected() {
@@ -400,17 +365,10 @@ document.addEventListener("click", (event) => {
     return;
   }
 
-  const playButton = event.target.closest("[data-play]");
-  if (playButton) {
+  const playerButton = event.target.closest("[data-show-player]");
+  if (playerButton) {
     event.stopPropagation();
-    togglePlay(playButton.dataset.play);
-    return;
-  }
-
-  const skipButton = event.target.closest("[data-skip]");
-  if (skipButton) {
-    event.stopPropagation();
-    skipAudio(Number(skipButton.dataset.skip));
+    showPlayer(playerButton.dataset.showPlayer);
     return;
   }
 
@@ -425,12 +383,6 @@ document.addEventListener("input", (event) => {
     else state.selectedDownloads.delete(checkbox.dataset.selectFile);
     renderList();
     return;
-  }
-
-  const seek = event.target.closest(".seek");
-  if (seek) {
-    audio.currentTime = Number(seek.value);
-    renderList();
   }
 });
 
@@ -464,33 +416,6 @@ els.selectVisible.addEventListener("click", () => {
 });
 
 els.downloadSelected.addEventListener("click", downloadSelected);
-
-audio.addEventListener("play", () => {
-  state.isPlaying = true;
-  renderList();
-});
-
-audio.addEventListener("pause", () => {
-  state.isPlaying = false;
-  renderList();
-});
-
-audio.addEventListener("ended", () => {
-  state.isPlaying = false;
-  renderList();
-});
-
-audio.addEventListener("timeupdate", () => {
-  const player = document.querySelector(`[data-player="${CSS.escape(state.audioFile)}"]`);
-  if (!player) return;
-  const seek = player.querySelector(".seek");
-  const times = player.querySelectorAll(".player-times span");
-  const duration = Number(rowForFile(state.audioFile)?.duration_seconds || audio.duration || 0);
-  const current = audio.currentTime || 0;
-  if (seek) seek.value = current;
-  if (times[0]) times[0].textContent = formatTotal(current);
-  if (times[1]) times[1].textContent = `-${formatTotal(Math.max(0, duration - current))}`;
-});
 
 fetch(csvUrl)
   .then((response) => {
