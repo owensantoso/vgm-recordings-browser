@@ -73,7 +73,8 @@ h1 {
 .row-links a,
 .card-actions button,
 .card-actions a,
-.download-link {
+.download-link,
+.session-row a {
   border: 1px solid var(--line-strong);
   border-radius: 7px;
   color: var(--ink);
@@ -115,7 +116,14 @@ h1 {
 .control-row {
   display: grid;
   gap: 10px;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.session-row {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 label span {
@@ -312,6 +320,12 @@ tbody tr.active {
 
 .tag.missing {
   color: var(--warn);
+}
+
+.tag.youtube {
+  background: #fff1f1;
+  border-color: #ffd0d0;
+  color: #9f1f1f;
 }
 
 .card-list {

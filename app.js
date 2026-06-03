@@ -14,7 +14,10 @@ const els = {
   search: document.querySelector("#search"),
   mediaFilter: document.querySelector("#media-filter"),
   captionFilter: document.querySelector("#caption-filter"),
+  sessionFilter: document.querySelector("#session-filter"),
   sort: document.querySelector("#sort"),
+  sessionLabel: document.querySelector("#session-label"),
+  sessionPlaylist: document.querySelector("#session-playlist"),
   table: document.querySelector("#recording-table"),
   cards: document.querySelector("#card-list"),
   visibleCount: document.querySelector("#visible-count"),
@@ -132,6 +135,12 @@ function youtubeLink(row) {
   return "";
 }
 
+function playlistUrl(row) {
+  if (row.youtube_playlist_url) return row.youtube_playlist_url;
+  if (row.youtube_playlist_id) return `https://www.youtube.com/playlist?list=${encodeURIComponent(row.youtube_playlist_id)}`;
+  return "";
+}
+
 function escapeHtml(value) {
   return String(value || "")
     .replaceAll("&", "&amp;")
@@ -157,6 +166,7 @@ function applyFilters() {
   const query = els.search.value.trim().toLowerCase();
   const media = els.mediaFilter.value;
   const caption = els.captionFilter.value;
+  const session = els.sessionFilter.value;
 
   state.visible = state.rows.filter((row) => {
     const haystack = [
@@ -164,6 +174,8 @@ function applyFilters() {
       row.caption,
       row.device,
       row.session_id,
+      row.session_label,
+      row.tags,
       row.song,
       row.game,
     ].join(" ").toLowerCase();
@@ -177,7 +189,8 @@ function applyFilters() {
       caption === "all" ||
       (caption === "named" && !hasMissingCaption(row)) ||
       (caption === "missing" && hasMissingCaption(row));
-    return matchesQuery && matchesMedia && matchesCaption;
+    const matchesSession = session === "all" || row.session_id === session;
+    return matchesQuery && matchesMedia && matchesCaption && matchesSession;
   });
 
   const sorters = {
@@ -204,6 +217,7 @@ function mediaTags(row) {
   const tags = [];
   if (row.has_video === "yes") tags.push('<span class="tag">video</span>');
   if (row.has_audio === "yes") tags.push('<span class="tag">audio</span>');
+  if (row.youtube_video_id) tags.push('<span class="tag youtube">YouTube</span>');
   if (hasMissingCaption(row)) tags.push('<span class="tag missing">no caption</span>');
   return `<div class="media-tags">${tags.join("")}</div>`;
 }
@@ -370,6 +384,13 @@ function renderSummary() {
   els.totalDuration.textContent = formatTotal(totalDuration);
   els.videoCount.textContent = state.visible.filter((row) => row.has_video === "yes").length;
   els.audioCount.textContent = state.visible.filter((row) => row.has_audio === "yes").length;
+
+  const sessionRows = state.rows.filter((row) => row.session_id && row.session_id === els.sessionFilter.value);
+  const sessionRow = sessionRows[0];
+  const url = sessionRow ? playlistUrl(sessionRow) : "";
+  els.sessionLabel.textContent = sessionRow ? sessionRow.session_label || sessionRow.session_id : "All sessions";
+  els.sessionPlaylist.href = url || "#";
+  els.sessionPlaylist.hidden = !url;
 }
 
 function render() {
@@ -420,6 +441,23 @@ function downloadSelected() {
     });
 }
 
+function populateSessionFilter() {
+  const sessions = new Map();
+  state.rows.forEach((row) => {
+    if (!row.session_id) return;
+    sessions.set(row.session_id, row.session_label || row.session_id);
+  });
+  els.sessionFilter.innerHTML = [
+    '<option value="all">All sessions</option>',
+    ...[...sessions.entries()].map(
+      ([value, label]) => `<option value="${escapeHtml(value)}">${escapeHtml(label)}</option>`,
+    ),
+  ].join("");
+  if (sessions.size === 1) {
+    els.sessionFilter.value = [...sessions.keys()][0];
+  }
+}
+
 document.addEventListener("click", (event) => {
   if (event.target.closest("[data-select-file]")) {
     event.stopPropagation();
@@ -447,7 +485,7 @@ document.addEventListener("input", (event) => {
   }
 });
 
-[els.search, els.mediaFilter, els.captionFilter, els.sort].forEach((input) => {
+[els.search, els.mediaFilter, els.captionFilter, els.sessionFilter, els.sort].forEach((input) => {
   input.addEventListener("input", applyFilters);
 });
 
@@ -487,6 +525,7 @@ fetch(csvUrl)
     state.rows = parseCsv(text);
     state.selectedFile = state.rows[0]?.file || "";
     state.audioFile = state.selectedFile;
+    populateSessionFilter();
     applyFilters();
   })
   .catch((error) => {
