@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>2026 VGM Recordings</title>
     <link rel="icon" href="data:,">
-    <link rel="stylesheet" href="styles.css?v=20260604-instrument-icons">
+    <link rel="stylesheet" href="styles.css?v=20260604-song-sections">
   </head>
   <body>
     <header class="topbar">
@@ -84,6 +84,7 @@
                 <th class="select-col"></th>
                 <th>File</th>
                 <th>Caption</th>
+                <th>Song / Game</th>
                 <th>Instruments</th>
                 <th>Length</th>
                 <th>Media</th>
@@ -115,6 +116,10 @@
             <span id="segment-current" class="time-label">0:00</span>
             <input id="segment-seek" class="segment-seek" type="range" min="0" max="0" value="0" step="0.1" aria-label="Seek within selected recording">
             <span id="segment-end" class="time-label">0:00</span>
+            <div id="section-indicator" class="section-indicator" hidden>
+              <span id="section-label" class="section-label"></span>
+              <span class="section-rail" aria-hidden="true"><span id="section-range" class="section-range"></span></span>
+            </div>
           </div>
 
           <div class="tabs" role="tablist" aria-label="Media preview">
@@ -126,6 +131,8 @@
 
           <dl class="meta-grid">
             <div><dt>Recorded</dt><dd id="selected-recorded"></dd></div>
+            <div><dt>Song</dt><dd id="selected-song"></dd></div>
+            <div><dt>Game</dt><dd id="selected-game"></dd></div>
             <div><dt>Size</dt><dd id="selected-size"></dd></div>
             <div><dt>Resolution</dt><dd id="selected-resolution"></dd></div>
             <div><dt>Rotation</dt><dd id="selected-rotation"></dd></div>
@@ -144,6 +151,6 @@
       </section>
     </main>
 
-    <script src="app.js?v=20260604-instrument-icons"></script>
+    <script src="app.js?v=20260604-song-sections"></script>
   </body>
 </html>

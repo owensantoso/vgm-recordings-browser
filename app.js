@@ -1,4 +1,4 @@
-const csvUrl = "data/recordings.csv?v=20260604-instrument-icons";
+const csvUrl = "data/recordings.csv?v=20260604-song-sections";
 
 const state = {
   rows: [],
@@ -49,6 +49,8 @@ const els = {
   selectedCaption: document.querySelector("#selected-caption"),
   selectedLength: document.querySelector("#selected-length"),
   selectedRecorded: document.querySelector("#selected-recorded"),
+  selectedSong: document.querySelector("#selected-song"),
+  selectedGame: document.querySelector("#selected-game"),
   selectedSize: document.querySelector("#selected-size"),
   selectedResolution: document.querySelector("#selected-resolution"),
   selectedRotation: document.querySelector("#selected-rotation"),
@@ -59,6 +61,9 @@ const els = {
   segmentSeek: document.querySelector("#segment-seek"),
   segmentCurrent: document.querySelector("#segment-current"),
   segmentEnd: document.querySelector("#segment-end"),
+  sectionIndicator: document.querySelector("#section-indicator"),
+  sectionLabel: document.querySelector("#section-label"),
+  sectionRange: document.querySelector("#section-range"),
   preview: document.querySelector("#preview"),
   videoTab: document.querySelector("#video-tab"),
   audioTab: document.querySelector("#audio-tab"),
@@ -160,11 +165,23 @@ function segmentBounds(row) {
   const start = youtubeStart(row);
   const explicitEnd = youtubeEnd(row);
   const duration = Number(row.duration_seconds || 0);
-  const end = explicitEnd > start ? explicitEnd : start + duration;
+  const end = explicitEnd > start ? explicitEnd : duration;
   return {
     start,
     end,
     duration: Math.max(0, end - start),
+  };
+}
+
+function explicitSectionRange(row) {
+  const fullDuration = Number(row.duration_seconds || 0);
+  const start = timestampToSeconds(row.section_start);
+  const end = timestampToSeconds(row.section_end) || fullDuration;
+  if (!fullDuration || (!row.section_start && !row.section_end)) return null;
+  return {
+    start: Math.max(0, Math.min(fullDuration, start)),
+    end: Math.max(0, Math.min(fullDuration, end)),
+    fullDuration,
   };
 }
 
@@ -244,12 +261,21 @@ function updateSegmentLabels(row, offset = 0) {
   const bounds = segmentBounds(row);
   const value = Math.max(0, Math.min(bounds.duration, offset));
   const progress = bounds.duration > 0 ? (value / bounds.duration) * 100 : 0;
+  const section = explicitSectionRange(row);
   youtubeState.offset = value;
   els.segmentSeek.max = String(bounds.duration || 0);
   els.segmentSeek.value = String(value);
   els.segmentSeek.style.setProperty("--seek-progress", `${progress}%`);
   els.segmentCurrent.textContent = formatTotal(value);
   els.segmentEnd.textContent = formatTotal(bounds.duration);
+  els.sectionIndicator.hidden = !section;
+  if (section) {
+    const startPercent = (section.start / section.fullDuration) * 100;
+    const endPercent = (section.end / section.fullDuration) * 100;
+    els.sectionRange.style.left = `${startPercent}%`;
+    els.sectionRange.style.width = `${Math.max(2, endPercent - startPercent)}%`;
+    els.sectionLabel.textContent = `Relevant section ${formatTotal(section.start)}-${formatTotal(section.end)} of ${formatTotal(section.fullDuration)}`;
+  }
 }
 
 function currentPlaybackOffset() {
@@ -501,7 +527,7 @@ async function playAudioFromOffset(offset) {
   youtubeState.audioSource = source;
   youtubeState.audioStartOffset = boundedOffset;
   youtubeState.audioStartedAt = context.currentTime;
-  source.start(0, boundedOffset);
+  source.start(0, bounds.start + boundedOffset);
   updateSegmentLabels(row, boundedOffset);
   setPlayLabel(true);
   startYoutubeTimer();
@@ -590,8 +616,12 @@ function applyFilters() {
       row.session_id,
       row.session_label,
       row.tags,
-      row.song,
-      row.game,
+      row.song_name,
+      row.franchise,
+      row.game_title,
+      row.drums,
+      row.piano,
+      row.guitar,
     ].join(" ").toLowerCase();
     const matchesQuery = !query || haystack.includes(query);
     const matchesMedia =
@@ -652,6 +682,17 @@ function instrumentBadges(row) {
   return `<div class="instrument-tags">${badges.join("")}</div>`;
 }
 
+function songMeta(row) {
+  if (!row.song_name && !row.franchise && !row.game_title) return '<span class="muted">Unknown</span>';
+  const gameLine = [row.franchise, row.game_title].filter(Boolean).join(" · ");
+  return `
+    <div class="song-meta">
+      <strong>${escapeHtml(row.song_name || row.caption)}</strong>
+      ${gameLine ? `<span>${escapeHtml(gameLine)}</span>` : ""}
+    </div>
+  `;
+}
+
 function thumbnail(row) {
   return row.thumbnail || `thumbs/${row.file.replace(/\.MOV$/i, "")}.jpg`;
 }
@@ -689,6 +730,7 @@ function renderList() {
             </div>
           </td>
           <td class="caption-cell">${escapeHtml(row.caption)}</td>
+          <td>${songMeta(row)}</td>
           <td>${instrumentBadges(row)}</td>
           <td>${escapeHtml(row.length)}</td>
           <td>${mediaTags(row)}</td>
@@ -708,6 +750,7 @@ function renderList() {
             <span class="pill">${escapeHtml(row.length)}</span>
           </div>
           <span class="muted">${escapeHtml(row.file)} · ${escapeHtml(row.recorded_create_date)}</span>
+          ${songMeta(row)}
           ${instrumentBadges(row)}
           ${mediaTags(row)}
           <div class="card-actions">
@@ -795,6 +838,8 @@ function renderDetail(resumeAfterReady = false) {
   els.selectedCaption.textContent = row.caption;
   els.selectedLength.textContent = row.length;
   els.selectedRecorded.textContent = row.recorded_create_date;
+  els.selectedSong.textContent = row.song_name || "Unknown";
+  els.selectedGame.textContent = [row.franchise, row.game_title].filter(Boolean).join(" · ") || "Unknown";
   els.selectedSize.textContent = `${row.size_mb} MB MOV`;
   els.selectedResolution.textContent = row.resolution;
   els.selectedRotation.textContent = `${row.rotation} degrees`;

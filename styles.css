@@ -284,6 +284,22 @@ tbody tr.active {
   font-weight: 650;
 }
 
+.song-meta {
+  display: grid;
+  gap: 4px;
+  min-width: 150px;
+}
+
+.song-meta strong {
+  font-weight: 650;
+}
+
+.song-meta span {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.25;
+}
+
 .muted {
   color: var(--muted);
 }
@@ -563,6 +579,35 @@ h2 {
   outline-offset: 4px;
 }
 
+.section-indicator {
+  display: grid;
+  gap: 5px;
+  grid-column: 2 / -1;
+}
+
+.section-label {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.section-rail {
+  background: #e4e9f1;
+  border-radius: 999px;
+  display: block;
+  height: 5px;
+  overflow: hidden;
+  position: relative;
+}
+
+.section-range {
+  background: color-mix(in srgb, var(--accent), white 22%);
+  border-radius: 999px;
+  display: block;
+  height: 100%;
+  position: absolute;
+  top: 0;
+}
+
 .meta-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -671,6 +716,7 @@ dd {
 
   .card-actions,
   .instrument-tags,
+  .song-meta,
   .media-tags,
   .recording-card > .muted {
     grid-column: 2;
@@ -811,6 +857,10 @@ dd {
     grid-template-columns: auto auto minmax(0, 1fr) auto;
     margin-top: 0;
     order: 3;
+  }
+
+  .section-indicator {
+    grid-column: 1 / -1;
   }
 
   .segment-controls button {
