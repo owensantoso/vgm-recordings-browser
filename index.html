@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>2026 VGM Recordings</title>
     <link rel="icon" href="data:,">
-    <link rel="stylesheet" href="styles.css?v=20260604-song-sections">
+    <link rel="stylesheet" href="styles.css?v=20260604-dual-seek">
   </head>
   <body>
     <header class="topbar">
@@ -117,8 +117,11 @@
             <input id="segment-seek" class="segment-seek" type="range" min="0" max="0" value="0" step="0.1" aria-label="Seek within selected recording">
             <span id="segment-end" class="time-label">0:00</span>
             <div id="section-indicator" class="section-indicator" hidden>
-              <span id="section-label" class="section-label"></span>
-              <span class="section-rail" aria-hidden="true"><span id="section-range" class="section-range"></span></span>
+              <div class="section-label-row">
+                <span id="section-label" class="section-label"></span>
+                <span class="section-time"><span id="full-current">0:00</span> / <span id="full-end">0:00</span></span>
+              </div>
+              <input id="full-seek" class="full-seek" type="range" min="0" max="0" value="0" step="0.1" aria-label="Seek within full recording">
             </div>
           </div>
 
@@ -151,6 +154,6 @@
       </section>
     </main>
 
-    <script src="app.js?v=20260604-song-sections"></script>
+    <script src="app.js?v=20260604-dual-seek"></script>
   </body>
 </html>

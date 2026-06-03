@@ -63,7 +63,9 @@ const els = {
   segmentEnd: document.querySelector("#segment-end"),
   sectionIndicator: document.querySelector("#section-indicator"),
   sectionLabel: document.querySelector("#section-label"),
-  sectionRange: document.querySelector("#section-range"),
+  fullSeek: document.querySelector("#full-seek"),
+  fullCurrent: document.querySelector("#full-current"),
+  fullEnd: document.querySelector("#full-end"),
   preview: document.querySelector("#preview"),
   videoTab: document.querySelector("#video-tab"),
   audioTab: document.querySelector("#audio-tab"),
@@ -185,6 +187,11 @@ function explicitSectionRange(row) {
   };
 }
 
+function sectionOffsetFromFullTime(row, fullTime) {
+  const bounds = segmentBounds(row);
+  return Math.max(0, Math.min(bounds.duration, Number(fullTime || 0) - bounds.start));
+}
+
 function youtubeEmbed(row, enableApi = false) {
   const start = youtubeStart(row);
   const params = new URLSearchParams();
@@ -272,9 +279,14 @@ function updateSegmentLabels(row, offset = 0) {
   if (section) {
     const startPercent = (section.start / section.fullDuration) * 100;
     const endPercent = (section.end / section.fullDuration) * 100;
-    els.sectionRange.style.left = `${startPercent}%`;
-    els.sectionRange.style.width = `${Math.max(2, endPercent - startPercent)}%`;
-    els.sectionLabel.textContent = `Relevant section ${formatTotal(section.start)}-${formatTotal(section.end)} of ${formatTotal(section.fullDuration)}`;
+    const fullValue = bounds.start + value;
+    els.fullSeek.max = String(section.fullDuration);
+    els.fullSeek.value = String(fullValue);
+    els.fullSeek.style.setProperty("--section-start", `${startPercent}%`);
+    els.fullSeek.style.setProperty("--section-end", `${Math.max(startPercent, endPercent)}%`);
+    els.fullCurrent.textContent = formatTotal(fullValue);
+    els.fullEnd.textContent = formatTotal(section.fullDuration);
+    els.sectionLabel.textContent = `Full clip · relevant ${formatTotal(section.start)}-${formatTotal(section.end)}`;
   }
 }
 
@@ -333,6 +345,7 @@ function setPlayLabel(playing) {
 function setSegmentControlsReady(ready) {
   els.playToggle.disabled = !ready;
   els.segmentSeek.disabled = !ready;
+  els.fullSeek.disabled = !ready;
 }
 
 function stopYoutubeTimer() {
@@ -1049,10 +1062,22 @@ els.segmentSeek.addEventListener("change", () => {
   seekWithinSegment(Number(els.segmentSeek.value));
 });
 
+els.fullSeek.addEventListener("input", () => {
+  youtubeState.seeking = true;
+  const row = currentSegmentRow();
+  if (row) updateSegmentLabels(row, sectionOffsetFromFullTime(row, Number(els.fullSeek.value)));
+});
+
+els.fullSeek.addEventListener("change", () => {
+  youtubeState.seeking = false;
+  const row = currentSegmentRow();
+  if (row) seekWithinSegment(sectionOffsetFromFullTime(row, Number(els.fullSeek.value)));
+});
+
 function handleKeyboardShortcuts(event) {
   const target = event.target?.closest ? event.target : document.activeElement;
   const field = target?.closest?.("input, textarea, select");
-  if (field && field !== els.segmentSeek) return;
+  if (field && field !== els.segmentSeek && field !== els.fullSeek) return;
   if (target?.closest?.("button, a")) return;
   const row = currentSegmentRow();
   if (!row || els.segmentControls.hidden) return;
