@@ -24,11 +24,14 @@ const youtubeState = {
   file: "",
   mode: "video",
   offset: 0,
+  absoluteTime: 0,
+  fullMode: false,
   timer: 0,
   settleTimer: 0,
   seeking: false,
   playing: false,
   resumeAfterReady: false,
+  audioAbsoluteStart: 0,
 };
 
 const els = {
@@ -192,6 +195,14 @@ function sectionOffsetFromFullTime(row, fullTime) {
   return Math.max(0, Math.min(bounds.duration, Number(fullTime || 0) - bounds.start));
 }
 
+function fullDuration(row) {
+  return Number(row.duration_seconds || 0);
+}
+
+function boundedFullTime(row, fullTime) {
+  return Math.max(0, Math.min(fullDuration(row), Number(fullTime || 0)));
+}
+
 function youtubeEmbed(row, enableApi = false) {
   const start = youtubeStart(row);
   const params = new URLSearchParams();
@@ -264,12 +275,17 @@ function formatTotal(seconds) {
   return `${minutes}:${String(secs).padStart(2, "0")}`;
 }
 
-function updateSegmentLabels(row, offset = 0) {
+function updateSegmentLabels(row, offset = 0, absoluteTime = null) {
   const bounds = segmentBounds(row);
-  const value = Math.max(0, Math.min(bounds.duration, offset));
+  const absolute = absoluteTime === null ? bounds.start + Number(offset || 0) : boundedFullTime(row, absoluteTime);
+  const value =
+    absoluteTime === null
+      ? Math.max(0, Math.min(bounds.duration, offset))
+      : sectionOffsetFromFullTime(row, absolute);
   const progress = bounds.duration > 0 ? (value / bounds.duration) * 100 : 0;
   const section = explicitSectionRange(row);
   youtubeState.offset = value;
+  youtubeState.absoluteTime = absolute;
   els.segmentSeek.max = String(bounds.duration || 0);
   els.segmentSeek.value = String(value);
   els.segmentSeek.style.setProperty("--seek-progress", `${progress}%`);
@@ -279,12 +295,11 @@ function updateSegmentLabels(row, offset = 0) {
   if (section) {
     const startPercent = (section.start / section.fullDuration) * 100;
     const endPercent = (section.end / section.fullDuration) * 100;
-    const fullValue = bounds.start + value;
     els.fullSeek.max = String(section.fullDuration);
-    els.fullSeek.value = String(fullValue);
+    els.fullSeek.value = String(absolute);
     els.fullSeek.style.setProperty("--section-start", `${startPercent}%`);
     els.fullSeek.style.setProperty("--section-end", `${Math.max(startPercent, endPercent)}%`);
-    els.fullCurrent.textContent = formatTotal(fullValue);
+    els.fullCurrent.textContent = formatTotal(absolute);
     els.fullEnd.textContent = formatTotal(section.fullDuration);
     els.sectionLabel.textContent = `Full clip · relevant ${formatTotal(section.start)}-${formatTotal(section.end)}`;
   }
@@ -294,21 +309,25 @@ function currentPlaybackOffset() {
   const row = currentSegmentRow();
   if (!row) return youtubeState.offset;
   if (youtubeState.seeking) return youtubeState.offset;
+  return sectionOffsetFromFullTime(row, currentAbsoluteTime(row));
+}
+
+function currentAbsoluteTime(row) {
   const bounds = segmentBounds(row);
-  let offset = youtubeState.offset;
+  let absolute = youtubeState.absoluteTime || bounds.start + youtubeState.offset;
   if (youtubeState.mode === "video" && youtubeState.player?.getCurrentTime) {
-    offset = Number(youtubeState.player.getCurrentTime() || bounds.start) - bounds.start;
+    absolute = Number(youtubeState.player.getCurrentTime() || absolute);
   } else if (youtubeState.mode === "audio" && youtubeState.audioContext && youtubeState.playing) {
-    offset = youtubeState.audioStartOffset + (youtubeState.audioContext.currentTime - youtubeState.audioStartedAt);
+    absolute = youtubeState.audioAbsoluteStart + (youtubeState.audioContext.currentTime - youtubeState.audioStartedAt);
   }
-  return Math.max(0, Math.min(bounds.duration, offset));
+  return boundedFullTime(row, absolute);
 }
 
 function rememberPlaybackOffset() {
   const row = currentSegmentRow();
   if (!row) return;
-  youtubeState.offset = currentPlaybackOffset();
-  updateSegmentLabels(row, youtubeState.offset);
+  const absolute = currentAbsoluteTime(row);
+  updateSegmentLabels(row, sectionOffsetFromFullTime(row, absolute), absolute);
 }
 
 function loadYoutubeApi() {
@@ -365,21 +384,19 @@ function syncYoutubeProgress() {
   const row = currentSegmentRow();
   if (!row || !youtubeState.ready || youtubeState.seeking) return;
   const bounds = segmentBounds(row);
-  const absoluteTime =
-    youtubeState.mode === "video"
-      ? Number(youtubeState.player?.getCurrentTime?.() || bounds.start)
-      : bounds.start + currentPlaybackOffset();
-  const offset = Math.max(0, Math.min(bounds.duration, absoluteTime - bounds.start));
-  updateSegmentLabels(row, offset);
+  const absoluteTime = currentAbsoluteTime(row);
+  const offset = sectionOffsetFromFullTime(row, absoluteTime);
+  updateSegmentLabels(row, offset, absoluteTime);
 
-  if (bounds.duration > 0 && absoluteTime >= bounds.end - 0.15) {
+  const stopAt = youtubeState.fullMode ? fullDuration(row) : bounds.end;
+  if (stopAt > 0 && absoluteTime >= stopAt - 0.15) {
     if (youtubeState.mode === "video") {
       youtubeState.player?.pauseVideo?.();
-      youtubeState.player?.seekTo?.(bounds.end, true);
+      youtubeState.player?.seekTo?.(stopAt, true);
     } else if (youtubeState.mode === "audio") {
       stopAudioSource();
     }
-    updateSegmentLabels(row, bounds.duration);
+    updateSegmentLabels(row, sectionOffsetFromFullTime(row, stopAt), stopAt);
     setPlayLabel(false);
   }
 }
@@ -400,6 +417,8 @@ function teardownYoutubePlayer() {
   youtubeState.ready = false;
   youtubeState.resumeAfterReady = false;
   youtubeState.file = "";
+  youtubeState.fullMode = false;
+  youtubeState.absoluteTime = 0;
   setPlayLabel(false);
   setSegmentControlsReady(false);
 }
@@ -413,7 +432,11 @@ function teardownActiveMedia(keepFile = true) {
   youtubeState.player = null;
   youtubeState.audioBuffer = null;
   youtubeState.ready = false;
-  if (!keepFile) youtubeState.file = "";
+  if (!keepFile) {
+    youtubeState.file = "";
+    youtubeState.fullMode = false;
+    youtubeState.absoluteTime = 0;
+  }
   setPlayLabel(false);
   setSegmentControlsReady(false);
 }
@@ -423,12 +446,16 @@ function setupYoutubePlayer(row, resumeAfterReady = false) {
     teardownYoutubePlayer();
     return;
   }
-  const offset = youtubeState.file === row.file ? youtubeState.offset : 0;
+  const sameFile = youtubeState.file === row.file;
+  const absolute = sameFile ? youtubeState.absoluteTime : youtubeStart(row);
+  const offset = sectionOffsetFromFullTime(row, absolute);
+  const preserveFullMode = sameFile && youtubeState.fullMode;
   teardownActiveMedia(false);
   youtubeState.file = row.file;
   youtubeState.mode = "video";
+  youtubeState.fullMode = preserveFullMode;
   youtubeState.resumeAfterReady = resumeAfterReady;
-  updateSegmentLabels(row, offset);
+  updateSegmentLabels(row, offset, absolute);
   setSegmentControlsReady(false);
 
   loadYoutubeApi().then((YT) => {
@@ -442,8 +469,8 @@ function setupYoutubePlayer(row, resumeAfterReady = false) {
           const bounds = segmentBounds(active);
           youtubeState.ready = true;
           setSegmentControlsReady(true);
-          youtubeState.player.seekTo?.(bounds.start + youtubeState.offset, true);
-          updateSegmentLabels(active, youtubeState.offset);
+          youtubeState.player.seekTo?.(youtubeState.absoluteTime || bounds.start + youtubeState.offset, true);
+          updateSegmentLabels(active, youtubeState.offset, youtubeState.absoluteTime);
           if (youtubeState.resumeAfterReady) {
             youtubeState.resumeAfterReady = false;
             youtubeState.player.playVideo?.();
@@ -464,14 +491,18 @@ function setupAudioPlayer(row, resumeAfterReady = false) {
     teardownYoutubePlayer();
     return;
   }
-  const offset = youtubeState.file === row.file ? youtubeState.offset : 0;
+  const sameFile = youtubeState.file === row.file;
+  const absolute = sameFile ? youtubeState.absoluteTime : youtubeStart(row);
+  const offset = sectionOffsetFromFullTime(row, absolute);
+  const preserveFullMode = sameFile && youtubeState.fullMode;
   const loadId = youtubeState.audioLoadId + 1;
   teardownActiveMedia(false);
   youtubeState.audioLoadId = loadId;
   youtubeState.file = row.file;
   youtubeState.mode = "audio";
+  youtubeState.fullMode = preserveFullMode;
   youtubeState.resumeAfterReady = resumeAfterReady;
-  updateSegmentLabels(row, offset);
+  updateSegmentLabels(row, offset, absolute);
   setSegmentControlsReady(false);
   if (resumeAfterReady) ensureAudioContext().resume().catch(() => {});
 
@@ -481,10 +512,11 @@ function setupAudioPlayer(row, resumeAfterReady = false) {
       youtubeState.audioBuffer = buffer;
       youtubeState.ready = true;
       setSegmentControlsReady(true);
-      updateSegmentLabels(row, youtubeState.offset);
+      updateSegmentLabels(row, youtubeState.offset, youtubeState.absoluteTime);
       if (youtubeState.resumeAfterReady) {
         youtubeState.resumeAfterReady = false;
-        playAudioFromOffset(youtubeState.offset);
+        if (youtubeState.fullMode) playAudioAtTime(youtubeState.absoluteTime);
+        else playAudioFromOffset(youtubeState.offset);
       }
     })
     .catch(() => {
@@ -523,10 +555,18 @@ function stopAudioSource() {
 async function playAudioFromOffset(offset) {
   const row = currentSegmentRow();
   if (!row || !youtubeState.audioBuffer) return;
+  const bounds = segmentBounds(row);
+  return playAudioAtTime(bounds.start + offset);
+}
+
+async function playAudioAtTime(absoluteTime) {
+  const row = currentSegmentRow();
+  if (!row || !youtubeState.audioBuffer) return;
   const context = ensureAudioContext();
   await context.resume();
   const bounds = segmentBounds(row);
-  const boundedOffset = Math.max(0, Math.min(bounds.duration, offset));
+  const absolute = boundedFullTime(row, absoluteTime);
+  const boundedOffset = sectionOffsetFromFullTime(row, absolute);
   stopAudioSource();
   const source = context.createBufferSource();
   source.buffer = youtubeState.audioBuffer;
@@ -539,9 +579,10 @@ async function playAudioFromOffset(offset) {
   };
   youtubeState.audioSource = source;
   youtubeState.audioStartOffset = boundedOffset;
+  youtubeState.audioAbsoluteStart = absolute;
   youtubeState.audioStartedAt = context.currentTime;
-  source.start(0, bounds.start + boundedOffset);
-  updateSegmentLabels(row, boundedOffset);
+  source.start(0, absolute);
+  updateSegmentLabels(row, boundedOffset, absolute);
   setPlayLabel(true);
   startYoutubeTimer();
 }
@@ -551,6 +592,7 @@ function seekWithinSegment(offset, playAfterSeek = youtubeState.playing) {
   if (!row || !youtubeState.ready) return;
   const bounds = segmentBounds(row);
   const boundedOffset = Math.max(0, Math.min(bounds.duration, Number(offset || 0)));
+  youtubeState.fullMode = false;
   youtubeState.seeking = true;
   if (youtubeState.mode === "video") youtubeState.player?.seekTo?.(bounds.start + boundedOffset, true);
   else if (youtubeState.mode === "audio") {
@@ -570,6 +612,29 @@ function seekWithinSegment(offset, playAfterSeek = youtubeState.playing) {
   }, 350);
 }
 
+function seekWithinFull(fullTime, playAfterSeek = youtubeState.playing) {
+  const row = currentSegmentRow();
+  if (!row || !youtubeState.ready) return;
+  const absolute = boundedFullTime(row, fullTime);
+  const offset = sectionOffsetFromFullTime(row, absolute);
+  youtubeState.fullMode = true;
+  youtubeState.seeking = true;
+  if (youtubeState.mode === "video") youtubeState.player?.seekTo?.(absolute, true);
+  else if (youtubeState.mode === "audio") {
+    if (playAfterSeek) playAudioAtTime(absolute);
+    else stopAudioSource();
+  }
+  updateSegmentLabels(row, offset, absolute);
+  if (playAfterSeek && youtubeState.mode === "video") youtubeState.player?.playVideo?.();
+  stopSeekSettling();
+  youtubeState.seeking = true;
+  youtubeState.settleTimer = window.setTimeout(() => {
+    youtubeState.seeking = false;
+    youtubeState.settleTimer = 0;
+    syncYoutubeProgress();
+  }, 350);
+}
+
 function seekBy(deltaSeconds) {
   const row = currentSegmentRow();
   if (!row) return;
@@ -580,11 +645,12 @@ function toggleYoutubePlayback() {
   const row = currentSegmentRow();
   if (!row || !youtubeState.ready) return;
   const bounds = segmentBounds(row);
-  const offset = currentPlaybackOffset();
-  const absoluteTime = bounds.start + offset;
-  if (absoluteTime < bounds.start || absoluteTime >= bounds.end - 0.15) {
-    if (youtubeState.mode === "video") youtubeState.player?.seekTo?.(bounds.start, true);
-    else updateSegmentLabels(row, 0);
+  let absoluteTime = currentAbsoluteTime(row);
+  const stopAt = youtubeState.fullMode ? fullDuration(row) : bounds.end;
+  if (absoluteTime < 0 || absoluteTime >= stopAt - 0.15) {
+    absoluteTime = youtubeState.fullMode ? 0 : bounds.start;
+    if (youtubeState.mode === "video") youtubeState.player?.seekTo?.(absoluteTime, true);
+    else updateSegmentLabels(row, sectionOffsetFromFullTime(row, absoluteTime), absoluteTime);
   }
   if (youtubeState.playing) {
     if (youtubeState.mode === "video") youtubeState.player?.pauseVideo?.();
@@ -595,6 +661,7 @@ function toggleYoutubePlayback() {
     setPlayLabel(false);
   } else {
     if (youtubeState.mode === "video") youtubeState.player?.playVideo?.();
+    else if (youtubeState.fullMode) playAudioAtTime(absoluteTime);
     else playAudioFromOffset(youtubeState.offset);
     if (youtubeState.mode === "video") {
       setPlayLabel(true);
@@ -1065,13 +1132,15 @@ els.segmentSeek.addEventListener("change", () => {
 els.fullSeek.addEventListener("input", () => {
   youtubeState.seeking = true;
   const row = currentSegmentRow();
-  if (row) updateSegmentLabels(row, sectionOffsetFromFullTime(row, Number(els.fullSeek.value)));
+  if (row) {
+    const absolute = boundedFullTime(row, Number(els.fullSeek.value));
+    updateSegmentLabels(row, sectionOffsetFromFullTime(row, absolute), absolute);
+  }
 });
 
 els.fullSeek.addEventListener("change", () => {
   youtubeState.seeking = false;
-  const row = currentSegmentRow();
-  if (row) seekWithinSegment(sectionOffsetFromFullTime(row, Number(els.fullSeek.value)));
+  seekWithinFull(Number(els.fullSeek.value));
 });
 
 function handleKeyboardShortcuts(event) {
