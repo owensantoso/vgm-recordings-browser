@@ -300,6 +300,30 @@ tbody tr.active {
   line-height: 1.25;
 }
 
+.filter-link {
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  min-height: auto;
+  padding: 0;
+  text-align: left;
+}
+
+.filter-link:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.song-meta span .filter-link {
+  color: var(--muted);
+}
+
+.song-meta span .filter-link:hover {
+  color: var(--accent);
+}
+
 .muted {
   color: var(--muted);
 }

@@ -764,11 +764,15 @@ function instrumentBadges(row) {
 
 function songMeta(row) {
   if (!row.song_name && !row.franchise && !row.game_title) return '<span class="muted">Unknown</span>';
-  const gameLine = [row.franchise, row.game_title].filter(Boolean).join(" · ");
+  const gameButtons = [row.franchise, row.game_title]
+    .filter(Boolean)
+    .map((value) => `<button class="filter-link" type="button" data-filter-search="${escapeHtml(value)}">${escapeHtml(value)}</button>`)
+    .join('<span aria-hidden="true"> · </span>');
+  const songName = row.song_name || row.caption;
   return `
     <div class="song-meta">
-      <strong>${escapeHtml(row.song_name || row.caption)}</strong>
-      ${gameLine ? `<span>${escapeHtml(gameLine)}</span>` : ""}
+      <strong><button class="filter-link" type="button" data-filter-search="${escapeHtml(songName)}">${escapeHtml(songName)}</button></strong>
+      ${gameButtons ? `<span>${gameButtons}</span>` : ""}
     </div>
   `;
 }
@@ -920,8 +924,14 @@ function renderDetail(resumeAfterReady = false) {
   els.selectedCaption.textContent = row.caption;
   els.selectedLength.textContent = row.length;
   els.selectedRecorded.textContent = row.recorded_create_date;
-  els.selectedSong.textContent = row.song_name || "Unknown";
-  els.selectedGame.textContent = [row.franchise, row.game_title].filter(Boolean).join(" · ") || "Unknown";
+  els.selectedSong.innerHTML = row.song_name
+    ? `<button class="filter-link" type="button" data-filter-search="${escapeHtml(row.song_name)}">${escapeHtml(row.song_name)}</button>`
+    : "Unknown";
+  const gameButtons = [row.franchise, row.game_title]
+    .filter(Boolean)
+    .map((value) => `<button class="filter-link" type="button" data-filter-search="${escapeHtml(value)}">${escapeHtml(value)}</button>`)
+    .join('<span aria-hidden="true"> · </span>');
+  els.selectedGame.innerHTML = gameButtons || "Unknown";
   els.selectedSize.textContent = `${row.size_mb} MB MOV`;
   els.selectedResolution.textContent = row.resolution;
   els.selectedRotation.textContent = `${row.rotation} degrees`;
@@ -1065,6 +1075,15 @@ function populateSessionFilter() {
 document.addEventListener("click", (event) => {
   if (event.target.closest("[data-select-file]")) {
     event.stopPropagation();
+    return;
+  }
+
+  const filterButton = event.target.closest("[data-filter-search]");
+  if (filterButton) {
+    event.stopPropagation();
+    els.search.value = filterButton.dataset.filterSearch || "";
+    applyFilters();
+    els.search.focus();
     return;
   }
 
