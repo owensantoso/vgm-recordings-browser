@@ -650,6 +650,7 @@ function render() {
 }
 
 function selectFile(file) {
+  if (file === state.selectedFile) return;
   state.selectedFile = file;
   state.audioFile = file;
   state.detailOpen = false;
@@ -672,6 +673,7 @@ function renderSelection() {
 function showPlayer(file) {
   const row = rowForFile(file);
   if (!row || row.has_audio !== "yes") return;
+  if (file === state.selectedFile && file === state.audioFile) return;
   state.audioFile = file;
   state.selectedFile = file;
   state.detailOpen = false;
