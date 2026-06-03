@@ -14,9 +14,13 @@ const state = {
 const youtubeState = {
   apiPromise: null,
   player: null,
+  audio: null,
   ready: false,
   file: "",
+  mode: "video",
+  offset: 0,
   timer: 0,
+  settleTimer: 0,
   seeking: false,
   playing: false,
 };
@@ -57,7 +61,6 @@ const els = {
   copyPageLink: document.querySelector("#copy-page-link"),
   audioLink: document.querySelector("#audio-link"),
   videoDownload: document.querySelector("#video-download"),
-  audioDownload: document.querySelector("#audio-download"),
   selectMode: document.querySelector("#select-mode"),
   selectVisible: document.querySelector("#select-visible"),
   downloadSelected: document.querySelector("#download-selected"),
@@ -235,11 +238,36 @@ function updateSegmentLabels(row, offset = 0) {
   const bounds = segmentBounds(row);
   const value = Math.max(0, Math.min(bounds.duration, offset));
   const progress = bounds.duration > 0 ? (value / bounds.duration) * 100 : 0;
+  youtubeState.offset = value;
   els.segmentSeek.max = String(bounds.duration || 0);
   els.segmentSeek.value = String(value);
   els.segmentSeek.style.setProperty("--seek-progress", `${progress}%`);
   els.segmentCurrent.textContent = formatTotal(value);
   els.segmentEnd.textContent = formatTotal(bounds.duration);
+}
+
+function currentPlaybackOffset() {
+  const row = currentSegmentRow();
+  if (!row) return youtubeState.offset;
+  if (youtubeState.seeking) return youtubeState.offset;
+  const bounds = segmentBounds(row);
+  let offset = youtubeState.offset;
+  if (youtubeState.mode === "video" && youtubeState.player?.getCurrentTime) {
+    offset = Number(youtubeState.player.getCurrentTime() || bounds.start) - bounds.start;
+  } else if (youtubeState.mode === "audio" && youtubeState.audio) {
+    offset =
+      youtubeState.audio.seekable.length && youtubeState.audio.seekable.end(0) === 0 && !youtubeState.playing
+        ? youtubeState.offset
+        : Number(youtubeState.audio.currentTime || 0);
+  }
+  return Math.max(0, Math.min(bounds.duration, offset));
+}
+
+function rememberPlaybackOffset() {
+  const row = currentSegmentRow();
+  if (!row) return;
+  youtubeState.offset = currentPlaybackOffset();
+  updateSegmentLabels(row, youtubeState.offset);
 }
 
 function loadYoutubeApi() {
@@ -281,17 +309,35 @@ function stopYoutubeTimer() {
   youtubeState.timer = 0;
 }
 
+function stopSeekSettling() {
+  if (!youtubeState.settleTimer) return;
+  window.clearTimeout(youtubeState.settleTimer);
+  youtubeState.settleTimer = 0;
+  youtubeState.seeking = false;
+}
+
 function syncYoutubeProgress() {
   const row = currentSegmentRow();
-  if (!row || !youtubeState.player || !youtubeState.ready || youtubeState.seeking) return;
+  if (!row || !youtubeState.ready || youtubeState.seeking) return;
   const bounds = segmentBounds(row);
-  const absoluteTime = Number(youtubeState.player.getCurrentTime?.() || bounds.start);
+  const absoluteTime =
+    youtubeState.mode === "video"
+      ? Number(youtubeState.player?.getCurrentTime?.() || bounds.start)
+      : bounds.start +
+        (youtubeState.audio?.seekable?.length && youtubeState.audio.seekable.end(0) === 0 && !youtubeState.playing
+          ? youtubeState.offset
+          : Number(youtubeState.audio?.currentTime || 0));
   const offset = Math.max(0, Math.min(bounds.duration, absoluteTime - bounds.start));
   updateSegmentLabels(row, offset);
 
   if (bounds.duration > 0 && absoluteTime >= bounds.end - 0.15) {
-    youtubeState.player.pauseVideo?.();
-    youtubeState.player.seekTo?.(bounds.end, true);
+    if (youtubeState.mode === "video") {
+      youtubeState.player?.pauseVideo?.();
+      youtubeState.player?.seekTo?.(bounds.end, true);
+    } else if (youtubeState.audio) {
+      youtubeState.audio.pause();
+      youtubeState.audio.currentTime = bounds.duration;
+    }
     updateSegmentLabels(row, bounds.duration);
     setPlayLabel(false);
   }
@@ -304,10 +350,28 @@ function startYoutubeTimer() {
 
 function teardownYoutubePlayer() {
   stopYoutubeTimer();
+  stopSeekSettling();
+  if (youtubeState.audio) youtubeState.audio.pause();
+  if (youtubeState.player?.pauseVideo) youtubeState.player.pauseVideo();
   if (youtubeState.player?.destroy) youtubeState.player.destroy();
   youtubeState.player = null;
+  youtubeState.audio = null;
   youtubeState.ready = false;
   youtubeState.file = "";
+  setPlayLabel(false);
+  setSegmentControlsReady(false);
+}
+
+function teardownActiveMedia(keepFile = true) {
+  stopYoutubeTimer();
+  stopSeekSettling();
+  if (youtubeState.audio) youtubeState.audio.pause();
+  if (youtubeState.player?.pauseVideo) youtubeState.player.pauseVideo();
+  if (youtubeState.player?.destroy) youtubeState.player.destroy();
+  youtubeState.player = null;
+  youtubeState.audio = null;
+  youtubeState.ready = false;
+  if (!keepFile) youtubeState.file = "";
   setPlayLabel(false);
   setSegmentControlsReady(false);
 }
@@ -317,9 +381,11 @@ function setupYoutubePlayer(row) {
     teardownYoutubePlayer();
     return;
   }
-  teardownYoutubePlayer();
+  const offset = youtubeState.file === row.file ? youtubeState.offset : 0;
+  teardownActiveMedia(false);
   youtubeState.file = row.file;
-  updateSegmentLabels(row);
+  youtubeState.mode = "video";
+  updateSegmentLabels(row, offset);
   setSegmentControlsReady(false);
 
   loadYoutubeApi().then((YT) => {
@@ -333,8 +399,8 @@ function setupYoutubePlayer(row) {
           const bounds = segmentBounds(active);
           youtubeState.ready = true;
           setSegmentControlsReady(true);
-          youtubeState.player.seekTo?.(bounds.start, true);
-          updateSegmentLabels(active);
+          youtubeState.player.seekTo?.(bounds.start + youtubeState.offset, true);
+          updateSegmentLabels(active, youtubeState.offset);
           startYoutubeTimer();
         },
         onStateChange: (event) => {
@@ -346,17 +412,82 @@ function setupYoutubePlayer(row) {
   });
 }
 
+function setupAudioPlayer(row) {
+  if (!row.audio_file) {
+    teardownYoutubePlayer();
+    return;
+  }
+  const offset = youtubeState.file === row.file ? youtubeState.offset : 0;
+  teardownActiveMedia(false);
+  youtubeState.file = row.file;
+  youtubeState.mode = "audio";
+  updateSegmentLabels(row, offset);
+  setSegmentControlsReady(false);
+
+  const audio = document.querySelector("#audio-preview");
+  if (!audio) return;
+  youtubeState.audio = audio;
+  const applyAudioOffset = (targetOffset) => {
+    if (audio.seekable.length && audio.seekable.end(0) >= targetOffset) {
+      audio.currentTime = targetOffset;
+      return true;
+    }
+    return false;
+  };
+  const markReady = () => {
+    const active = currentSegmentRow();
+    if (!active || youtubeState.audio !== audio) return;
+    const bounds = segmentBounds(active);
+    const targetOffset = Math.max(0, Math.min(bounds.duration, youtubeState.offset));
+    youtubeState.ready = true;
+    setSegmentControlsReady(true);
+    youtubeState.seeking = true;
+    applyAudioOffset(targetOffset);
+    const retry = window.setInterval(() => {
+      if (youtubeState.audio !== audio || applyAudioOffset(targetOffset)) {
+        window.clearInterval(retry);
+        youtubeState.seeking = false;
+        syncYoutubeProgress();
+      }
+    }, 100);
+    window.setTimeout(() => {
+      window.clearInterval(retry);
+      youtubeState.seeking = false;
+      if (audio.seekable.length && audio.seekable.end(0) > 0) syncYoutubeProgress();
+    }, 2000);
+    updateSegmentLabels(active, targetOffset);
+    startYoutubeTimer();
+  };
+  audio.addEventListener("loadedmetadata", markReady, { once: true });
+  audio.addEventListener("canplay", () => {
+    if (youtubeState.audio === audio) applyAudioOffset(youtubeState.offset);
+  });
+  audio.addEventListener("play", () => {
+    setPlayLabel(true);
+    startYoutubeTimer();
+  });
+  audio.addEventListener("pause", () => setPlayLabel(false));
+  if (audio.readyState >= 1) markReady();
+}
+
 function seekWithinSegment(offset, playAfterSeek = youtubeState.playing) {
   const row = currentSegmentRow();
-  if (!row || !youtubeState.player || !youtubeState.ready) return;
+  if (!row || !youtubeState.ready) return;
   const bounds = segmentBounds(row);
   const boundedOffset = Math.max(0, Math.min(bounds.duration, Number(offset || 0)));
   youtubeState.seeking = true;
-  youtubeState.player.seekTo?.(bounds.start + boundedOffset, true);
+  if (youtubeState.mode === "video") youtubeState.player?.seekTo?.(bounds.start + boundedOffset, true);
+  else if (youtubeState.audio) youtubeState.audio.currentTime = boundedOffset;
   updateSegmentLabels(row, boundedOffset);
-  if (playAfterSeek) youtubeState.player.playVideo?.();
-  window.setTimeout(() => {
+  if (playAfterSeek) {
+    if (youtubeState.mode === "video") youtubeState.player?.playVideo?.();
+    else youtubeState.audio?.play?.();
+  }
+  stopSeekSettling();
+  youtubeState.seeking = true;
+  youtubeState.settleTimer = window.setTimeout(() => {
     youtubeState.seeking = false;
+    youtubeState.settleTimer = 0;
     syncYoutubeProgress();
   }, 350);
 }
@@ -369,17 +500,21 @@ function seekBy(deltaSeconds) {
 
 function toggleYoutubePlayback() {
   const row = currentSegmentRow();
-  if (!row || !youtubeState.player || !youtubeState.ready) return;
+  if (!row || !youtubeState.ready) return;
   const bounds = segmentBounds(row);
-  const absoluteTime = Number(youtubeState.player.getCurrentTime?.() || bounds.start);
+  const offset = currentPlaybackOffset();
+  const absoluteTime = bounds.start + offset;
   if (absoluteTime < bounds.start || absoluteTime >= bounds.end - 0.15) {
-    youtubeState.player.seekTo?.(bounds.start, true);
+    if (youtubeState.mode === "video") youtubeState.player?.seekTo?.(bounds.start, true);
+    else if (youtubeState.audio) youtubeState.audio.currentTime = 0;
   }
   if (youtubeState.playing) {
-    youtubeState.player.pauseVideo?.();
+    if (youtubeState.mode === "video") youtubeState.player?.pauseVideo?.();
+    else youtubeState.audio?.pause?.();
     setPlayLabel(false);
   } else {
-    youtubeState.player.playVideo?.();
+    if (youtubeState.mode === "video") youtubeState.player?.playVideo?.();
+    else youtubeState.audio?.play?.();
     setPlayLabel(true);
     startYoutubeTimer();
   }
@@ -465,27 +600,6 @@ function mediaDownload(row) {
   return driveDownload(row.video_file_id || row.audio_file_id);
 }
 
-function playerMarkup(row) {
-  if (state.audioFile !== row.file || row.has_audio !== "yes") return "";
-  return `
-    <div class="inline-player" data-player="${escapeHtml(row.file)}">
-      <audio class="native-audio" controls preload="metadata" src="${escapeHtml(audioSource(row))}"></audio>
-      <div class="player-actions">
-        <a class="download-link" href="${escapeHtml(driveDownload(row.audio_file_id))}" download target="_blank" rel="noopener">Download audio</a>
-      </div>
-    </div>
-  `;
-}
-
-function tablePlayerRow(row) {
-  if (state.audioFile !== row.file || row.has_audio !== "yes") return "";
-  return `
-    <tr class="player-row ${row.file === state.selectedFile ? "active" : ""}">
-      <td colspan="5">${playerMarkup(row)}</td>
-    </tr>
-  `;
-}
-
 function renderList() {
   els.table.innerHTML = state.visible
     .map(
@@ -502,7 +616,6 @@ function renderList() {
                 <span class="muted">${escapeHtml(row.recorded_create_date)}</span>
                 <div class="row-links">
                   ${row.has_audio === "yes" ? `<button type="button" data-show-player="${escapeHtml(row.file)}">Audio player</button>` : ""}
-                  <a href="${escapeHtml(mediaDownload(row))}" download target="_blank" rel="noopener">Download</a>
                 </div>
               </div>
             </div>
@@ -511,7 +624,6 @@ function renderList() {
           <td>${escapeHtml(row.length)}</td>
           <td>${mediaTags(row)}</td>
         </tr>
-        ${tablePlayerRow(row)}
       `,
     )
     .join("");
@@ -530,9 +642,7 @@ function renderList() {
           ${mediaTags(row)}
           <div class="card-actions">
             ${row.has_audio === "yes" ? `<button type="button" data-show-player="${escapeHtml(row.file)}">Audio player</button>` : ""}
-            <a href="${escapeHtml(mediaDownload(row))}" download target="_blank" rel="noopener">Download</a>
           </div>
-          ${playerMarkup(row)}
         </article>
       `,
     )
@@ -542,6 +652,7 @@ function renderList() {
 }
 
 function renderPreview(row) {
+  rememberPlaybackOffset();
   els.videoTab.classList.toggle("active", state.mediaMode === "video");
   els.audioTab.classList.toggle("active", state.mediaMode === "audio");
 
@@ -556,6 +667,18 @@ function renderPreview(row) {
       </iframe>
     `;
     setupYoutubePlayer(row);
+    return;
+  }
+
+  if (state.mediaMode === "audio" && row.audio_file) {
+    els.preview.innerHTML = `
+      <div class="audio-preview">
+        <strong>${escapeHtml(row.caption)}</strong>
+        <span>${escapeHtml(row.audio_file)}</span>
+      </div>
+      <audio id="audio-preview" preload="auto" src="${escapeHtml(audioSource(row))}"></audio>
+    `;
+    setupAudioPlayer(row);
     return;
   }
 
@@ -594,9 +717,10 @@ function renderDetail() {
   els.detail.classList.add("has-selection");
   els.detail.classList.toggle("open", state.detailOpen);
   if (state.mediaMode === "video" && row.has_video !== "yes") state.mediaMode = "audio";
-  const hasSegmentControls = state.mediaMode === "video" && Boolean(row.youtube_video_id);
+  const hasSegmentControls =
+    (state.mediaMode === "video" && Boolean(row.youtube_video_id)) ||
+    (state.mediaMode === "audio" && Boolean(row.audio_file));
   els.segmentControls.hidden = !hasSegmentControls;
-  if (hasSegmentControls) updateSegmentLabels(row);
 
   els.selectedFile.textContent = row.file;
   els.selectedCaption.textContent = row.caption;
@@ -622,8 +746,6 @@ function renderDetail() {
   els.audioLink.classList.toggle("disabled", !row.audio_url);
   els.videoDownload.href = row.video_file_id ? driveDownload(row.video_file_id) : "#";
   els.videoDownload.classList.toggle("disabled", !row.video_file_id);
-  els.audioDownload.href = row.audio_file_id ? driveDownload(row.audio_file_id) : "#";
-  els.audioDownload.classList.toggle("disabled", !row.audio_file_id);
 
   renderPreview(row);
 }
@@ -653,6 +775,7 @@ function selectFile(file) {
   if (file === state.selectedFile) return;
   state.selectedFile = file;
   state.audioFile = file;
+  state.mediaMode = rowForFile(file)?.has_video === "yes" ? "video" : "audio";
   state.detailOpen = false;
   setUrlForFile(file);
   render();
@@ -673,9 +796,10 @@ function renderSelection() {
 function showPlayer(file) {
   const row = rowForFile(file);
   if (!row || row.has_audio !== "yes") return;
-  if (file === state.selectedFile && file === state.audioFile) return;
+  if (file === state.selectedFile && state.mediaMode === "audio") return;
   state.audioFile = file;
   state.selectedFile = file;
+  state.mediaMode = "audio";
   state.detailOpen = false;
   setUrlForFile(file);
   render();

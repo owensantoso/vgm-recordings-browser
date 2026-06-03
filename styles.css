@@ -75,7 +75,6 @@ h1 {
 .row-links a,
 .card-actions button,
 .card-actions a,
-.download-link,
 .session-row a,
 .expand-detail,
 .close-detail {
@@ -212,16 +211,6 @@ td {
   vertical-align: top;
 }
 
-.player-row td {
-  padding: 0 12px 14px;
-}
-
-tbody tr.player-row,
-tbody tr.player-row:hover {
-  background: var(--accent-soft);
-  cursor: default;
-}
-
 .select-col {
   text-align: center;
   width: 42px;
@@ -260,11 +249,11 @@ tbody tr.active {
 .row-thumb,
 .card-thumb {
   aspect-ratio: 16 / 9;
-  background: #d0d5dd;
+  background: #111827;
   border: 1px solid var(--line);
   border-radius: 6px;
   display: block;
-  object-fit: cover;
+  object-fit: contain;
   object-position: center center;
   width: 100%;
 }
@@ -289,37 +278,6 @@ tbody tr.active {
   font-size: 12px;
   min-height: 30px;
   padding: 5px 8px;
-}
-
-.inline-player {
-  display: grid;
-  gap: 8px;
-  margin-top: 10px;
-  max-width: 760px;
-}
-
-.player-row .inline-player {
-  background: rgb(255 255 255 / 68%);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  margin: 0;
-  max-width: none;
-  padding: 12px;
-}
-
-.native-audio {
-  width: 100%;
-}
-
-.player-actions {
-  align-items: center;
-  display: flex;
-  gap: 8px;
-  justify-content: center;
-}
-
-.download-link {
-  min-height: 34px;
 }
 
 .caption-cell {
@@ -436,6 +394,18 @@ h2 {
   color: #d0d5dd;
   padding: 24px;
   text-align: center;
+}
+
+.audio-preview {
+  align-items: center;
+  display: grid;
+  gap: 4px;
+  padding: 24px;
+  text-align: center;
+}
+
+.audio-preview span {
+  color: #d0d5dd;
 }
 
 .segment-controls {
@@ -799,10 +769,6 @@ dd {
   .inline-player {
     grid-column: 1 / -1;
     max-width: none;
-  }
-
-  .player-actions {
-    justify-content: space-between;
   }
 
   .meta-grid,
