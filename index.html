@@ -106,6 +106,13 @@
             </div>
           </div>
 
+          <div id="segment-controls" class="segment-controls" hidden>
+            <button id="play-toggle" class="play-toggle" type="button" aria-label="Play selected video">Play</button>
+            <span id="segment-current" class="time-label">0:00</span>
+            <input id="segment-seek" class="segment-seek" type="range" min="0" max="0" value="0" step="0.1" aria-label="Seek within selected recording">
+            <span id="segment-end" class="time-label">0:00</span>
+          </div>
+
           <div class="tabs" role="tablist" aria-label="Media preview">
             <button id="video-tab" class="tab active" type="button">Video</button>
             <button id="audio-tab" class="tab" type="button">Audio</button>

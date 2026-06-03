@@ -11,6 +11,16 @@ const state = {
   detailOpen: false,
 };
 
+const youtubeState = {
+  apiPromise: null,
+  player: null,
+  ready: false,
+  file: "",
+  timer: 0,
+  seeking: false,
+  playing: false,
+};
+
 const els = {
   search: document.querySelector("#search"),
   mediaFilter: document.querySelector("#media-filter"),
@@ -34,6 +44,11 @@ const els = {
   selectedRotation: document.querySelector("#selected-rotation"),
   selectedAudio: document.querySelector("#selected-audio"),
   selectedDevice: document.querySelector("#selected-device"),
+  segmentControls: document.querySelector("#segment-controls"),
+  playToggle: document.querySelector("#play-toggle"),
+  segmentSeek: document.querySelector("#segment-seek"),
+  segmentCurrent: document.querySelector("#segment-current"),
+  segmentEnd: document.querySelector("#segment-end"),
   preview: document.querySelector("#preview"),
   videoTab: document.querySelector("#video-tab"),
   audioTab: document.querySelector("#audio-tab"),
@@ -128,10 +143,32 @@ function youtubeStart(row) {
   return timestampToSeconds(row.section_start) || secondsFromYoutubeUrl(row.youtube_timestamp_url);
 }
 
-function youtubeEmbed(row) {
+function youtubeEnd(row) {
+  return timestampToSeconds(row.section_end);
+}
+
+function segmentBounds(row) {
   const start = youtubeStart(row);
-  const params = start > 0 ? `?start=${start}` : "";
-  return `https://www.youtube.com/embed/${encodeURIComponent(row.youtube_video_id)}${params}`;
+  const explicitEnd = youtubeEnd(row);
+  const duration = Number(row.duration_seconds || 0);
+  const end = explicitEnd > start ? explicitEnd : start + duration;
+  return {
+    start,
+    end,
+    duration: Math.max(0, end - start),
+  };
+}
+
+function youtubeEmbed(row, enableApi = false) {
+  const start = youtubeStart(row);
+  const params = new URLSearchParams();
+  if (start > 0) params.set("start", String(start));
+  if (enableApi) {
+    params.set("enablejsapi", "1");
+    params.set("origin", window.location.origin);
+  }
+  const suffix = params.toString() ? `?${params.toString()}` : "";
+  return `https://www.youtube.com/embed/${encodeURIComponent(row.youtube_video_id)}${suffix}`;
 }
 
 function youtubeLink(row) {
@@ -192,6 +229,147 @@ function formatTotal(seconds) {
   const secs = total % 60;
   if (hours) return `${hours}:${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
   return `${minutes}:${String(secs).padStart(2, "0")}`;
+}
+
+function updateSegmentLabels(row, offset = 0) {
+  const bounds = segmentBounds(row);
+  const value = Math.max(0, Math.min(bounds.duration, offset));
+  els.segmentSeek.max = String(bounds.duration || 0);
+  els.segmentSeek.value = String(value);
+  els.segmentCurrent.textContent = formatTotal(value);
+  els.segmentEnd.textContent = formatTotal(bounds.duration);
+}
+
+function loadYoutubeApi() {
+  if (window.YT?.Player) return Promise.resolve(window.YT);
+  if (youtubeState.apiPromise) return youtubeState.apiPromise;
+  youtubeState.apiPromise = new Promise((resolve) => {
+    const previousReady = window.onYouTubeIframeAPIReady;
+    window.onYouTubeIframeAPIReady = () => {
+      if (typeof previousReady === "function") previousReady();
+      resolve(window.YT);
+    };
+    const script = document.createElement("script");
+    script.src = "https://www.youtube.com/iframe_api";
+    document.head.append(script);
+  });
+  return youtubeState.apiPromise;
+}
+
+function currentSegmentRow() {
+  const row = selectedRow();
+  if (!row || row.file !== youtubeState.file) return null;
+  return row;
+}
+
+function setPlayLabel(playing) {
+  youtubeState.playing = playing;
+  els.playToggle.textContent = playing ? "Pause" : "Play";
+  els.playToggle.setAttribute("aria-label", `${playing ? "Pause" : "Play"} selected video`);
+}
+
+function setSegmentControlsReady(ready) {
+  els.playToggle.disabled = !ready;
+  els.segmentSeek.disabled = !ready;
+}
+
+function stopYoutubeTimer() {
+  if (!youtubeState.timer) return;
+  window.clearInterval(youtubeState.timer);
+  youtubeState.timer = 0;
+}
+
+function syncYoutubeProgress() {
+  const row = currentSegmentRow();
+  if (!row || !youtubeState.player || !youtubeState.ready || youtubeState.seeking) return;
+  const bounds = segmentBounds(row);
+  const absoluteTime = Number(youtubeState.player.getCurrentTime?.() || bounds.start);
+  const offset = Math.max(0, Math.min(bounds.duration, absoluteTime - bounds.start));
+  updateSegmentLabels(row, offset);
+
+  if (bounds.duration > 0 && absoluteTime >= bounds.end - 0.15) {
+    youtubeState.player.pauseVideo?.();
+    youtubeState.player.seekTo?.(bounds.end, true);
+    updateSegmentLabels(row, bounds.duration);
+    setPlayLabel(false);
+  }
+}
+
+function startYoutubeTimer() {
+  stopYoutubeTimer();
+  youtubeState.timer = window.setInterval(syncYoutubeProgress, 250);
+}
+
+function teardownYoutubePlayer() {
+  stopYoutubeTimer();
+  if (youtubeState.player?.destroy) youtubeState.player.destroy();
+  youtubeState.player = null;
+  youtubeState.ready = false;
+  youtubeState.file = "";
+  setPlayLabel(false);
+  setSegmentControlsReady(false);
+}
+
+function setupYoutubePlayer(row) {
+  if (!row.youtube_video_id) {
+    teardownYoutubePlayer();
+    return;
+  }
+  teardownYoutubePlayer();
+  youtubeState.file = row.file;
+  updateSegmentLabels(row);
+  setSegmentControlsReady(false);
+
+  loadYoutubeApi().then((YT) => {
+    const iframe = document.querySelector("#youtube-preview");
+    if (!iframe || youtubeState.file !== row.file) return;
+    youtubeState.player = new YT.Player(iframe, {
+      events: {
+        onReady: () => {
+          const active = currentSegmentRow();
+          if (!active) return;
+          const bounds = segmentBounds(active);
+          youtubeState.ready = true;
+          setSegmentControlsReady(true);
+          youtubeState.player.seekTo?.(bounds.start, true);
+          updateSegmentLabels(active);
+          startYoutubeTimer();
+        },
+        onStateChange: (event) => {
+          setPlayLabel(event.data === YT.PlayerState.PLAYING);
+          if (event.data === YT.PlayerState.PLAYING) startYoutubeTimer();
+        },
+      },
+    });
+  });
+}
+
+function seekWithinSegment(offset, playAfterSeek = youtubeState.playing) {
+  const row = currentSegmentRow();
+  if (!row || !youtubeState.player || !youtubeState.ready) return;
+  const bounds = segmentBounds(row);
+  const boundedOffset = Math.max(0, Math.min(bounds.duration, Number(offset || 0)));
+  youtubeState.player.seekTo?.(bounds.start + boundedOffset, true);
+  updateSegmentLabels(row, boundedOffset);
+  if (playAfterSeek) youtubeState.player.playVideo?.();
+}
+
+function toggleYoutubePlayback() {
+  const row = currentSegmentRow();
+  if (!row || !youtubeState.player || !youtubeState.ready) return;
+  const bounds = segmentBounds(row);
+  const absoluteTime = Number(youtubeState.player.getCurrentTime?.() || bounds.start);
+  if (absoluteTime < bounds.start || absoluteTime >= bounds.end - 0.15) {
+    youtubeState.player.seekTo?.(bounds.start, true);
+  }
+  if (youtubeState.playing) {
+    youtubeState.player.pauseVideo?.();
+    setPlayLabel(false);
+  } else {
+    youtubeState.player.playVideo?.();
+    setPlayLabel(true);
+    startYoutubeTimer();
+  }
 }
 
 function hasMissingCaption(row) {
@@ -357,12 +535,14 @@ function renderPreview(row) {
   if (state.mediaMode === "video" && row.youtube_video_id) {
     els.preview.innerHTML = `
       <iframe
-        src="${escapeHtml(youtubeEmbed(row))}"
+        id="youtube-preview"
+        src="${escapeHtml(youtubeEmbed(row, true))}"
         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
         allowfullscreen
         title="${escapeHtml(row.file)} YouTube preview">
       </iframe>
     `;
+    setupYoutubePlayer(row);
     return;
   }
 
@@ -382,6 +562,7 @@ function renderPreview(row) {
       title="${escapeHtml(row.file)} ${label} preview">
     </iframe>
   `;
+  teardownYoutubePlayer();
 }
 
 function renderDetail() {
@@ -400,6 +581,9 @@ function renderDetail() {
   els.detail.classList.add("has-selection");
   els.detail.classList.toggle("open", state.detailOpen);
   if (state.mediaMode === "video" && row.has_video !== "yes") state.mediaMode = "audio";
+  const hasSegmentControls = state.mediaMode === "video" && Boolean(row.youtube_video_id);
+  els.segmentControls.hidden = !hasSegmentControls;
+  if (hasSegmentControls) updateSegmentLabels(row);
 
   els.selectedFile.textContent = row.file;
   els.selectedCaption.textContent = row.caption;
@@ -600,6 +784,19 @@ els.selectVisible.addEventListener("click", () => {
 });
 
 els.downloadSelected.addEventListener("click", downloadSelected);
+
+els.playToggle.addEventListener("click", toggleYoutubePlayback);
+
+els.segmentSeek.addEventListener("input", () => {
+  youtubeState.seeking = true;
+  const row = currentSegmentRow();
+  if (row) updateSegmentLabels(row, Number(els.segmentSeek.value));
+});
+
+els.segmentSeek.addEventListener("change", () => {
+  youtubeState.seeking = false;
+  seekWithinSegment(Number(els.segmentSeek.value));
+});
 
 els.copyYoutube.addEventListener("click", () => {
   copyButtonValue(els.copyYoutube);

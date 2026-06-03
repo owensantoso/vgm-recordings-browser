@@ -68,6 +68,7 @@ h1 {
 .csv-link,
 .actions a,
 .actions button,
+.segment-controls button,
 .tab,
 .selection-bar button,
 .row-links button,
@@ -437,6 +438,40 @@ h2 {
   text-align: center;
 }
 
+.segment-controls {
+  align-items: center;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  margin-top: 12px;
+}
+
+.segment-controls button {
+  min-height: 34px;
+  min-width: 62px;
+  padding: 5px 9px;
+}
+
+.segment-controls button:disabled,
+.segment-seek:disabled {
+  color: var(--muted);
+  cursor: default;
+  opacity: 0.72;
+}
+
+.time-label {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  min-width: 38px;
+  text-align: center;
+}
+
+.segment-seek {
+  accent-color: var(--accent);
+  min-height: 24px;
+  padding: 0;
+}
+
 .meta-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -475,7 +510,7 @@ dd {
 
 @media (max-width: 860px) {
   body {
-    padding-bottom: calc(112px + env(safe-area-inset-bottom));
+    padding-bottom: calc(154px + env(safe-area-inset-bottom));
   }
 
   .topbar {
@@ -566,7 +601,7 @@ dd {
     grid-template-columns: 116px minmax(0, 1fr);
     left: 0;
     max-height: none;
-    min-height: 104px;
+    min-height: 146px;
     overflow: hidden;
     padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
     position: fixed;
@@ -586,6 +621,10 @@ dd {
     max-height: min(82dvh, 720px);
     overflow: auto;
     transform: translateY(0);
+  }
+
+  .detail.open .segment-controls {
+    margin: 10px 0 0;
   }
 
   .detail-head {
@@ -673,6 +712,23 @@ dd {
   .preview {
     min-height: 65px;
     order: 1;
+  }
+
+  .segment-controls {
+    grid-column: 1 / -1;
+    grid-template-columns: auto auto minmax(0, 1fr) auto;
+    margin-top: 0;
+    order: 3;
+  }
+
+  .segment-controls button {
+    min-height: 32px;
+    min-width: 58px;
+  }
+
+  .time-label {
+    font-size: 12px;
+    min-width: 34px;
   }
 
   .detail.open .preview {
