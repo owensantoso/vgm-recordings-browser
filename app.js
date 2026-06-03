@@ -234,8 +234,10 @@ function formatTotal(seconds) {
 function updateSegmentLabels(row, offset = 0) {
   const bounds = segmentBounds(row);
   const value = Math.max(0, Math.min(bounds.duration, offset));
+  const progress = bounds.duration > 0 ? (value / bounds.duration) * 100 : 0;
   els.segmentSeek.max = String(bounds.duration || 0);
   els.segmentSeek.value = String(value);
+  els.segmentSeek.style.setProperty("--seek-progress", `${progress}%`);
   els.segmentCurrent.textContent = formatTotal(value);
   els.segmentEnd.textContent = formatTotal(bounds.duration);
 }
@@ -349,9 +351,20 @@ function seekWithinSegment(offset, playAfterSeek = youtubeState.playing) {
   if (!row || !youtubeState.player || !youtubeState.ready) return;
   const bounds = segmentBounds(row);
   const boundedOffset = Math.max(0, Math.min(bounds.duration, Number(offset || 0)));
+  youtubeState.seeking = true;
   youtubeState.player.seekTo?.(bounds.start + boundedOffset, true);
   updateSegmentLabels(row, boundedOffset);
   if (playAfterSeek) youtubeState.player.playVideo?.();
+  window.setTimeout(() => {
+    youtubeState.seeking = false;
+    syncYoutubeProgress();
+  }, 350);
+}
+
+function seekBy(deltaSeconds) {
+  const row = currentSegmentRow();
+  if (!row) return;
+  seekWithinSegment(Number(els.segmentSeek.value || 0) + deltaSeconds);
 }
 
 function toggleYoutubePlayback() {
@@ -797,6 +810,27 @@ els.segmentSeek.addEventListener("change", () => {
   youtubeState.seeking = false;
   seekWithinSegment(Number(els.segmentSeek.value));
 });
+
+function handleKeyboardShortcuts(event) {
+  const target = event.target?.closest ? event.target : document.activeElement;
+  const field = target?.closest?.("input, textarea, select");
+  if (field && field !== els.segmentSeek) return;
+  if (target?.closest?.("button, a")) return;
+  const row = currentSegmentRow();
+  if (!row || els.segmentControls.hidden) return;
+  if (event.code === "Space" || event.key === " " || event.key === "Spacebar") {
+    event.preventDefault();
+    toggleYoutubePlayback();
+  } else if (event.key === "ArrowLeft") {
+    event.preventDefault();
+    seekBy(-5);
+  } else if (event.key === "ArrowRight") {
+    event.preventDefault();
+    seekBy(5);
+  }
+}
+
+document.addEventListener("keydown", handleKeyboardShortcuts, true);
 
 els.copyYoutube.addEventListener("click", () => {
   copyButtonValue(els.copyYoutube);

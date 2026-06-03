@@ -467,9 +467,62 @@ h2 {
 }
 
 .segment-seek {
-  accent-color: var(--accent);
-  min-height: 24px;
+  --seek-progress: 0%;
+  appearance: none;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  min-height: 32px;
   padding: 0;
+}
+
+.segment-seek::-webkit-slider-runnable-track {
+  background: linear-gradient(
+    to right,
+    var(--accent) 0%,
+    var(--accent) var(--seek-progress),
+    #c7d0dd var(--seek-progress),
+    #c7d0dd 100%
+  );
+  border-radius: 999px;
+  height: 8px;
+}
+
+.segment-seek::-webkit-slider-thumb {
+  appearance: none;
+  background: var(--accent);
+  border: 3px solid #fff;
+  border-radius: 999px;
+  box-shadow: 0 1px 4px rgb(16 24 40 / 28%);
+  height: 22px;
+  margin-top: -7px;
+  width: 22px;
+}
+
+.segment-seek::-moz-range-track {
+  background: #c7d0dd;
+  border-radius: 999px;
+  height: 8px;
+}
+
+.segment-seek::-moz-range-progress {
+  background: var(--accent);
+  border-radius: 999px;
+  height: 8px;
+}
+
+.segment-seek::-moz-range-thumb {
+  background: var(--accent);
+  border: 3px solid #fff;
+  border-radius: 999px;
+  box-shadow: 0 1px 4px rgb(16 24 40 / 28%);
+  height: 16px;
+  width: 16px;
+}
+
+.segment-seek:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent), white 35%);
+  outline-offset: 4px;
 }
 
 .meta-grid {
