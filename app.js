@@ -38,6 +38,8 @@ const els = {
   videoTab: document.querySelector("#video-tab"),
   audioTab: document.querySelector("#audio-tab"),
   videoLink: document.querySelector("#video-link"),
+  copyYoutube: document.querySelector("#copy-youtube"),
+  copyPageLink: document.querySelector("#copy-page-link"),
   audioLink: document.querySelector("#audio-link"),
   videoDownload: document.querySelector("#video-download"),
   audioDownload: document.querySelector("#audio-download"),
@@ -173,6 +175,16 @@ function setUrlForFile(file) {
   history.replaceState(null, "", hash);
 }
 
+function pageLinkForFile(file) {
+  const url = new URL(window.location.href);
+  url.hash = hashForFile(file);
+  return url.toString();
+}
+
+function selectedRow() {
+  return state.visible.find((item) => item.file === state.selectedFile) || state.visible[0];
+}
+
 function formatTotal(seconds) {
   const total = Math.round(seconds);
   const hours = Math.floor(total / 3600);
@@ -274,6 +286,15 @@ function playerMarkup(row) {
   `;
 }
 
+function tablePlayerRow(row) {
+  if (state.audioFile !== row.file || row.has_audio !== "yes") return "";
+  return `
+    <tr class="player-row ${row.file === state.selectedFile ? "active" : ""}">
+      <td colspan="5">${playerMarkup(row)}</td>
+    </tr>
+  `;
+}
+
 function renderList() {
   els.table.innerHTML = state.visible
     .map(
@@ -294,12 +315,12 @@ function renderList() {
                 </div>
               </div>
             </div>
-            ${playerMarkup(row)}
           </td>
           <td class="caption-cell">${escapeHtml(row.caption)}</td>
           <td>${escapeHtml(row.length)}</td>
           <td>${mediaTags(row)}</td>
         </tr>
+        ${tablePlayerRow(row)}
       `,
     )
     .join("");
@@ -364,7 +385,7 @@ function renderPreview(row) {
 }
 
 function renderDetail() {
-  const row = state.visible.find((item) => item.file === state.selectedFile) || state.visible[0];
+  const row = selectedRow();
 
   if (!row) {
     els.detail.classList.remove("has-selection", "open");
@@ -392,8 +413,13 @@ function renderDetail() {
 
   const openVideoUrl = youtubeLink(row) || row.video_url;
   els.videoLink.href = openVideoUrl || "#";
-  els.videoLink.textContent = row.youtube_timestamp_url ? "Open YouTube section" : "Open video";
+  els.videoLink.textContent = row.youtube_timestamp_url ? "Open YouTube section" : "Open YouTube";
   els.videoLink.classList.toggle("disabled", !openVideoUrl);
+  els.copyYoutube.dataset.copyValue = openVideoUrl || "";
+  els.copyYoutube.disabled = !openVideoUrl;
+  els.copyYoutube.textContent = "Copy YouTube link";
+  els.copyPageLink.dataset.copyValue = pageLinkForFile(row.file);
+  els.copyPageLink.textContent = "Copy page link";
   els.audioLink.href = row.audio_url || "#";
   els.audioLink.textContent = row.audio_file_id ? "Open audio" : "Open audio";
   els.audioLink.classList.toggle("disabled", !row.audio_url);
@@ -472,6 +498,34 @@ function downloadSelected() {
     });
 }
 
+function fallbackCopy(value) {
+  const field = document.createElement("textarea");
+  field.value = value;
+  field.setAttribute("readonly", "");
+  field.style.position = "fixed";
+  field.style.opacity = "0";
+  document.body.append(field);
+  field.select();
+  document.execCommand("copy");
+  field.remove();
+}
+
+async function copyButtonValue(button) {
+  const value = button.dataset.copyValue;
+  if (!value) return;
+  const label = button.textContent;
+  try {
+    if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(value);
+    else fallbackCopy(value);
+    button.textContent = "Copied";
+  } catch {
+    button.textContent = "Copy failed";
+  }
+  window.setTimeout(() => {
+    button.textContent = label;
+  }, 1200);
+}
+
 function populateSessionFilter() {
   const sessions = new Map();
   state.rows.forEach((row) => {
@@ -546,6 +600,14 @@ els.selectVisible.addEventListener("click", () => {
 });
 
 els.downloadSelected.addEventListener("click", downloadSelected);
+
+els.copyYoutube.addEventListener("click", () => {
+  copyButtonValue(els.copyYoutube);
+});
+
+els.copyPageLink.addEventListener("click", () => {
+  copyButtonValue(els.copyPageLink);
+});
 
 els.expandDetail.addEventListener("click", () => {
   state.detailOpen = true;

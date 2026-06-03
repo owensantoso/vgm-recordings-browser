@@ -67,6 +67,7 @@ h1 {
 
 .csv-link,
 .actions a,
+.actions button,
 .tab,
 .selection-bar button,
 .row-links button,
@@ -210,6 +211,16 @@ td {
   vertical-align: top;
 }
 
+.player-row td {
+  padding: 0 12px 14px;
+}
+
+tbody tr.player-row,
+tbody tr.player-row:hover {
+  background: var(--accent-soft);
+  cursor: default;
+}
+
 .select-col {
   text-align: center;
   width: 42px;
@@ -242,6 +253,7 @@ tbody tr.active {
   display: grid;
   gap: 10px;
   grid-template-columns: 76px minmax(0, 1fr);
+  min-width: 240px;
 }
 
 .row-thumb,
@@ -252,7 +264,13 @@ tbody tr.active {
   border-radius: 6px;
   display: block;
   object-fit: cover;
+  object-position: center center;
   width: 100%;
+}
+
+.row-thumb {
+  align-self: center;
+  justify-self: center;
 }
 
 .row-links,
@@ -276,7 +294,16 @@ tbody tr.active {
   display: grid;
   gap: 8px;
   margin-top: 10px;
-  max-width: 520px;
+  max-width: 760px;
+}
+
+.player-row .inline-player {
+  background: rgb(255 255 255 / 68%);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  margin: 0;
+  max-width: none;
+  padding: 12px;
 }
 
 .native-audio {
@@ -435,12 +462,14 @@ dd {
 
 .actions {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
 }
 
-.actions a.disabled {
+.actions a.disabled,
+.actions button:disabled {
   color: var(--muted);
+  cursor: default;
   pointer-events: none;
 }
 
