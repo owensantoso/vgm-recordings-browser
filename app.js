@@ -46,6 +46,7 @@ const els = {
   downloadSelected: document.querySelector("#download-selected"),
   selectedCount: document.querySelector("#selected-count"),
   detail: document.querySelector("#detail"),
+  expandDetail: document.querySelector("#expand-detail"),
   closeDetail: document.querySelector("#close-detail"),
 };
 
@@ -366,6 +367,7 @@ function renderDetail() {
   const row = state.visible.find((item) => item.file === state.selectedFile) || state.visible[0];
 
   if (!row) {
+    els.detail.classList.remove("has-selection", "open");
     els.selectedFile.textContent = "";
     els.selectedCaption.textContent = "No matching recordings";
     els.selectedLength.textContent = "";
@@ -374,6 +376,7 @@ function renderDetail() {
   }
 
   state.selectedFile = row.file;
+  els.detail.classList.add("has-selection");
   els.detail.classList.toggle("open", state.detailOpen);
   if (state.mediaMode === "video" && row.has_video !== "yes") state.mediaMode = "audio";
 
@@ -426,7 +429,7 @@ function render() {
 function selectFile(file) {
   state.selectedFile = file;
   state.audioFile = file;
-  state.detailOpen = true;
+  state.detailOpen = false;
   setUrlForFile(file);
   render();
 }
@@ -448,7 +451,7 @@ function showPlayer(file) {
   if (!row || row.has_audio !== "yes") return;
   state.audioFile = file;
   state.selectedFile = file;
-  state.detailOpen = true;
+  state.detailOpen = false;
   setUrlForFile(file);
   render();
 }
@@ -544,6 +547,11 @@ els.selectVisible.addEventListener("click", () => {
 
 els.downloadSelected.addEventListener("click", downloadSelected);
 
+els.expandDetail.addEventListener("click", () => {
+  state.detailOpen = true;
+  els.detail.classList.add("open");
+});
+
 els.closeDetail.addEventListener("click", () => {
   state.detailOpen = false;
   els.detail.classList.remove("open");
@@ -554,7 +562,7 @@ window.addEventListener("hashchange", () => {
   if (!file) return;
   state.selectedFile = file;
   state.audioFile = file;
-  state.detailOpen = true;
+  state.detailOpen = false;
   applyFilters();
 });
 
@@ -568,7 +576,7 @@ fetch(csvUrl)
     const hashedFile = fileFromHash();
     state.selectedFile = hashedFile || state.rows[0]?.file || "";
     state.audioFile = state.selectedFile;
-    state.detailOpen = Boolean(hashedFile);
+    state.detailOpen = false;
     populateSessionFilter();
     applyFilters();
   })
