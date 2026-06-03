@@ -909,6 +909,8 @@ function renderDetail(resumeAfterReady = false) {
   els.detail.classList.add("has-selection");
   els.detail.classList.toggle("open", state.detailOpen);
   if (state.mediaMode === "video" && row.has_video !== "yes") state.mediaMode = "audio";
+  els.videoTab.disabled = row.has_video !== "yes";
+  els.audioTab.disabled = row.has_audio !== "yes";
   const hasSegmentControls =
     (state.mediaMode === "video" && Boolean(row.youtube_video_id)) ||
     (state.mediaMode === "audio" && Boolean(row.audio_file));
@@ -959,20 +961,20 @@ function renderSummary() {
   els.sessionPlaylist.hidden = !url;
 }
 
-function render() {
+function render(resumeAfterReady = false) {
   renderSummary();
   renderList();
-  renderDetail();
+  renderDetail(resumeAfterReady);
 }
 
-function selectFile(file) {
+function selectFile(file, resumeAfterReady = false) {
   if (file === state.selectedFile) return;
   state.selectedFile = file;
   state.audioFile = file;
   state.mediaMode = rowForFile(file)?.has_video === "yes" ? "video" : "audio";
   state.detailOpen = false;
   setUrlForFile(file);
-  render();
+  render(resumeAfterReady);
 }
 
 function renderSelection() {
@@ -996,7 +998,7 @@ function showPlayer(file) {
   state.mediaMode = "audio";
   state.detailOpen = false;
   setUrlForFile(file);
-  render();
+  render(true);
 }
 
 function downloadSelected() {
@@ -1074,7 +1076,7 @@ document.addEventListener("click", (event) => {
   }
 
   const row = event.target.closest("[data-file]");
-  if (row) selectFile(row.dataset.file);
+  if (row) selectFile(row.dataset.file, true);
 });
 
 document.addEventListener("input", (event) => {
@@ -1092,10 +1094,12 @@ document.addEventListener("input", (event) => {
 });
 
 els.videoTab.addEventListener("click", () => {
+  if (els.videoTab.disabled) return;
   switchMediaMode("video");
 });
 
 els.audioTab.addEventListener("click", () => {
+  if (els.audioTab.disabled) return;
   switchMediaMode("audio");
 });
 

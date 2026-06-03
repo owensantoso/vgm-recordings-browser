@@ -414,6 +414,13 @@ h2 {
   color: #fff;
 }
 
+.tab:disabled {
+  background: #f8fafc;
+  color: var(--muted);
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
 .preview {
   align-items: center;
   background: #101418;
@@ -480,9 +487,10 @@ h2 {
 }
 
 .play-icon {
-  display: block;
+  align-items: center;
+  display: inline-flex;
   height: 18px;
-  position: relative;
+  justify-content: center;
   width: 18px;
 }
 
@@ -491,18 +499,23 @@ h2 {
   border-style: solid;
   border-width: 7px 0 7px 11px;
   content: "";
-  left: 5px;
-  position: absolute;
-  top: 2px;
+  transform: translateX(1px);
 }
 
 .play-toggle.is-playing .play-icon::before {
   background: currentColor;
   border: 0;
-  box-shadow: 8px 0 0 currentColor;
-  height: 14px;
-  left: 4px;
-  top: 2px;
+  box-shadow: none;
+  height: 15px;
+  transform: none;
+  width: 4px;
+}
+
+.play-toggle.is-playing .play-icon::after {
+  background: currentColor;
+  content: "";
+  height: 15px;
+  margin-left: 5px;
   width: 4px;
 }
 
