@@ -8,6 +8,7 @@ const state = {
   audioFile: "",
   selectedDownloads: new Set(),
   selectMode: false,
+  detailOpen: false,
 };
 
 const els = {
@@ -44,6 +45,8 @@ const els = {
   selectVisible: document.querySelector("#select-visible"),
   downloadSelected: document.querySelector("#download-selected"),
   selectedCount: document.querySelector("#selected-count"),
+  detail: document.querySelector("#detail"),
+  closeDetail: document.querySelector("#close-detail"),
 };
 
 function parseCsv(text) {
@@ -147,6 +150,26 @@ function escapeHtml(value) {
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;");
+}
+
+function hashForFile(file) {
+  return encodeURIComponent(String(file || "").replace(/\.[^.]+$/, ""));
+}
+
+function fileFromHash() {
+  const value = decodeURIComponent(window.location.hash.replace(/^#/, ""));
+  if (!value) return "";
+  const normalized = value.toLowerCase();
+  const exact = state.rows.find((row) => row.file.toLowerCase() === normalized);
+  if (exact) return exact.file;
+  const byStem = state.rows.find((row) => row.file.replace(/\.[^.]+$/, "").toLowerCase() === normalized);
+  return byStem?.file || "";
+}
+
+function setUrlForFile(file) {
+  const hash = `#${hashForFile(file)}`;
+  if (window.location.hash === hash) return;
+  history.replaceState(null, "", hash);
 }
 
 function formatTotal(seconds) {
@@ -351,6 +374,7 @@ function renderDetail() {
   }
 
   state.selectedFile = row.file;
+  els.detail.classList.toggle("open", state.detailOpen);
   if (state.mediaMode === "video" && row.has_video !== "yes") state.mediaMode = "audio";
 
   els.selectedFile.textContent = row.file;
@@ -402,6 +426,8 @@ function render() {
 function selectFile(file) {
   state.selectedFile = file;
   state.audioFile = file;
+  state.detailOpen = true;
+  setUrlForFile(file);
   render();
 }
 
@@ -422,6 +448,8 @@ function showPlayer(file) {
   if (!row || row.has_audio !== "yes") return;
   state.audioFile = file;
   state.selectedFile = file;
+  state.detailOpen = true;
+  setUrlForFile(file);
   render();
 }
 
@@ -516,6 +544,20 @@ els.selectVisible.addEventListener("click", () => {
 
 els.downloadSelected.addEventListener("click", downloadSelected);
 
+els.closeDetail.addEventListener("click", () => {
+  state.detailOpen = false;
+  els.detail.classList.remove("open");
+});
+
+window.addEventListener("hashchange", () => {
+  const file = fileFromHash();
+  if (!file) return;
+  state.selectedFile = file;
+  state.audioFile = file;
+  state.detailOpen = true;
+  applyFilters();
+});
+
 fetch(csvUrl)
   .then((response) => {
     if (!response.ok) throw new Error(`Could not load ${csvUrl}`);
@@ -523,8 +565,10 @@ fetch(csvUrl)
   })
   .then((text) => {
     state.rows = parseCsv(text);
-    state.selectedFile = state.rows[0]?.file || "";
+    const hashedFile = fileFromHash();
+    state.selectedFile = hashedFile || state.rows[0]?.file || "";
     state.audioFile = state.selectedFile;
+    state.detailOpen = Boolean(hashedFile);
     populateSessionFilter();
     applyFilters();
   })

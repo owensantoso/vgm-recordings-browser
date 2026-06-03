@@ -93,13 +93,16 @@
           <div id="card-list" class="card-list"></div>
         </div>
 
-        <aside class="detail" aria-label="Selected recording">
+        <aside id="detail" class="detail" aria-label="Selected recording">
           <div class="detail-head">
             <div>
               <p id="selected-file" class="file-name"></p>
               <h2 id="selected-caption"></h2>
             </div>
-            <span id="selected-length" class="pill"></span>
+            <div class="detail-tools">
+              <span id="selected-length" class="pill"></span>
+              <button id="close-detail" class="close-detail" type="button" aria-label="Close selected recording">Close</button>
+            </div>
           </div>
 
           <div class="tabs" role="tablist" aria-label="Media preview">
