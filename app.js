@@ -1,4 +1,4 @@
-const csvUrl = "data/recordings.csv?v=20260604-instruments";
+const csvUrl = "data/recordings.csv?v=20260604-instrument-icons";
 
 const state = {
   rows: [],
@@ -638,9 +638,9 @@ function mediaTags(row) {
 
 function instrumentBadges(row) {
   const instruments = [
-    ["D", "Drums", row.drums],
-    ["P", "Piano", row.piano],
-    ["G", "Guitar", row.guitar],
+    ["🥁", "Drums", row.drums],
+    ["🎹", "Piano", row.piano],
+    ["🎸", "Guitar", row.guitar],
   ];
   const badges = instruments
     .filter(([, , name]) => name)
