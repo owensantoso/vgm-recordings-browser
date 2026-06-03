@@ -91,6 +91,47 @@ function driveDownload(fileId) {
   return `https://drive.google.com/uc?export=download&id=${fileId}`;
 }
 
+function timestampToSeconds(value) {
+  if (!value) return 0;
+  const parts = String(value)
+    .split(":")
+    .map((part) => Number(part));
+  if (parts.some((part) => Number.isNaN(part))) return 0;
+  return parts.reduce((total, part) => total * 60 + part, 0);
+}
+
+function secondsFromYoutubeUrl(value) {
+  if (!value) return 0;
+  try {
+    const url = new URL(value);
+    const timestamp = url.searchParams.get("t") || url.searchParams.get("start");
+    if (!timestamp) return 0;
+    if (/^\d+$/.test(timestamp)) return Number(timestamp);
+    const match = timestamp.match(/^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?$/);
+    if (!match) return 0;
+    return Number(match[1] || 0) * 3600 + Number(match[2] || 0) * 60 + Number(match[3] || 0);
+  } catch {
+    return 0;
+  }
+}
+
+function youtubeStart(row) {
+  return timestampToSeconds(row.section_start) || secondsFromYoutubeUrl(row.youtube_timestamp_url);
+}
+
+function youtubeEmbed(row) {
+  const start = youtubeStart(row);
+  const params = start > 0 ? `?start=${start}` : "";
+  return `https://www.youtube.com/embed/${encodeURIComponent(row.youtube_video_id)}${params}`;
+}
+
+function youtubeLink(row) {
+  if (row.youtube_timestamp_url) return row.youtube_timestamp_url;
+  if (row.youtube_url) return row.youtube_url;
+  if (row.youtube_video_id) return `https://www.youtube.com/watch?v=${encodeURIComponent(row.youtube_video_id)}`;
+  return "";
+}
+
 function escapeHtml(value) {
   return String(value || "")
     .replaceAll("&", "&amp;")
@@ -118,7 +159,14 @@ function applyFilters() {
   const caption = els.captionFilter.value;
 
   state.visible = state.rows.filter((row) => {
-    const haystack = `${row.file} ${row.caption} ${row.device}`.toLowerCase();
+    const haystack = [
+      row.file,
+      row.caption,
+      row.device,
+      row.session_id,
+      row.song,
+      row.game,
+    ].join(" ").toLowerCase();
     const matchesQuery = !query || haystack.includes(query);
     const matchesMedia =
       media === "all" ||
@@ -247,6 +295,18 @@ function renderPreview(row) {
   els.videoTab.classList.toggle("active", state.mediaMode === "video");
   els.audioTab.classList.toggle("active", state.mediaMode === "audio");
 
+  if (state.mediaMode === "video" && row.youtube_video_id) {
+    els.preview.innerHTML = `
+      <iframe
+        src="${escapeHtml(youtubeEmbed(row))}"
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+        allowfullscreen
+        title="${escapeHtml(row.file)} YouTube preview">
+      </iframe>
+    `;
+    return;
+  }
+
   const fileId = state.mediaMode === "video" ? row.video_file_id : row.audio_file_id;
   const label = state.mediaMode === "video" ? "video" : "audio";
 
@@ -257,10 +317,10 @@ function renderPreview(row) {
 
   els.preview.innerHTML = `
     <iframe
-      src="${drivePreview(fileId)}"
-      allow="autoplay; fullscreen"
+      src="${escapeHtml(drivePreview(fileId))}"
+      allow="autoplay"
       allowfullscreen
-      title="${row.file} ${label} preview">
+      title="${escapeHtml(row.file)} ${label} preview">
     </iframe>
   `;
 }
@@ -289,9 +349,10 @@ function renderDetail() {
   els.selectedAudio.textContent = `${row.audio_file || "No audio"} · ${row.audio_size_mb || "0"} MB`;
   els.selectedDevice.textContent = row.device;
 
-  els.videoLink.href = row.video_url || "#";
-  els.videoLink.textContent = row.video_file_id ? "Open video" : "Open video";
-  els.videoLink.classList.toggle("disabled", !row.video_url);
+  const openVideoUrl = youtubeLink(row) || row.video_url;
+  els.videoLink.href = openVideoUrl || "#";
+  els.videoLink.textContent = row.youtube_timestamp_url ? "Open YouTube section" : "Open video";
+  els.videoLink.classList.toggle("disabled", !openVideoUrl);
   els.audioLink.href = row.audio_url || "#";
   els.audioLink.textContent = row.audio_file_id ? "Open audio" : "Open audio";
   els.audioLink.classList.toggle("disabled", !row.audio_url);
