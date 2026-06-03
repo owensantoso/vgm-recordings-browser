@@ -14,7 +14,12 @@ const state = {
 const youtubeState = {
   apiPromise: null,
   player: null,
-  audio: null,
+  audioContext: null,
+  audioBuffer: null,
+  audioSource: null,
+  audioStartedAt: 0,
+  audioStartOffset: 0,
+  audioLoadId: 0,
   ready: false,
   file: "",
   mode: "video",
@@ -23,6 +28,7 @@ const youtubeState = {
   settleTimer: 0,
   seeking: false,
   playing: false,
+  resumeAfterReady: false,
 };
 
 const els = {
@@ -254,11 +260,8 @@ function currentPlaybackOffset() {
   let offset = youtubeState.offset;
   if (youtubeState.mode === "video" && youtubeState.player?.getCurrentTime) {
     offset = Number(youtubeState.player.getCurrentTime() || bounds.start) - bounds.start;
-  } else if (youtubeState.mode === "audio" && youtubeState.audio) {
-    offset =
-      youtubeState.audio.seekable.length && youtubeState.audio.seekable.end(0) === 0 && !youtubeState.playing
-        ? youtubeState.offset
-        : Number(youtubeState.audio.currentTime || 0);
+  } else if (youtubeState.mode === "audio" && youtubeState.audioContext && youtubeState.playing) {
+    offset = youtubeState.audioStartOffset + (youtubeState.audioContext.currentTime - youtubeState.audioStartedAt);
   }
   return Math.max(0, Math.min(bounds.duration, offset));
 }
@@ -294,7 +297,10 @@ function currentSegmentRow() {
 
 function setPlayLabel(playing) {
   youtubeState.playing = playing;
-  els.playToggle.textContent = playing ? "Pause" : "Play";
+  els.playToggle.classList.toggle("is-playing", playing);
+  const label = playing ? "Pause" : "Play";
+  const hiddenLabel = els.playToggle.querySelector(".sr-only");
+  if (hiddenLabel) hiddenLabel.textContent = label;
   els.playToggle.setAttribute("aria-label", `${playing ? "Pause" : "Play"} selected video`);
 }
 
@@ -323,10 +329,7 @@ function syncYoutubeProgress() {
   const absoluteTime =
     youtubeState.mode === "video"
       ? Number(youtubeState.player?.getCurrentTime?.() || bounds.start)
-      : bounds.start +
-        (youtubeState.audio?.seekable?.length && youtubeState.audio.seekable.end(0) === 0 && !youtubeState.playing
-          ? youtubeState.offset
-          : Number(youtubeState.audio?.currentTime || 0));
+      : bounds.start + currentPlaybackOffset();
   const offset = Math.max(0, Math.min(bounds.duration, absoluteTime - bounds.start));
   updateSegmentLabels(row, offset);
 
@@ -334,9 +337,8 @@ function syncYoutubeProgress() {
     if (youtubeState.mode === "video") {
       youtubeState.player?.pauseVideo?.();
       youtubeState.player?.seekTo?.(bounds.end, true);
-    } else if (youtubeState.audio) {
-      youtubeState.audio.pause();
-      youtubeState.audio.currentTime = bounds.duration;
+    } else if (youtubeState.mode === "audio") {
+      stopAudioSource();
     }
     updateSegmentLabels(row, bounds.duration);
     setPlayLabel(false);
@@ -351,12 +353,13 @@ function startYoutubeTimer() {
 function teardownYoutubePlayer() {
   stopYoutubeTimer();
   stopSeekSettling();
-  if (youtubeState.audio) youtubeState.audio.pause();
+  stopAudioSource();
   if (youtubeState.player?.pauseVideo) youtubeState.player.pauseVideo();
   if (youtubeState.player?.destroy) youtubeState.player.destroy();
   youtubeState.player = null;
-  youtubeState.audio = null;
+  youtubeState.audioBuffer = null;
   youtubeState.ready = false;
+  youtubeState.resumeAfterReady = false;
   youtubeState.file = "";
   setPlayLabel(false);
   setSegmentControlsReady(false);
@@ -365,18 +368,18 @@ function teardownYoutubePlayer() {
 function teardownActiveMedia(keepFile = true) {
   stopYoutubeTimer();
   stopSeekSettling();
-  if (youtubeState.audio) youtubeState.audio.pause();
+  stopAudioSource();
   if (youtubeState.player?.pauseVideo) youtubeState.player.pauseVideo();
   if (youtubeState.player?.destroy) youtubeState.player.destroy();
   youtubeState.player = null;
-  youtubeState.audio = null;
+  youtubeState.audioBuffer = null;
   youtubeState.ready = false;
   if (!keepFile) youtubeState.file = "";
   setPlayLabel(false);
   setSegmentControlsReady(false);
 }
 
-function setupYoutubePlayer(row) {
+function setupYoutubePlayer(row, resumeAfterReady = false) {
   if (!row.youtube_video_id) {
     teardownYoutubePlayer();
     return;
@@ -385,6 +388,7 @@ function setupYoutubePlayer(row) {
   teardownActiveMedia(false);
   youtubeState.file = row.file;
   youtubeState.mode = "video";
+  youtubeState.resumeAfterReady = resumeAfterReady;
   updateSegmentLabels(row, offset);
   setSegmentControlsReady(false);
 
@@ -401,6 +405,10 @@ function setupYoutubePlayer(row) {
           setSegmentControlsReady(true);
           youtubeState.player.seekTo?.(bounds.start + youtubeState.offset, true);
           updateSegmentLabels(active, youtubeState.offset);
+          if (youtubeState.resumeAfterReady) {
+            youtubeState.resumeAfterReady = false;
+            youtubeState.player.playVideo?.();
+          }
           startYoutubeTimer();
         },
         onStateChange: (event) => {
@@ -412,62 +420,91 @@ function setupYoutubePlayer(row) {
   });
 }
 
-function setupAudioPlayer(row) {
+function setupAudioPlayer(row, resumeAfterReady = false) {
   if (!row.audio_file) {
     teardownYoutubePlayer();
     return;
   }
   const offset = youtubeState.file === row.file ? youtubeState.offset : 0;
+  const loadId = youtubeState.audioLoadId + 1;
   teardownActiveMedia(false);
+  youtubeState.audioLoadId = loadId;
   youtubeState.file = row.file;
   youtubeState.mode = "audio";
+  youtubeState.resumeAfterReady = resumeAfterReady;
   updateSegmentLabels(row, offset);
   setSegmentControlsReady(false);
+  if (resumeAfterReady) ensureAudioContext().resume().catch(() => {});
 
-  const audio = document.querySelector("#audio-preview");
-  if (!audio) return;
-  youtubeState.audio = audio;
-  const applyAudioOffset = (targetOffset) => {
-    if (audio.seekable.length && audio.seekable.end(0) >= targetOffset) {
-      audio.currentTime = targetOffset;
-      return true;
-    }
-    return false;
-  };
-  const markReady = () => {
-    const active = currentSegmentRow();
-    if (!active || youtubeState.audio !== audio) return;
-    const bounds = segmentBounds(active);
-    const targetOffset = Math.max(0, Math.min(bounds.duration, youtubeState.offset));
-    youtubeState.ready = true;
-    setSegmentControlsReady(true);
-    youtubeState.seeking = true;
-    applyAudioOffset(targetOffset);
-    const retry = window.setInterval(() => {
-      if (youtubeState.audio !== audio || applyAudioOffset(targetOffset)) {
-        window.clearInterval(retry);
-        youtubeState.seeking = false;
-        syncYoutubeProgress();
+  loadAudioBuffer(audioSource(row))
+    .then((buffer) => {
+      if (youtubeState.audioLoadId !== loadId || youtubeState.file !== row.file || youtubeState.mode !== "audio") return;
+      youtubeState.audioBuffer = buffer;
+      youtubeState.ready = true;
+      setSegmentControlsReady(true);
+      updateSegmentLabels(row, youtubeState.offset);
+      if (youtubeState.resumeAfterReady) {
+        youtubeState.resumeAfterReady = false;
+        playAudioFromOffset(youtubeState.offset);
       }
-    }, 100);
-    window.setTimeout(() => {
-      window.clearInterval(retry);
-      youtubeState.seeking = false;
-      if (audio.seekable.length && audio.seekable.end(0) > 0) syncYoutubeProgress();
-    }, 2000);
-    updateSegmentLabels(active, targetOffset);
-    startYoutubeTimer();
+    })
+    .catch(() => {
+      if (youtubeState.audioLoadId !== loadId) return;
+      els.preview.innerHTML = '<div class="empty">Could not decode this audio file.</div>';
+      setSegmentControlsReady(false);
+    });
+}
+
+function ensureAudioContext() {
+  if (!youtubeState.audioContext) {
+    youtubeState.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  return youtubeState.audioContext;
+}
+
+async function loadAudioBuffer(src) {
+  const context = ensureAudioContext();
+  const response = await fetch(src);
+  if (!response.ok) throw new Error(`Could not load ${src}`);
+  const bytes = await response.arrayBuffer();
+  return context.decodeAudioData(bytes);
+}
+
+function stopAudioSource() {
+  if (!youtubeState.audioSource) return;
+  try {
+    youtubeState.audioSource.onended = null;
+    youtubeState.audioSource.stop();
+  } catch {
+    // Source may already have stopped.
+  }
+  youtubeState.audioSource = null;
+}
+
+async function playAudioFromOffset(offset) {
+  const row = currentSegmentRow();
+  if (!row || !youtubeState.audioBuffer) return;
+  const context = ensureAudioContext();
+  await context.resume();
+  const bounds = segmentBounds(row);
+  const boundedOffset = Math.max(0, Math.min(bounds.duration, offset));
+  stopAudioSource();
+  const source = context.createBufferSource();
+  source.buffer = youtubeState.audioBuffer;
+  source.connect(context.destination);
+  source.onended = () => {
+    const active = currentSegmentRow();
+    if (!active || youtubeState.mode !== "audio") return;
+    updateSegmentLabels(active, currentPlaybackOffset());
+    setPlayLabel(false);
   };
-  audio.addEventListener("loadedmetadata", markReady, { once: true });
-  audio.addEventListener("canplay", () => {
-    if (youtubeState.audio === audio) applyAudioOffset(youtubeState.offset);
-  });
-  audio.addEventListener("play", () => {
-    setPlayLabel(true);
-    startYoutubeTimer();
-  });
-  audio.addEventListener("pause", () => setPlayLabel(false));
-  if (audio.readyState >= 1) markReady();
+  youtubeState.audioSource = source;
+  youtubeState.audioStartOffset = boundedOffset;
+  youtubeState.audioStartedAt = context.currentTime;
+  source.start(0, boundedOffset);
+  updateSegmentLabels(row, boundedOffset);
+  setPlayLabel(true);
+  startYoutubeTimer();
 }
 
 function seekWithinSegment(offset, playAfterSeek = youtubeState.playing) {
@@ -477,11 +514,13 @@ function seekWithinSegment(offset, playAfterSeek = youtubeState.playing) {
   const boundedOffset = Math.max(0, Math.min(bounds.duration, Number(offset || 0)));
   youtubeState.seeking = true;
   if (youtubeState.mode === "video") youtubeState.player?.seekTo?.(bounds.start + boundedOffset, true);
-  else if (youtubeState.audio) youtubeState.audio.currentTime = boundedOffset;
+  else if (youtubeState.mode === "audio") {
+    if (playAfterSeek) playAudioFromOffset(boundedOffset);
+    else stopAudioSource();
+  }
   updateSegmentLabels(row, boundedOffset);
   if (playAfterSeek) {
     if (youtubeState.mode === "video") youtubeState.player?.playVideo?.();
-    else youtubeState.audio?.play?.();
   }
   stopSeekSettling();
   youtubeState.seeking = true;
@@ -506,18 +545,31 @@ function toggleYoutubePlayback() {
   const absoluteTime = bounds.start + offset;
   if (absoluteTime < bounds.start || absoluteTime >= bounds.end - 0.15) {
     if (youtubeState.mode === "video") youtubeState.player?.seekTo?.(bounds.start, true);
-    else if (youtubeState.audio) youtubeState.audio.currentTime = 0;
+    else updateSegmentLabels(row, 0);
   }
   if (youtubeState.playing) {
     if (youtubeState.mode === "video") youtubeState.player?.pauseVideo?.();
-    else youtubeState.audio?.pause?.();
+    else {
+      rememberPlaybackOffset();
+      stopAudioSource();
+    }
     setPlayLabel(false);
   } else {
     if (youtubeState.mode === "video") youtubeState.player?.playVideo?.();
-    else youtubeState.audio?.play?.();
-    setPlayLabel(true);
-    startYoutubeTimer();
+    else playAudioFromOffset(youtubeState.offset);
+    if (youtubeState.mode === "video") {
+      setPlayLabel(true);
+      startYoutubeTimer();
+    }
   }
+}
+
+function switchMediaMode(mode) {
+  if (state.mediaMode === mode) return;
+  const shouldResume = youtubeState.playing;
+  rememberPlaybackOffset();
+  state.mediaMode = mode;
+  renderDetail(shouldResume);
 }
 
 function hasMissingCaption(row) {
@@ -651,7 +703,7 @@ function renderList() {
   renderSelection();
 }
 
-function renderPreview(row) {
+function renderPreview(row, resumeAfterReady = false) {
   rememberPlaybackOffset();
   els.videoTab.classList.toggle("active", state.mediaMode === "video");
   els.audioTab.classList.toggle("active", state.mediaMode === "audio");
@@ -666,7 +718,7 @@ function renderPreview(row) {
         title="${escapeHtml(row.file)} YouTube preview">
       </iframe>
     `;
-    setupYoutubePlayer(row);
+    setupYoutubePlayer(row, resumeAfterReady);
     return;
   }
 
@@ -676,9 +728,8 @@ function renderPreview(row) {
         <strong>${escapeHtml(row.caption)}</strong>
         <span>${escapeHtml(row.audio_file)}</span>
       </div>
-      <audio id="audio-preview" preload="auto" src="${escapeHtml(audioSource(row))}"></audio>
     `;
-    setupAudioPlayer(row);
+    setupAudioPlayer(row, resumeAfterReady);
     return;
   }
 
@@ -701,7 +752,7 @@ function renderPreview(row) {
   teardownYoutubePlayer();
 }
 
-function renderDetail() {
+function renderDetail(resumeAfterReady = false) {
   const row = selectedRow();
 
   if (!row) {
@@ -747,7 +798,7 @@ function renderDetail() {
   els.videoDownload.href = row.video_file_id ? driveDownload(row.video_file_id) : "#";
   els.videoDownload.classList.toggle("disabled", !row.video_file_id);
 
-  renderPreview(row);
+  renderPreview(row, resumeAfterReady);
 }
 
 function renderSummary() {
@@ -898,13 +949,11 @@ document.addEventListener("input", (event) => {
 });
 
 els.videoTab.addEventListener("click", () => {
-  state.mediaMode = "video";
-  renderDetail();
+  switchMediaMode("video");
 });
 
 els.audioTab.addEventListener("click", () => {
-  state.mediaMode = "audio";
-  renderDetail();
+  switchMediaMode("audio");
 });
 
 els.selectMode.addEventListener("click", () => {
