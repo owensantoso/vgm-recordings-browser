@@ -1,4 +1,4 @@
-const csvUrl = "data/recordings.csv";
+const csvUrl = "data/recordings.csv?v=20260604-instruments";
 
 const state = {
   rows: [],
@@ -636,6 +636,22 @@ function mediaTags(row) {
   return `<div class="media-tags">${tags.join("")}</div>`;
 }
 
+function instrumentBadges(row) {
+  const instruments = [
+    ["D", "Drums", row.drums],
+    ["P", "Piano", row.piano],
+    ["G", "Guitar", row.guitar],
+  ];
+  const badges = instruments
+    .filter(([, , name]) => name)
+    .map(([icon, instrument, name]) => {
+      const initial = name.trim().charAt(0).toUpperCase();
+      const label = `${instrument}: ${name}`;
+      return `<span class="instrument-badge" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}"><span aria-hidden="true">${icon}</span>${escapeHtml(initial)}</span>`;
+    });
+  return `<div class="instrument-tags">${badges.join("")}</div>`;
+}
+
 function thumbnail(row) {
   return row.thumbnail || `thumbs/${row.file.replace(/\.MOV$/i, "")}.jpg`;
 }
@@ -673,6 +689,7 @@ function renderList() {
             </div>
           </td>
           <td class="caption-cell">${escapeHtml(row.caption)}</td>
+          <td>${instrumentBadges(row)}</td>
           <td>${escapeHtml(row.length)}</td>
           <td>${mediaTags(row)}</td>
         </tr>
@@ -691,6 +708,7 @@ function renderList() {
             <span class="pill">${escapeHtml(row.length)}</span>
           </div>
           <span class="muted">${escapeHtml(row.file)} · ${escapeHtml(row.recorded_create_date)}</span>
+          ${instrumentBadges(row)}
           ${mediaTags(row)}
           <div class="card-actions">
             ${row.has_audio === "yes" ? `<button type="button" data-show-player="${escapeHtml(row.file)}">Audio player</button>` : ""}
