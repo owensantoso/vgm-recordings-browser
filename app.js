@@ -1009,7 +1009,10 @@ function render(resumeAfterReady = false) {
 }
 
 function selectFile(file, resumeAfterReady = false) {
-  if (file === state.selectedFile) return;
+  if (file === state.selectedFile) {
+    setUrlForFile(file);
+    return;
+  }
   state.selectedFile = file;
   state.audioFile = file;
   state.mediaMode = rowForFile(file)?.has_video === "yes" ? "video" : "audio";
@@ -1244,6 +1247,11 @@ els.closeDetail.addEventListener("click", () => {
 window.addEventListener("hashchange", () => {
   const file = fileFromHash();
   if (!file) return;
+  const row = rowForFile(file);
+  if (row?.session_id && els.sessionFilter.value !== "all" && els.sessionFilter.value !== row.session_id) {
+    els.sessionFilter.value = row.session_id;
+    setUrlForSession(row.session_id);
+  }
   state.selectedFile = file;
   state.audioFile = file;
   state.detailOpen = false;
