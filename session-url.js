@@ -24,5 +24,13 @@
     return `${url.pathname}${url.search}${url.hash}`;
   }
 
-  return { pathForFile, pathForSession, sessionFromHref, validSession };
+  function reconcileSelection(visibleFiles, selectedFile, hasHash) {
+    const resolved = visibleFiles.includes(selectedFile) ? selectedFile : visibleFiles[0] || "";
+    return {
+      selectedFile: resolved,
+      syncHash: Boolean(hasHash && resolved && resolved !== selectedFile),
+    };
+  }
+
+  return { pathForFile, pathForSession, reconcileSelection, sessionFromHref, validSession };
 });

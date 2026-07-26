@@ -751,10 +751,13 @@ function applyFilters() {
     if (!visibleFiles.has(file)) state.selectedDownloads.delete(file);
   });
 
-  if (!state.visible.some((row) => row.file === state.selectedFile)) {
-    state.selectedFile = state.visible[0]?.file || "";
-    if (state.selectedFile && window.location.hash) setUrlForFile(state.selectedFile);
-  }
+  const selection = SessionUrl.reconcileSelection(
+    state.visible.map((row) => row.file),
+    state.selectedFile,
+    Boolean(window.location.hash),
+  );
+  state.selectedFile = selection.selectedFile;
+  if (selection.syncHash) setUrlForFile(selection.selectedFile);
 
   render();
 }

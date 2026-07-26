@@ -1,6 +1,12 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { pathForFile, pathForSession, sessionFromHref, validSession } = require("../session-url.js");
+const {
+  pathForFile,
+  pathForSession,
+  reconcileSelection,
+  sessionFromHref,
+  validSession,
+} = require("../session-url.js");
 
 const base = "https://example.test/archive/?session=july#IMG_5944";
 
@@ -21,4 +27,15 @@ test("updates or removes the session while preserving the recording hash", () =>
 
 test("updates the recording hash while preserving the session", () => {
   assert.equal(pathForFile(base, "IMG_5934"), "/archive/?session=july#IMG_5934");
+});
+
+test("reconciles an out-of-session hash to the first visible recording", () => {
+  assert.deepEqual(reconcileSelection(["IMG_5944", "IMG_5943"], "IMG_7799", true), {
+    selectedFile: "IMG_5944",
+    syncHash: true,
+  });
+  assert.deepEqual(reconcileSelection(["IMG_5944", "IMG_5943"], "IMG_5943", true), {
+    selectedFile: "IMG_5943",
+    syncHash: false,
+  });
 });
