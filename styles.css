@@ -3,7 +3,9 @@
   --page: #f2f3ef;
   --paper: #fbfaf6;
   --ink: #202624;
-  --muted: #666d69;
+  --muted: #6f7672;
+  --muted-readable: #666d69;
+  --muted-on-soft: #59615d;
   --rule: #d8d7cf;
   --rule-strong: #aeb3b0;
   --playback: #a53d34;
@@ -28,6 +30,7 @@ html {
 }
 
 body {
+  --muted: var(--muted-readable);
   background: var(--page);
   color: var(--ink);
   font: 14px/1.45 var(--font-body);
@@ -240,7 +243,7 @@ select:focus {
 .session-row.archive-wide .session-date,
 .session-row.archive-wide .session-stats,
 .session-row.archive-wide .session-stats strong {
-  color: var(--muted);
+  color: var(--muted-on-soft);
 }
 
 .session-heading {
@@ -414,6 +417,15 @@ tbody tr.active {
   min-height: auto;
   padding: 0;
   width: 18px;
+}
+
+.select-hit {
+  align-items: center;
+  cursor: pointer;
+  display: inline-flex;
+  height: 44px;
+  justify-content: center;
+  width: 44px;
 }
 
 .row-file {

@@ -846,7 +846,7 @@ function renderList() {
         return `
         <tr class="${row.file === state.selectedFile ? "active" : ""}" data-file="${row.file}">
           <td class="select-col">
-            ${state.selectMode ? `<input class="select-box" type="checkbox" data-select-file="${escapeHtml(row.file)}" ${state.selectedDownloads.has(row.file) ? "checked" : ""} aria-label="Select ${escapeHtml(row.caption)}">` : ""}
+            ${state.selectMode ? `<label class="select-hit"><input class="select-box" type="checkbox" data-select-file="${escapeHtml(row.file)}" ${state.selectedDownloads.has(row.file) ? "checked" : ""} aria-label="Select ${escapeHtml(row.caption)}"></label>` : ""}
           </td>
           <td class="take-number">${takeNumber}</td>
           <td>
@@ -878,7 +878,7 @@ function renderList() {
         const takeNumber = String(state.visible.length - index).padStart(2, "0");
         return `
         <article class="recording-card ${row.file === state.selectedFile ? "active" : ""}" data-file="${row.file}">
-          ${state.selectMode ? `<input class="select-box card-select" type="checkbox" data-select-file="${escapeHtml(row.file)}" ${state.selectedDownloads.has(row.file) ? "checked" : ""} aria-label="Select ${escapeHtml(row.caption)}">` : ""}
+          ${state.selectMode ? `<label class="select-hit card-select"><input class="select-box" type="checkbox" data-select-file="${escapeHtml(row.file)}" ${state.selectedDownloads.has(row.file) ? "checked" : ""} aria-label="Select ${escapeHtml(row.caption)}"></label>` : ""}
           <span class="take-number">${takeNumber}</span>
           <img class="card-thumb" src="${escapeHtml(thumbnail(row))}" alt="Thumbnail for ${escapeHtml(row.caption)}" loading="lazy">
           <div class="card-main">
@@ -1140,7 +1140,7 @@ function populateSessionFilter() {
 }
 
 document.addEventListener("click", (event) => {
-  if (event.target.closest("[data-select-file]")) {
+  if (event.target.closest(".select-hit, [data-select-file]")) {
     event.stopPropagation();
     return;
   }
