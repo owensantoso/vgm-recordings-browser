@@ -48,6 +48,7 @@ const els = {
   sort: document.querySelector("#sort"),
   archiveCount: document.querySelector("#archive-count"),
   archiveDuration: document.querySelector("#archive-duration"),
+  sessionBand: document.querySelector("#session-band"),
   sessionLabel: document.querySelector("#session-label"),
   sessionDate: document.querySelector("#session-date"),
   sessionStats: document.querySelector("#session-stats"),
@@ -1023,6 +1024,7 @@ function renderSummary() {
   const sessionRow = sessionRows[0];
   const playlist = sessionRow ? playlistUrl(sessionRow) : "";
   const driveFolder = sessionRow ? sessionDriveUrls[sessionRow.session_id] || "" : "";
+  els.sessionBand.classList.toggle("archive-wide", !sessionRow);
   els.sessionDate.textContent = sessionRow ? formatSessionDate(sessionRow.recorded_create_date) : "Archive index";
   els.sessionLabel.textContent = sessionRow ? sessionRow.session_label || sessionRow.session_id : "All sessions";
   if (els.sessionDrive) {

@@ -53,7 +53,7 @@
             </select>
           </label>
         </div>
-        <div class="session-row">
+        <div id="session-band" class="session-row">
           <div class="session-heading">
             <span id="session-date" class="session-date">Archive index</span>
             <strong id="session-label">All sessions</strong>
@@ -105,7 +105,10 @@
             </div>
             <div class="detail-tools">
               <span id="selected-length" class="pill"></span>
-              <button id="expand-detail" class="expand-detail" type="button">Expand</button>
+              <button id="expand-detail" class="expand-detail" type="button" aria-label="Expand selected recording">
+                <img src="icons/maximize-2.svg" alt="" aria-hidden="true">
+                <span>Expand</span>
+              </button>
               <button id="close-detail" class="close-detail" type="button">Minimize</button>
             </div>
           </div>
