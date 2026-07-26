@@ -44,7 +44,6 @@ const youtubeState = {
 const els = {
   search: document.querySelector("#search"),
   mediaFilter: document.querySelector("#media-filter"),
-  captionFilter: document.querySelector("#caption-filter"),
   sessionFilter: document.querySelector("#session-filter"),
   sort: document.querySelector("#sort"),
   sessionLabel: document.querySelector("#session-label"),
@@ -258,10 +257,30 @@ function fileFromHash() {
   return byStem?.file || "";
 }
 
+function sessionFromUrl() {
+  return new URL(window.location.href).searchParams.get("session") || "all";
+}
+
+function setUrlForSession(sessionId) {
+  const url = new URL(window.location.href);
+  if (!sessionId || sessionId === "all") url.searchParams.delete("session");
+  else url.searchParams.set("session", sessionId);
+  history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+}
+
+function restoreSessionFromUrl() {
+  const requested = sessionFromUrl();
+  const valid = [...els.sessionFilter.options].some((option) => option.value === requested);
+  els.sessionFilter.value = valid ? requested : "all";
+  if (!valid) setUrlForSession("all");
+}
+
 function setUrlForFile(file) {
+  const url = new URL(window.location.href);
   const hash = `#${hashForFile(file)}`;
-  if (window.location.hash === hash) return;
-  history.replaceState(null, "", hash);
+  if (url.hash === hash) return;
+  url.hash = hash;
+  history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
 }
 
 function pageLinkForFile(file) {
@@ -693,7 +712,6 @@ function hasMissingCaption(row) {
 function applyFilters() {
   const query = els.search.value.trim().toLowerCase();
   const media = els.mediaFilter.value;
-  const caption = els.captionFilter.value;
   const session = els.sessionFilter.value;
 
   state.visible = state.rows.filter((row) => {
@@ -718,12 +736,8 @@ function applyFilters() {
       (media === "video" && row.has_video === "yes") ||
       (media === "audio" && row.has_audio === "yes") ||
       (media === "audio-only" && row.has_audio === "yes" && row.has_video !== "yes");
-    const matchesCaption =
-      caption === "all" ||
-      (caption === "named" && !hasMissingCaption(row)) ||
-      (caption === "missing" && hasMissingCaption(row));
     const matchesSession = session === "all" || row.session_id === session;
-    return matchesQuery && matchesMedia && matchesCaption && matchesSession;
+    return matchesQuery && matchesMedia && matchesSession;
   });
 
   const sorters = {
@@ -1125,8 +1139,13 @@ document.addEventListener("input", (event) => {
   }
 });
 
-[els.search, els.mediaFilter, els.captionFilter, els.sessionFilter, els.sort].forEach((input) => {
+[els.search, els.mediaFilter, els.sort].forEach((input) => {
   input.addEventListener("input", applyFilters);
+});
+
+els.sessionFilter.addEventListener("input", () => {
+  setUrlForSession(els.sessionFilter.value);
+  applyFilters();
 });
 
 els.videoTab.addEventListener("click", () => {
@@ -1231,6 +1250,11 @@ window.addEventListener("hashchange", () => {
   applyFilters();
 });
 
+window.addEventListener("popstate", () => {
+  restoreSessionFromUrl();
+  applyFilters();
+});
+
 fetch(csvUrl)
   .then((response) => {
     if (!response.ok) throw new Error(`Could not load ${csvUrl}`);
@@ -1243,6 +1267,7 @@ fetch(csvUrl)
     state.audioFile = state.selectedFile;
     state.detailOpen = false;
     populateSessionFilter();
+    restoreSessionFromUrl();
     applyFilters();
   })
   .catch((error) => {
