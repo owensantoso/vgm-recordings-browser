@@ -1,4 +1,4 @@
-const csvUrl = "data/recordings.csv?v=20260604-song-sections";
+const csvUrl = "data/recordings.csv?v=20260726-session";
 
 const state = {
   rows: [],
@@ -702,6 +702,7 @@ function applyFilters() {
       row.drums,
       row.piano,
       row.guitar,
+      row.bass,
     ].join(" ").toLowerCase();
     const matchesQuery = !query || haystack.includes(query);
     const matchesMedia =
@@ -718,8 +719,10 @@ function applyFilters() {
   });
 
   const sorters = {
-    newest: (a, b) => b.file.localeCompare(a.file),
-    oldest: (a, b) => a.file.localeCompare(b.file),
+    newest: (a, b) =>
+      b.recorded_create_date.localeCompare(a.recorded_create_date) || b.file.localeCompare(a.file),
+    oldest: (a, b) =>
+      a.recorded_create_date.localeCompare(b.recorded_create_date) || a.file.localeCompare(b.file),
     longest: (a, b) => Number(b.duration_seconds) - Number(a.duration_seconds),
     shortest: (a, b) => Number(a.duration_seconds) - Number(b.duration_seconds),
     caption: (a, b) => a.caption.localeCompare(b.caption),
@@ -751,6 +754,7 @@ function instrumentBadges(row) {
     ["🥁", "Drums", row.drums],
     ["🎹", "Piano", row.piano],
     ["🎸", "Guitar", row.guitar],
+    ["🎸", "Bass", row.bass],
   ];
   const badges = instruments
     .filter(([, , name]) => name)
