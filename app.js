@@ -258,29 +258,25 @@ function fileFromHash() {
 }
 
 function sessionFromUrl() {
-  return new URL(window.location.href).searchParams.get("session") || "all";
+  return SessionUrl.sessionFromHref(window.location.href);
 }
 
 function setUrlForSession(sessionId) {
-  const url = new URL(window.location.href);
-  if (!sessionId || sessionId === "all") url.searchParams.delete("session");
-  else url.searchParams.set("session", sessionId);
-  history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+  history.replaceState(null, "", SessionUrl.pathForSession(window.location.href, sessionId));
 }
 
 function restoreSessionFromUrl() {
   const requested = sessionFromUrl();
-  const valid = [...els.sessionFilter.options].some((option) => option.value === requested);
-  els.sessionFilter.value = valid ? requested : "all";
-  if (!valid) setUrlForSession("all");
+  const available = [...els.sessionFilter.options].map((option) => option.value);
+  const resolved = SessionUrl.validSession(requested, available);
+  els.sessionFilter.value = resolved;
+  if (resolved !== requested) setUrlForSession("all");
 }
 
 function setUrlForFile(file) {
-  const url = new URL(window.location.href);
   const hash = `#${hashForFile(file)}`;
-  if (url.hash === hash) return;
-  url.hash = hash;
-  history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+  if (window.location.hash === hash) return;
+  history.replaceState(null, "", SessionUrl.pathForFile(window.location.href, hash));
 }
 
 function pageLinkForFile(file) {
@@ -757,6 +753,7 @@ function applyFilters() {
 
   if (!state.visible.some((row) => row.file === state.selectedFile)) {
     state.selectedFile = state.visible[0]?.file || "";
+    if (state.selectedFile && window.location.hash) setUrlForFile(state.selectedFile);
   }
 
   render();
