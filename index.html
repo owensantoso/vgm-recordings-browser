@@ -3,24 +3,28 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>2026 VGM Recordings</title>
+    <title>Music Jam Sessions · Recording Archive</title>
     <link rel="icon" href="data:,">
-    <link rel="stylesheet" href="styles.css?v=20260604-filter-links">
+    <link rel="stylesheet" href="styles.css?v=20260726-setlist-ledger">
   </head>
   <body>
     <header class="topbar">
       <div>
-        <h1>2026 VGM Recordings</h1>
-        <p class="subhead">iPhone rehearsal videos and high-quality audio extracts</p>
+        <p class="archive-kicker">Recording archive · 2026</p>
+        <h1>Music Jam Sessions</h1>
+        <p class="subhead">Rehearsal videos, audio extracts, and session notes</p>
       </div>
-      <a class="csv-link" href="data/recordings.csv">CSV</a>
+      <div class="archive-utility">
+        <p class="archive-total"><strong id="archive-count">0</strong> takes · <strong id="archive-duration">0:00</strong></p>
+        <a class="csv-link" href="data/recordings.csv">CSV export</a>
+      </div>
     </header>
 
     <main class="layout">
       <section class="controls" aria-label="Filters">
         <label class="search-label">
           <span>Search</span>
-          <input id="search" type="search" placeholder="caption, filename, device">
+          <input id="search" type="search" placeholder="Song, game, filename, or player">
         </label>
         <div class="control-row">
           <label>
@@ -50,17 +54,21 @@
           </label>
         </div>
         <div class="session-row">
-          <span id="session-label" class="tag">No session selected</span>
-          <a id="session-drive" href="#" target="_blank" rel="noopener" hidden>Drive folder</a>
-          <a id="session-playlist" href="#" target="_blank" rel="noopener" hidden>YouTube playlist</a>
+          <div class="session-heading">
+            <span id="session-date" class="session-date">Archive index</span>
+            <strong id="session-label">All sessions</strong>
+          </div>
+          <div id="session-stats" class="session-stats">
+            <span><strong id="visible-count">0</strong> takes</span>
+            <span><strong id="total-duration">0:00</strong></span>
+            <span><strong id="video-count">0</strong> video</span>
+            <span><strong id="audio-count">0</strong> audio</span>
+          </div>
+          <nav class="session-links" aria-label="Session resources">
+            <a id="session-drive" href="#" target="_blank" rel="noopener" hidden>Drive folder</a>
+            <a id="session-playlist" href="#" target="_blank" rel="noopener" hidden>YouTube playlist</a>
+          </nav>
         </div>
-      </section>
-
-      <section class="summary" aria-label="Collection summary">
-        <div><strong id="visible-count">0</strong><span>shown</span></div>
-        <div><strong id="total-duration">0:00</strong><span>visible length</span></div>
-        <div><strong id="video-count">0</strong><span>videos</span></div>
-        <div><strong id="audio-count">0</strong><span>audio files</span></div>
       </section>
 
       <section class="browser">
@@ -75,11 +83,12 @@
             <thead>
               <tr>
                 <th class="select-col"></th>
-                <th>File</th>
-                <th>Caption</th>
+                <th class="take-col">Take</th>
+                <th>Recording</th>
                 <th>Song / Game</th>
-                <th>Instruments</th>
-                <th>Length</th>
+                <th>Players</th>
+                <th>Parts</th>
+                <th>Time</th>
                 <th>Media</th>
               </tr>
             </thead>
@@ -148,6 +157,6 @@
     </main>
 
     <script src="session-url.js?v=20260726"></script>
-    <script src="app.js?v=20260726-ledger-url"></script>
+    <script src="app.js?v=20260726-setlist-ledger"></script>
   </body>
 </html>

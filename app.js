@@ -46,7 +46,11 @@ const els = {
   mediaFilter: document.querySelector("#media-filter"),
   sessionFilter: document.querySelector("#session-filter"),
   sort: document.querySelector("#sort"),
+  archiveCount: document.querySelector("#archive-count"),
+  archiveDuration: document.querySelector("#archive-duration"),
   sessionLabel: document.querySelector("#session-label"),
+  sessionDate: document.querySelector("#session-date"),
+  sessionStats: document.querySelector("#session-stats"),
   sessionDrive: document.querySelector("#session-drive"),
   sessionPlaylist: document.querySelector("#session-playlist"),
   table: document.querySelector("#recording-table"),
@@ -298,6 +302,16 @@ function formatTotal(seconds) {
   return `${minutes}:${String(secs).padStart(2, "0")}`;
 }
 
+function formatSessionDate(value) {
+  const datePart = String(value || "").slice(0, 10);
+  const [year, month, day] = datePart.split("-").map(Number);
+  if (!year || !month || !day) return "Session";
+  const weekdays = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
+  const months = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
+  const weekday = weekdays[new Date(Date.UTC(year, month - 1, day)).getUTCDay()];
+  return `${weekday} ${String(day).padStart(2, "0")} ${months[month - 1]} ${year}`;
+}
+
 function updateSegmentLabels(row, offset = 0, absoluteTime = null) {
   const bounds = segmentBounds(row);
   const absolute = absoluteTime === null ? bounds.start + Number(offset || 0) : boundedFullTime(row, absoluteTime);
@@ -381,7 +395,7 @@ function setPlayLabel(playing) {
   const label = playing ? "Pause" : "Play";
   const hiddenLabel = els.playToggle.querySelector(".sr-only");
   if (hiddenLabel) hiddenLabel.textContent = label;
-  els.playToggle.setAttribute("aria-label", `${playing ? "Pause" : "Play"} selected video`);
+  els.playToggle.setAttribute("aria-label", `${playing ? "Pause" : "Play"} selected recording`);
 }
 
 function setSegmentControlsReady(ready) {
@@ -773,19 +787,23 @@ function mediaTags(row) {
 
 function instrumentBadges(row) {
   const instruments = [
-    ["🥁", "Drums", row.drums],
-    ["🎹", "Piano", row.piano],
-    ["🎸", "Guitar", row.guitar],
-    ["🎸", "Bass", row.bass],
+    ["icons/drum.svg", "Drums", row.drums],
+    ["icons/piano.svg", "Piano", row.piano],
+    ["icons/guitar.svg", "Guitar", row.guitar],
+    ["icons/guitar.svg", "Bass", row.bass],
   ];
   const badges = instruments
     .filter(([, , name]) => name)
-    .map(([icon, instrument, name]) => {
+    .map(([iconPath, instrument, name]) => {
       const initial = name.trim().charAt(0).toUpperCase();
       const label = `${instrument}: ${name}`;
-      return `<span class="instrument-badge" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}"><span aria-hidden="true">${icon}</span>${escapeHtml(initial)}</span>`;
+      return `<span class="instrument-badge" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}"><img class="instrument-icon" src="${iconPath}" alt="" aria-hidden="true"><span class="player-initial">${escapeHtml(initial)}</span></span>`;
     });
   return `<div class="instrument-tags">${badges.join("")}</div>`;
+}
+
+function performerNames(row) {
+  return [...new Set([row.drums, row.piano, row.guitar, row.bass].filter(Boolean))].join(" · ");
 }
 
 function songMeta(row) {
@@ -822,52 +840,61 @@ function mediaDownload(row) {
 function renderList() {
   els.table.innerHTML = state.visible
     .map(
-      (row) => `
+      (row, index) => {
+        const takeNumber = String(state.visible.length - index).padStart(2, "0");
+        return `
         <tr class="${row.file === state.selectedFile ? "active" : ""}" data-file="${row.file}">
           <td class="select-col">
             ${state.selectMode ? `<input class="select-box" type="checkbox" data-select-file="${escapeHtml(row.file)}" ${state.selectedDownloads.has(row.file) ? "checked" : ""} aria-label="Select ${escapeHtml(row.caption)}">` : ""}
           </td>
+          <td class="take-number">${takeNumber}</td>
           <td>
             <div class="row-file">
-              <img class="row-thumb" src="${escapeHtml(thumbnail(row))}" alt="">
+              <img class="row-thumb" src="${escapeHtml(thumbnail(row))}" alt="Thumbnail for ${escapeHtml(row.caption)}" loading="lazy">
               <div>
-                <strong>${escapeHtml(row.file)}</strong><br>
-                <span class="muted">${escapeHtml(row.recorded_create_date)}</span>
+                <strong>${escapeHtml(row.caption)}</strong>
+                <span class="recording-source">${escapeHtml(row.file)} · ${escapeHtml(row.recorded_create_date)}</span>
                 <div class="row-links">
                   ${row.has_audio === "yes" ? `<button type="button" data-show-player="${escapeHtml(row.file)}">Audio player</button>` : ""}
                 </div>
               </div>
             </div>
           </td>
-          <td class="caption-cell">${escapeHtml(row.caption)}</td>
           <td>${songMeta(row)}</td>
+          <td class="players-cell">${escapeHtml(performerNames(row))}</td>
           <td>${instrumentBadges(row)}</td>
-          <td>${escapeHtml(row.length)}</td>
+          <td class="duration-cell">${escapeHtml(row.length)}</td>
           <td>${mediaTags(row)}</td>
         </tr>
-      `,
+      `;
+      },
     )
     .join("");
 
   els.cards.innerHTML = state.visible
     .map(
-      (row) => `
+      (row, index) => {
+        const takeNumber = String(state.visible.length - index).padStart(2, "0");
+        return `
         <article class="recording-card ${row.file === state.selectedFile ? "active" : ""}" data-file="${row.file}">
           ${state.selectMode ? `<input class="select-box card-select" type="checkbox" data-select-file="${escapeHtml(row.file)}" ${state.selectedDownloads.has(row.file) ? "checked" : ""} aria-label="Select ${escapeHtml(row.caption)}">` : ""}
-          <img class="card-thumb" src="${escapeHtml(thumbnail(row))}" alt="">
+          <span class="take-number">${takeNumber}</span>
+          <img class="card-thumb" src="${escapeHtml(thumbnail(row))}" alt="Thumbnail for ${escapeHtml(row.caption)}" loading="lazy">
           <div class="card-main">
             <strong>${escapeHtml(row.caption)}</strong>
-            <span class="pill">${escapeHtml(row.length)}</span>
+            <span class="duration">${escapeHtml(row.length)}</span>
           </div>
-          <span class="muted">${escapeHtml(row.file)} · ${escapeHtml(row.recorded_create_date)}</span>
+          <span class="recording-source">${escapeHtml(row.game_title || row.franchise || "Unknown source")} · ${escapeHtml(row.file)}</span>
           ${songMeta(row)}
+          <span class="recording-players">${escapeHtml(performerNames(row))}</span>
           ${instrumentBadges(row)}
           ${mediaTags(row)}
           <div class="card-actions">
             ${row.has_audio === "yes" ? `<button type="button" data-show-player="${escapeHtml(row.file)}">Audio player</button>` : ""}
           </div>
         </article>
-      `,
+      `;
+      },
     )
     .join("");
 
@@ -984,6 +1011,9 @@ function renderDetail(resumeAfterReady = false) {
 
 function renderSummary() {
   const totalDuration = state.visible.reduce((sum, row) => sum + Number(row.duration_seconds || 0), 0);
+  const archiveDuration = state.rows.reduce((sum, row) => sum + Number(row.duration_seconds || 0), 0);
+  els.archiveCount.textContent = state.rows.length;
+  els.archiveDuration.textContent = formatTotal(archiveDuration);
   els.visibleCount.textContent = state.visible.length;
   els.totalDuration.textContent = formatTotal(totalDuration);
   els.videoCount.textContent = state.visible.filter((row) => row.has_video === "yes").length;
@@ -993,6 +1023,7 @@ function renderSummary() {
   const sessionRow = sessionRows[0];
   const playlist = sessionRow ? playlistUrl(sessionRow) : "";
   const driveFolder = sessionRow ? sessionDriveUrls[sessionRow.session_id] || "" : "";
+  els.sessionDate.textContent = sessionRow ? formatSessionDate(sessionRow.recorded_create_date) : "Archive index";
   els.sessionLabel.textContent = sessionRow ? sessionRow.session_label || sessionRow.session_id : "All sessions";
   if (els.sessionDrive) {
     els.sessionDrive.href = driveFolder || "#";
