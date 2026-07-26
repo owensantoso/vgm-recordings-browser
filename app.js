@@ -1,5 +1,12 @@
 const csvUrl = "data/recordings.csv?v=20260726-session";
 
+const sessionDriveUrls = {
+  "2026-05-31-shimokitazawa-first-vgm-session":
+    "https://drive.google.com/drive/folders/1_bHbtwZ_gi2YkmWzd1F76JjwmVpvKHrM?usp=drive_link",
+  "2026-07-26-shimokitazawa-vgm-session":
+    "https://drive.google.com/drive/folders/1jtvUIW6-4IStpwJ9aDTOXFd23nEjr6U-?usp=drive_link",
+};
+
 const state = {
   rows: [],
   visible: [],
@@ -41,6 +48,7 @@ const els = {
   sessionFilter: document.querySelector("#session-filter"),
   sort: document.querySelector("#sort"),
   sessionLabel: document.querySelector("#session-label"),
+  sessionDrive: document.querySelector("#session-drive"),
   sessionPlaylist: document.querySelector("#session-playlist"),
   table: document.querySelector("#recording-table"),
   cards: document.querySelector("#card-list"),
@@ -969,10 +977,15 @@ function renderSummary() {
 
   const sessionRows = state.rows.filter((row) => row.session_id && row.session_id === els.sessionFilter.value);
   const sessionRow = sessionRows[0];
-  const url = sessionRow ? playlistUrl(sessionRow) : "";
+  const playlist = sessionRow ? playlistUrl(sessionRow) : "";
+  const driveFolder = sessionRow ? sessionDriveUrls[sessionRow.session_id] || "" : "";
   els.sessionLabel.textContent = sessionRow ? sessionRow.session_label || sessionRow.session_id : "All sessions";
-  els.sessionPlaylist.href = url || "#";
-  els.sessionPlaylist.hidden = !url;
+  if (els.sessionDrive) {
+    els.sessionDrive.href = driveFolder || "#";
+    els.sessionDrive.hidden = !driveFolder;
+  }
+  els.sessionPlaylist.href = playlist || "#";
+  els.sessionPlaylist.hidden = !playlist;
 }
 
 function render(resumeAfterReady = false) {
