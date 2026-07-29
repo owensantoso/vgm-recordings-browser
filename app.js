@@ -253,6 +253,27 @@ function escapeHtml(value) {
     .replaceAll('"', "&quot;");
 }
 
+function highlightSearchMatch(value) {
+  const text = String(value || "");
+  const query = els.search.value.trim();
+  if (!query) return escapeHtml(text);
+
+  const haystack = text.toLowerCase();
+  const needle = query.toLowerCase();
+  let cursor = 0;
+  let index = haystack.indexOf(needle);
+  if (index < 0) return escapeHtml(text);
+
+  let html = "";
+  while (index >= 0) {
+    html += escapeHtml(text.slice(cursor, index));
+    html += `<mark class="search-match">${escapeHtml(text.slice(index, index + query.length))}</mark>`;
+    cursor = index + query.length;
+    index = haystack.indexOf(needle, cursor);
+  }
+  return `${html}${escapeHtml(text.slice(cursor))}`;
+}
+
 function hashForFile(file) {
   return encodeURIComponent(String(file || "").replace(/\.[^.]+$/, ""));
 }
@@ -816,12 +837,12 @@ function songMeta(row) {
   if (!row.song_name && !row.franchise && !row.game_title) return '<span class="muted">Unknown</span>';
   const gameButtons = [row.franchise, row.game_title]
     .filter(Boolean)
-    .map((value) => `<button class="filter-link" type="button" data-filter-search="${escapeHtml(value)}">${escapeHtml(value)}</button>`)
+    .map((value) => `<button class="filter-link" type="button" data-filter-search="${escapeHtml(value)}">${highlightSearchMatch(value)}</button>`)
     .join('<span aria-hidden="true"> · </span>');
   const songName = row.song_name || row.caption;
   return `
     <div class="song-meta">
-      <strong><button class="filter-link" type="button" data-filter-search="${escapeHtml(songName)}">${escapeHtml(songName)}</button></strong>
+      <strong><button class="filter-link" type="button" data-filter-search="${escapeHtml(songName)}">${highlightSearchMatch(songName)}</button></strong>
       ${gameButtons ? `<span>${gameButtons}</span>` : ""}
     </div>
   `;
@@ -917,8 +938,8 @@ function renderSessionOutline(groups) {
           class="session-outline-link ${index === 0 ? "active" : ""}"
           type="button"
           data-session-jump="${escapeHtml(sessionAnchor(group.id))}">
-          <span>${escapeHtml(formatSessionDate(group.recordedDate))}</span>
-          <strong>${escapeHtml(group.label)}</strong>
+          <span>${highlightSearchMatch(formatSessionDate(group.recordedDate))}</span>
+          <strong>${highlightSearchMatch(group.label)}</strong>
           <small>${escapeHtml(sessionGroupMeta(group))}</small>
         </button>
       `,
@@ -931,7 +952,7 @@ function syncSessionOutlineToScroll() {
   if (els.sessionOutline.hidden) return;
   const dividers = [...document.querySelectorAll(".session-divider-row")];
   if (!dividers.length) return;
-  const marker = (document.querySelector(".topbar")?.getBoundingClientRect().height || 0) + 8;
+  const marker = (document.querySelector(".search-strip")?.getBoundingClientRect().height || 0) + 8;
   let activeId = dividers[0].id;
   dividers.forEach((divider) => {
     if (divider.getBoundingClientRect().top <= marker) activeId = divider.id;
@@ -946,8 +967,8 @@ function tableSessionDivider(group) {
     <tr id="${escapeHtml(sessionAnchor(group.id))}" class="session-divider-row">
       <th colspan="8" scope="rowgroup">
         <div class="session-divider-content">
-          <span class="session-divider-date">${escapeHtml(formatSessionDate(group.recordedDate))}</span>
-          <strong>${escapeHtml(group.label)}</strong>
+          <span class="session-divider-date">${highlightSearchMatch(formatSessionDate(group.recordedDate))}</span>
+          <strong>${highlightSearchMatch(group.label)}</strong>
           <span class="session-divider-meta">${escapeHtml(sessionGroupMeta(group))}</span>
         </div>
       </th>
@@ -958,8 +979,8 @@ function tableSessionDivider(group) {
 function cardSessionDivider(group) {
   return `
     <div class="session-divider-card">
-      <span class="session-divider-date">${escapeHtml(formatSessionDate(group.recordedDate))}</span>
-      <strong>${escapeHtml(group.label)}</strong>
+      <span class="session-divider-date">${highlightSearchMatch(formatSessionDate(group.recordedDate))}</span>
+      <strong>${highlightSearchMatch(group.label)}</strong>
       <span class="session-divider-meta">${escapeHtml(sessionGroupMeta(group))}</span>
     </div>
   `;
@@ -976,8 +997,8 @@ function tableRecording(row, takeNumber) {
         <div class="row-file">
           <img class="row-thumb" src="${escapeHtml(thumbnail(row))}" alt="Thumbnail for ${escapeHtml(row.caption)}" loading="lazy">
           <div>
-            <strong>${escapeHtml(row.caption)}</strong>
-            <span class="recording-source">${escapeHtml(row.file)} · ${escapeHtml(row.recorded_create_date)}</span>
+            <strong>${highlightSearchMatch(row.caption)}</strong>
+            <span class="recording-source">${highlightSearchMatch(row.file)} · ${highlightSearchMatch(row.recorded_create_date)}</span>
             <div class="row-links">
               ${row.has_audio === "yes" ? `<button type="button" data-show-player="${escapeHtml(row.file)}">Audio player</button>` : ""}
             </div>
@@ -985,7 +1006,7 @@ function tableRecording(row, takeNumber) {
         </div>
       </td>
       <td>${songMeta(row)}</td>
-      <td class="players-cell">${escapeHtml(performerNames(row))}</td>
+      <td class="players-cell">${highlightSearchMatch(performerNames(row))}</td>
       <td>${instrumentBadges(row)}</td>
       <td class="duration-cell">${escapeHtml(row.length)}</td>
       <td>${mediaTags(row)}</td>
@@ -1000,12 +1021,12 @@ function cardRecording(row, takeNumber) {
       <span class="take-number">${takeNumber}</span>
       <img class="card-thumb" src="${escapeHtml(thumbnail(row))}" alt="Thumbnail for ${escapeHtml(row.caption)}" loading="lazy">
       <div class="card-main">
-        <strong>${escapeHtml(row.caption)}</strong>
+        <strong>${highlightSearchMatch(row.caption)}</strong>
         <span class="duration">${escapeHtml(row.length)}</span>
       </div>
-      <span class="recording-source">${escapeHtml(row.game_title || row.franchise || "Unknown source")} · ${escapeHtml(row.file)}</span>
+      <span class="recording-source">${highlightSearchMatch(row.game_title || row.franchise || "Unknown source")} · ${highlightSearchMatch(row.file)}</span>
       ${songMeta(row)}
-      <span class="recording-players">${escapeHtml(performerNames(row))}</span>
+      <span class="recording-players">${highlightSearchMatch(performerNames(row))}</span>
       ${instrumentBadges(row)}
       ${mediaTags(row)}
       <div class="card-actions">
@@ -1396,8 +1417,22 @@ els.fullSeek.addEventListener("change", () => {
 function handleKeyboardShortcuts(event) {
   const target = event.target?.closest ? event.target : document.activeElement;
   const field = target?.closest?.("input, textarea, select");
+  const interactive = target?.closest?.("button, a, [contenteditable='true']");
+  const printableKey =
+    event.key.length === 1 &&
+    event.key !== " " &&
+    !event.metaKey &&
+    !event.ctrlKey &&
+    !event.altKey;
+  if (!field && !interactive && printableKey) {
+    event.preventDefault();
+    els.search.focus();
+    els.search.value += event.key;
+    applyFilters();
+    return;
+  }
   if (field && field !== els.segmentSeek && field !== els.fullSeek) return;
-  if (target?.closest?.("button, a")) return;
+  if (interactive) return;
   const row = currentSegmentRow();
   if (!row || els.segmentControls.hidden) return;
   if (event.code === "Space" || event.key === " " || event.key === "Spacebar") {

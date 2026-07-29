@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Music Jam Sessions · Recording Archive</title>
     <link rel="icon" href="data:,">
-    <link rel="stylesheet" href="styles.css?v=20260730-session-outline">
+    <link rel="stylesheet" href="styles.css?v=20260730-sticky-search">
   </head>
   <body>
     <header class="topbar">
@@ -21,11 +21,14 @@
     </header>
 
     <main class="layout">
-      <section class="controls" aria-label="Filters">
+      <section class="search-strip" aria-label="Search recordings">
         <label class="search-label">
           <span>Search</span>
           <input id="search" type="search" placeholder="Song, game, filename, or player">
         </label>
+      </section>
+
+      <section class="controls" aria-label="Filters">
         <div class="control-row">
           <label>
             <span>Media</span>
@@ -165,6 +168,6 @@
     </main>
 
     <script src="session-url.js?v=20260726"></script>
-    <script src="app.js?v=20260730-session-outline"></script>
+    <script src="app.js?v=20260730-sticky-search"></script>
   </body>
 </html>

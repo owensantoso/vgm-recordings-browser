@@ -1,4 +1,5 @@
 :root {
+  --sticky-search-height: 60px;
   color-scheme: light;
   --page: #f2f3ef;
   --paper: #fbfaf6;
@@ -79,8 +80,7 @@ p {
   margin: 0 auto;
   max-width: 1480px;
   padding: 18px 20px 15px;
-  position: sticky;
-  top: 0;
+  position: static;
   z-index: 5;
 }
 
@@ -149,6 +149,7 @@ h1 {
   padding: 0 16px 24px;
 }
 
+.search-strip,
 .controls,
 .list-wrap,
 .detail {
@@ -158,16 +159,26 @@ h1 {
   box-shadow: none;
 }
 
+.search-strip {
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-top: 0;
+  height: var(--sticky-search-height);
+  position: sticky;
+  top: 0;
+  z-index: 8;
+}
+
 .controls {
   border: 1px solid var(--rule);
   border-top: 0;
   display: grid;
-  grid-template-columns: minmax(260px, 1.8fr) minmax(420px, 2.2fr);
+  grid-template-columns: 1fr;
 }
 
 .search-label {
-  border-right: 1px solid var(--rule);
-  padding: 10px 14px 11px;
+  display: block;
+  padding: 6px 14px 7px;
 }
 
 .control-row {
@@ -223,13 +234,19 @@ select:focus {
   border-bottom-color: var(--selection);
 }
 
+.search-match {
+  background: color-mix(in srgb, var(--selection), transparent 82%);
+  border-radius: 2px;
+  color: inherit;
+  padding: 0 1px;
+}
+
 .session-row {
   align-items: center;
   background: var(--ink);
   color: #fff;
   display: grid;
   gap: 16px;
-  grid-column: 1 / -1;
   grid-template-columns: minmax(240px, 1fr) auto auto;
   min-height: 58px;
   padding: 10px 14px;
@@ -304,11 +321,11 @@ select:focus {
   border: 1px solid var(--rule);
   border-top: 0;
   min-width: 0;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .session-divider-row {
-  scroll-margin-top: 84px;
+  scroll-margin-top: calc(var(--sticky-search-height) + 8px);
 }
 
 .session-divider-row th {
@@ -318,7 +335,10 @@ select:focus {
   cursor: default;
   height: auto;
   padding: 10px 12px;
+  position: sticky;
+  top: var(--sticky-search-height);
   text-transform: none;
+  z-index: 4;
 }
 
 .session-divider-content,
@@ -656,7 +676,7 @@ tbody tr.active {
   border-top: 0;
   padding: 14px;
   position: sticky;
-  top: 79px;
+  top: calc(var(--sticky-search-height) + 12px);
 }
 
 .detail::before {
@@ -1032,7 +1052,7 @@ dd {
     display: block;
     padding: 12px 12px 16px 14px;
     position: sticky;
-    top: 86px;
+    top: calc(var(--sticky-search-height) + 12px);
   }
 
   .session-outline-title {
@@ -1152,6 +1172,10 @@ dd {
 }
 
 @media (max-width: 860px) {
+  :root {
+    --sticky-search-height: 76px;
+  }
+
   body {
     padding-bottom: calc(212px + env(safe-area-inset-bottom));
   }
@@ -1159,7 +1183,6 @@ dd {
   .topbar {
     align-items: start;
     padding: 14px 12px 12px;
-    position: static;
   }
 
   h1 {
@@ -1188,16 +1211,14 @@ dd {
     padding: 0;
   }
 
+  .search-strip,
   .controls {
     border-left: 0;
     border-right: 0;
-    grid-template-columns: 1fr;
   }
 
   .search-label {
-    border-bottom: 1px solid var(--rule);
-    border-right: 0;
-    padding: 9px 12px;
+    padding: 8px 12px;
   }
 
   .control-row {
@@ -1287,6 +1308,9 @@ dd {
 
   .session-divider-card {
     grid-template-columns: 1fr auto;
+    position: sticky;
+    top: var(--sticky-search-height);
+    z-index: 4;
   }
 
   .session-divider-card strong {
