@@ -18,6 +18,8 @@ const state = {
   detailOpen: false,
 };
 
+let outlineScrollFrame = 0;
+
 const youtubeState = {
   apiPromise: null,
   player: null,
@@ -54,6 +56,9 @@ const els = {
   sessionStats: document.querySelector("#session-stats"),
   sessionDrive: document.querySelector("#session-drive"),
   sessionPlaylist: document.querySelector("#session-playlist"),
+  browser: document.querySelector("#browser"),
+  sessionOutline: document.querySelector("#session-outline"),
+  sessionOutlineList: document.querySelector("#session-outline-list"),
   table: document.querySelector("#recording-table"),
   cards: document.querySelector("#card-list"),
   visibleCount: document.querySelector("#visible-count"),
@@ -838,68 +843,204 @@ function mediaDownload(row) {
   return driveDownload(row.video_file_id || row.audio_file_id);
 }
 
-function renderList() {
-  els.table.innerHTML = state.visible
+function sessionKey(row) {
+  return row.session_id || "unassigned-session";
+}
+
+function sessionAnchor(sessionId) {
+  return `session-${String(sessionId).replace(/[^a-z0-9_-]+/gi, "-")}`;
+}
+
+function sessionDisplayLabel(label) {
+  return String(label || "Unassigned session").replace(/^\d{4}-\d{2}-\d{2}\s+/, "");
+}
+
+function sessionGroups(rows) {
+  const groups = new Map();
+  rows.forEach((row) => {
+    const key = sessionKey(row);
+    if (!groups.has(key)) {
+      groups.set(key, {
+        id: key,
+        label: sessionDisplayLabel(row.session_label),
+        recordedDate: row.recorded_create_date,
+        rows: [],
+      });
+    }
+    const group = groups.get(key);
+    group.rows.push(row);
+    if (row.recorded_create_date > group.recordedDate) group.recordedDate = row.recorded_create_date;
+  });
+  const direction = els.sort.value === "oldest" ? 1 : -1;
+  return [...groups.values()].sort(
+    (a, b) => direction * a.recordedDate.localeCompare(b.recordedDate),
+  );
+}
+
+function sessionTakeNumbers() {
+  const groups = new Map();
+  state.rows.forEach((row) => {
+    const key = sessionKey(row);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(row);
+  });
+  const takeNumbers = new Map();
+  groups.forEach((rows) => {
+    rows
+      .sort(
+        (a, b) =>
+          a.recorded_create_date.localeCompare(b.recorded_create_date) ||
+          a.file.localeCompare(b.file),
+      )
+      .forEach((row, index) => takeNumbers.set(row.file, String(index + 1).padStart(2, "0")));
+  });
+  return takeNumbers;
+}
+
+function sessionGroupMeta(group) {
+  const duration = group.rows.reduce((sum, row) => sum + Number(row.duration_seconds || 0), 0);
+  return `${group.rows.length} ${group.rows.length === 1 ? "take" : "takes"} · ${formatTotal(duration)}`;
+}
+
+function renderSessionOutline(groups) {
+  const showOutline = els.sessionFilter.value === "all" && groups.length > 1;
+  els.browser.classList.toggle("has-session-outline", showOutline);
+  els.sessionOutline.hidden = !showOutline;
+  if (!showOutline) {
+    els.sessionOutlineList.innerHTML = "";
+    return;
+  }
+  els.sessionOutlineList.innerHTML = groups
     .map(
-      (row, index) => {
-        const takeNumber = String(state.visible.length - index).padStart(2, "0");
-        return `
-        <tr class="${row.file === state.selectedFile ? "active" : ""}" data-file="${row.file}">
-          <td class="select-col">
-            ${state.selectMode ? `<label class="select-hit"><input class="select-box" type="checkbox" data-select-file="${escapeHtml(row.file)}" ${state.selectedDownloads.has(row.file) ? "checked" : ""} aria-label="Select ${escapeHtml(row.caption)}"></label>` : ""}
-          </td>
-          <td class="take-number">${takeNumber}</td>
-          <td>
-            <div class="row-file">
-              <img class="row-thumb" src="${escapeHtml(thumbnail(row))}" alt="Thumbnail for ${escapeHtml(row.caption)}" loading="lazy">
-              <div>
-                <strong>${escapeHtml(row.caption)}</strong>
-                <span class="recording-source">${escapeHtml(row.file)} · ${escapeHtml(row.recorded_create_date)}</span>
-                <div class="row-links">
-                  ${row.has_audio === "yes" ? `<button type="button" data-show-player="${escapeHtml(row.file)}">Audio player</button>` : ""}
-                </div>
-              </div>
+      (group, index) => `
+        <button
+          class="session-outline-link ${index === 0 ? "active" : ""}"
+          type="button"
+          data-session-jump="${escapeHtml(sessionAnchor(group.id))}">
+          <span>${escapeHtml(formatSessionDate(group.recordedDate))}</span>
+          <strong>${escapeHtml(group.label)}</strong>
+          <small>${escapeHtml(sessionGroupMeta(group))}</small>
+        </button>
+      `,
+    )
+    .join("");
+}
+
+function syncSessionOutlineToScroll() {
+  outlineScrollFrame = 0;
+  if (els.sessionOutline.hidden) return;
+  const dividers = [...document.querySelectorAll(".session-divider-row")];
+  if (!dividers.length) return;
+  const marker = (document.querySelector(".topbar")?.getBoundingClientRect().height || 0) + 8;
+  let activeId = dividers[0].id;
+  dividers.forEach((divider) => {
+    if (divider.getBoundingClientRect().top <= marker) activeId = divider.id;
+  });
+  els.sessionOutlineList.querySelectorAll(".session-outline-link").forEach((link) => {
+    link.classList.toggle("active", link.dataset.sessionJump === activeId);
+  });
+}
+
+function tableSessionDivider(group) {
+  return `
+    <tr id="${escapeHtml(sessionAnchor(group.id))}" class="session-divider-row">
+      <th colspan="8" scope="rowgroup">
+        <div class="session-divider-content">
+          <span class="session-divider-date">${escapeHtml(formatSessionDate(group.recordedDate))}</span>
+          <strong>${escapeHtml(group.label)}</strong>
+          <span class="session-divider-meta">${escapeHtml(sessionGroupMeta(group))}</span>
+        </div>
+      </th>
+    </tr>
+  `;
+}
+
+function cardSessionDivider(group) {
+  return `
+    <div class="session-divider-card">
+      <span class="session-divider-date">${escapeHtml(formatSessionDate(group.recordedDate))}</span>
+      <strong>${escapeHtml(group.label)}</strong>
+      <span class="session-divider-meta">${escapeHtml(sessionGroupMeta(group))}</span>
+    </div>
+  `;
+}
+
+function tableRecording(row, takeNumber) {
+  return `
+    <tr class="${row.file === state.selectedFile ? "active" : ""}" data-file="${row.file}">
+      <td class="select-col">
+        ${state.selectMode ? `<label class="select-hit"><input class="select-box" type="checkbox" data-select-file="${escapeHtml(row.file)}" ${state.selectedDownloads.has(row.file) ? "checked" : ""} aria-label="Select ${escapeHtml(row.caption)}"></label>` : ""}
+      </td>
+      <td class="take-number">${takeNumber}</td>
+      <td>
+        <div class="row-file">
+          <img class="row-thumb" src="${escapeHtml(thumbnail(row))}" alt="Thumbnail for ${escapeHtml(row.caption)}" loading="lazy">
+          <div>
+            <strong>${escapeHtml(row.caption)}</strong>
+            <span class="recording-source">${escapeHtml(row.file)} · ${escapeHtml(row.recorded_create_date)}</span>
+            <div class="row-links">
+              ${row.has_audio === "yes" ? `<button type="button" data-show-player="${escapeHtml(row.file)}">Audio player</button>` : ""}
             </div>
-          </td>
-          <td>${songMeta(row)}</td>
-          <td class="players-cell">${escapeHtml(performerNames(row))}</td>
-          <td>${instrumentBadges(row)}</td>
-          <td class="duration-cell">${escapeHtml(row.length)}</td>
-          <td>${mediaTags(row)}</td>
-        </tr>
-      `;
-      },
+          </div>
+        </div>
+      </td>
+      <td>${songMeta(row)}</td>
+      <td class="players-cell">${escapeHtml(performerNames(row))}</td>
+      <td>${instrumentBadges(row)}</td>
+      <td class="duration-cell">${escapeHtml(row.length)}</td>
+      <td>${mediaTags(row)}</td>
+    </tr>
+  `;
+}
+
+function cardRecording(row, takeNumber) {
+  return `
+    <article class="recording-card ${row.file === state.selectedFile ? "active" : ""}" data-file="${row.file}">
+      ${state.selectMode ? `<label class="select-hit card-select"><input class="select-box" type="checkbox" data-select-file="${escapeHtml(row.file)}" ${state.selectedDownloads.has(row.file) ? "checked" : ""} aria-label="Select ${escapeHtml(row.caption)}"></label>` : ""}
+      <span class="take-number">${takeNumber}</span>
+      <img class="card-thumb" src="${escapeHtml(thumbnail(row))}" alt="Thumbnail for ${escapeHtml(row.caption)}" loading="lazy">
+      <div class="card-main">
+        <strong>${escapeHtml(row.caption)}</strong>
+        <span class="duration">${escapeHtml(row.length)}</span>
+      </div>
+      <span class="recording-source">${escapeHtml(row.game_title || row.franchise || "Unknown source")} · ${escapeHtml(row.file)}</span>
+      ${songMeta(row)}
+      <span class="recording-players">${escapeHtml(performerNames(row))}</span>
+      ${instrumentBadges(row)}
+      ${mediaTags(row)}
+      <div class="card-actions">
+        ${row.has_audio === "yes" ? `<button type="button" data-show-player="${escapeHtml(row.file)}">Audio player</button>` : ""}
+      </div>
+    </article>
+  `;
+}
+
+function renderList() {
+  const groups = sessionGroups(state.visible);
+  const takeNumbers = sessionTakeNumbers();
+  const grouped = els.sessionFilter.value === "all" && groups.length > 0;
+  renderSessionOutline(groups);
+
+  els.table.innerHTML = groups
+    .map(
+      (group) =>
+        `${grouped ? tableSessionDivider(group) : ""}${group.rows
+          .map((row) => tableRecording(row, takeNumbers.get(row.file) || "--"))
+          .join("")}`,
     )
     .join("");
 
-  els.cards.innerHTML = state.visible
+  els.cards.innerHTML = groups
     .map(
-      (row, index) => {
-        const takeNumber = String(state.visible.length - index).padStart(2, "0");
-        return `
-        <article class="recording-card ${row.file === state.selectedFile ? "active" : ""}" data-file="${row.file}">
-          ${state.selectMode ? `<label class="select-hit card-select"><input class="select-box" type="checkbox" data-select-file="${escapeHtml(row.file)}" ${state.selectedDownloads.has(row.file) ? "checked" : ""} aria-label="Select ${escapeHtml(row.caption)}"></label>` : ""}
-          <span class="take-number">${takeNumber}</span>
-          <img class="card-thumb" src="${escapeHtml(thumbnail(row))}" alt="Thumbnail for ${escapeHtml(row.caption)}" loading="lazy">
-          <div class="card-main">
-            <strong>${escapeHtml(row.caption)}</strong>
-            <span class="duration">${escapeHtml(row.length)}</span>
-          </div>
-          <span class="recording-source">${escapeHtml(row.game_title || row.franchise || "Unknown source")} · ${escapeHtml(row.file)}</span>
-          ${songMeta(row)}
-          <span class="recording-players">${escapeHtml(performerNames(row))}</span>
-          ${instrumentBadges(row)}
-          ${mediaTags(row)}
-          <div class="card-actions">
-            ${row.has_audio === "yes" ? `<button type="button" data-show-player="${escapeHtml(row.file)}">Audio player</button>` : ""}
-          </div>
-        </article>
-      `;
-      },
+      (group) =>
+        `${grouped ? cardSessionDivider(group) : ""}${group.rows
+          .map((row) => cardRecording(row, takeNumbers.get(row.file) || "--"))
+          .join("")}`,
     )
     .join("");
 
   renderSelection();
+  window.requestAnimationFrame(syncSessionOutlineToScroll);
 }
 
 function renderPreview(row, resumeAfterReady = false) {
@@ -1145,6 +1286,20 @@ document.addEventListener("click", (event) => {
     return;
   }
 
+  const sessionJump = event.target.closest("[data-session-jump]");
+  if (sessionJump) {
+    const target = document.getElementById(sessionJump.dataset.sessionJump);
+    if (!target) return;
+    els.sessionOutlineList
+      .querySelectorAll(".session-outline-link")
+      .forEach((link) => link.classList.toggle("active", link === sessionJump));
+    target.scrollIntoView({
+      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+      block: "start",
+    });
+    return;
+  }
+
   const filterButton = event.target.closest("[data-filter-search]");
   if (filterButton) {
     event.stopPropagation();
@@ -1295,6 +1450,15 @@ window.addEventListener("popstate", () => {
   restoreSessionFromUrl();
   applyFilters();
 });
+
+window.addEventListener(
+  "scroll",
+  () => {
+    if (outlineScrollFrame) return;
+    outlineScrollFrame = window.requestAnimationFrame(syncSessionOutlineToScroll);
+  },
+  { passive: true },
+);
 
 fetch(csvUrl)
   .then((response) => {

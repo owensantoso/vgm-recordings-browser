@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Music Jam Sessions · Recording Archive</title>
     <link rel="icon" href="data:,">
-    <link rel="stylesheet" href="styles.css?v=20260726-setlist-ledger-3">
+    <link rel="stylesheet" href="styles.css?v=20260730-session-outline">
   </head>
   <body>
     <header class="topbar">
@@ -71,7 +71,12 @@
         </div>
       </section>
 
-      <section class="browser">
+      <section id="browser" class="browser">
+        <nav id="session-outline" class="session-outline" aria-label="Session outline" hidden>
+          <p class="session-outline-title">Session index</p>
+          <div id="session-outline-list"></div>
+        </nav>
+
         <div class="list-wrap" aria-label="Recordings">
           <div class="selection-bar">
             <button id="select-mode" type="button">Select</button>
@@ -160,6 +165,6 @@
     </main>
 
     <script src="session-url.js?v=20260726"></script>
-    <script src="app.js?v=20260726-setlist-ledger-3"></script>
+    <script src="app.js?v=20260730-session-outline"></script>
   </body>
 </html>
