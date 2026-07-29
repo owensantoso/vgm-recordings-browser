@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Music Jam Sessions · Recording Archive</title>
     <link rel="icon" href="data:,">
-    <link rel="stylesheet" href="styles.css?v=20260730-sticky-search">
+    <link rel="stylesheet" href="styles.css?v=20260730-table-sort">
   </head>
   <body>
     <header class="topbar">
@@ -45,16 +45,6 @@
               <option value="all">All sessions</option>
             </select>
           </label>
-          <label>
-            <span>Sort</span>
-            <select id="sort">
-              <option value="newest">Newest first</option>
-              <option value="oldest">Oldest first</option>
-              <option value="longest">Longest</option>
-              <option value="shortest">Shortest</option>
-              <option value="caption">Caption A-Z</option>
-            </select>
-          </label>
         </div>
         <div id="session-band" class="session-row">
           <div class="session-heading">
@@ -87,16 +77,28 @@
             <button id="download-selected" type="button" hidden>Download selected</button>
             <span id="selected-count" class="muted" hidden>0 selected</span>
           </div>
+          <div class="mobile-sort" aria-label="Sort recordings">
+            <span>Sort</span>
+            <button type="button" data-sort-key="take">Take <span class="sort-indicator" aria-hidden="true"></span></button>
+            <button type="button" data-sort-key="recording">Recording <span class="sort-indicator" aria-hidden="true"></span></button>
+            <button type="button" data-sort-key="time">Time <span class="sort-indicator" aria-hidden="true"></span></button>
+          </div>
           <table>
             <thead>
               <tr>
                 <th class="select-col"></th>
-                <th class="take-col">Take</th>
-                <th>Recording</th>
+                <th class="take-col" data-sort-column="take">
+                  <button type="button" data-sort-key="take">Take <span class="sort-indicator" aria-hidden="true"></span></button>
+                </th>
+                <th data-sort-column="recording">
+                  <button type="button" data-sort-key="recording">Recording <span class="sort-indicator" aria-hidden="true"></span></button>
+                </th>
                 <th>Song / Game</th>
                 <th>Players</th>
                 <th>Parts</th>
-                <th>Time</th>
+                <th data-sort-column="time">
+                  <button type="button" data-sort-key="time">Time <span class="sort-indicator" aria-hidden="true"></span></button>
+                </th>
                 <th>Media</th>
               </tr>
             </thead>
@@ -168,6 +170,6 @@
     </main>
 
     <script src="session-url.js?v=20260726"></script>
-    <script src="app.js?v=20260730-sticky-search"></script>
+    <script src="app.js?v=20260730-table-sort"></script>
   </body>
 </html>

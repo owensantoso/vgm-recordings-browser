@@ -16,6 +16,8 @@ const state = {
   selectedDownloads: new Set(),
   selectMode: false,
   detailOpen: false,
+  sortKey: "take",
+  sortDirection: "desc",
 };
 
 let outlineScrollFrame = 0;
@@ -47,7 +49,6 @@ const els = {
   search: document.querySelector("#search"),
   mediaFilter: document.querySelector("#media-filter"),
   sessionFilter: document.querySelector("#session-filter"),
-  sort: document.querySelector("#sort"),
   archiveCount: document.querySelector("#archive-count"),
   archiveDuration: document.querySelector("#archive-duration"),
   sessionBand: document.querySelector("#session-band"),
@@ -778,15 +779,16 @@ function applyFilters() {
   });
 
   const sorters = {
-    newest: (a, b) =>
-      b.recorded_create_date.localeCompare(a.recorded_create_date) || b.file.localeCompare(a.file),
-    oldest: (a, b) =>
+    take: (a, b) =>
       a.recorded_create_date.localeCompare(b.recorded_create_date) || a.file.localeCompare(b.file),
-    longest: (a, b) => Number(b.duration_seconds) - Number(a.duration_seconds),
-    shortest: (a, b) => Number(a.duration_seconds) - Number(b.duration_seconds),
-    caption: (a, b) => a.caption.localeCompare(b.caption),
+    recording: (a, b) =>
+      (a.caption || a.file).localeCompare(b.caption || b.file) || a.file.localeCompare(b.file),
+    time: (a, b) =>
+      Number(a.duration_seconds || 0) - Number(b.duration_seconds || 0) ||
+      a.file.localeCompare(b.file),
   };
-  state.visible.sort(sorters[els.sort.value]);
+  const direction = state.sortDirection === "asc" ? 1 : -1;
+  state.visible.sort((a, b) => direction * sorters[state.sortKey](a, b));
   const visibleFiles = new Set(state.visible.map((row) => row.file));
   state.selectedDownloads.forEach((file) => {
     if (!visibleFiles.has(file)) state.selectedDownloads.delete(file);
@@ -892,9 +894,8 @@ function sessionGroups(rows) {
     group.rows.push(row);
     if (row.recorded_create_date > group.recordedDate) group.recordedDate = row.recorded_create_date;
   });
-  const direction = els.sort.value === "oldest" ? 1 : -1;
   return [...groups.values()].sort(
-    (a, b) => direction * a.recordedDate.localeCompare(b.recordedDate),
+    (a, b) => b.recordedDate.localeCompare(a.recordedDate),
   );
 }
 
@@ -1040,6 +1041,7 @@ function renderList() {
   const groups = sessionGroups(state.visible);
   const takeNumbers = sessionTakeNumbers();
   const grouped = els.sessionFilter.value === "all" && groups.length > 0;
+  updateSortControls();
   renderSessionOutline(groups);
 
   els.table.innerHTML = groups
@@ -1062,6 +1064,22 @@ function renderList() {
 
   renderSelection();
   window.requestAnimationFrame(syncSessionOutlineToScroll);
+}
+
+function updateSortControls() {
+  document.querySelectorAll("[data-sort-key]").forEach((button) => {
+    const active = button.dataset.sortKey === state.sortKey;
+    button.classList.toggle("active", active);
+    button.dataset.direction = active ? state.sortDirection : "";
+    button.setAttribute("aria-pressed", String(active));
+  });
+  document.querySelectorAll("[data-sort-column]").forEach((heading) => {
+    const active = heading.dataset.sortColumn === state.sortKey;
+    heading.setAttribute(
+      "aria-sort",
+      active ? (state.sortDirection === "asc" ? "ascending" : "descending") : "none",
+    );
+  });
 }
 
 function renderPreview(row, resumeAfterReady = false) {
@@ -1330,6 +1348,19 @@ document.addEventListener("click", (event) => {
     return;
   }
 
+  const sortButton = event.target.closest("[data-sort-key]");
+  if (sortButton) {
+    const key = sortButton.dataset.sortKey;
+    if (state.sortKey === key) {
+      state.sortDirection = state.sortDirection === "asc" ? "desc" : "asc";
+    } else {
+      state.sortKey = key;
+      state.sortDirection = key === "recording" ? "asc" : "desc";
+    }
+    applyFilters();
+    return;
+  }
+
   const playerButton = event.target.closest("[data-show-player]");
   if (playerButton) {
     event.stopPropagation();
@@ -1351,7 +1382,7 @@ document.addEventListener("input", (event) => {
   }
 });
 
-[els.search, els.mediaFilter, els.sort].forEach((input) => {
+[els.search, els.mediaFilter].forEach((input) => {
   input.addEventListener("input", applyFilters);
 });
 
