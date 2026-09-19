@@ -138,6 +138,9 @@ export function App() {
   }, [visible, active?.file, rows]);
   useEffect(() => {
     function restore() {
+      const file = fileFromHash(location.hash, rows);
+      // In-page anchors such as the skip link are not recording links.
+      if (!file && document.getElementById(location.hash.slice(1))) return;
       const value = validSession(sessionFromHref(location.href), [
         "all",
         ...rows.map((row) => row.session_id),
@@ -146,7 +149,7 @@ export function App() {
       setSession(value);
       setQuery("");
       setMedia("all");
-      setSelected(fileFromHash(location.hash, rows));
+      setSelected(file);
       setAutoPlay(false);
     }
     window.addEventListener("hashchange", restore);

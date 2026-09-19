@@ -76,12 +76,21 @@ of the May session and Beneath the Mask section, video/audio time and play-state
 transfer, reselecting a paused take, retaining a player through filtering, batch
 selection, and teardown on zero results. These use fake providers.
 
-The supervised preview started, but the cloud browser could not reach its
-approved address (`ERR_BLOCKED_BY_CLIENT`). No rendered screenshots or actual
-media playback were obtained. The design has been reviewed from source only;
-rendered acceptance is outstanding. Do not label the UI visually verified.
+`npm run test:browser` (part of `npm test`) drives the production bundle in a
+real headless Chrome at 1280 and 375 CSS pixels via `playwright-core`, against
+synthetic media generated at test time (`tests/browser/fixture.mjs`: sine-wave
+WAV, ffmpeg test-pattern WebM, and a fake `YT.Player` backed by a real
+`<video>`). It covers selection, filter retention and empty teardown, reload /
+hash / back / forward, video-audio offset handoff, seek, section stop and
+replay, natural end, failed audio and video with fallback, keyboard transport,
+skip-link focus, and `prefers-reduced-motion`. It asserts exactly one media
+element holds a source at any time and that callbacks from destroyed providers
+cannot change the current player. Screenshots land in `.test-artifacts/browser/`.
+The test skips (not fails) when no Chrome binary is found.
 
-Before merge, exercise the real app at 375, 768, 1024, and 1440 CSS pixels:
+Synthetic providers do not prove real YouTube availability, iOS behaviour, or
+human visual acceptance. Before merge, exercise the real app at 375, 768,
+1024, and 1440 CSS pixels:
 
 1. Inspect initial, filtered, selected, empty, loading-error, and expanded states;
    check long filenames, long game names, text enlargement, focus, and overflow.

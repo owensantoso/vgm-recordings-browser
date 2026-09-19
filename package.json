@@ -10,7 +10,8 @@
     "dev": "node scripts/build.mjs --serve",
     "build": "node scripts/build.mjs",
     "typecheck": "tsc --noEmit",
-    "test": "node --experimental-strip-types --test tests/*.test.ts && node scripts/test-ui.mjs",
+    "test": "node --experimental-strip-types --test tests/*.test.ts && node scripts/test-ui.mjs && npm run test:browser",
+    "test:browser": "node --test tests/browser.test.mjs",
     "check": "npm run typecheck && npm test && npm run build"
   },
   "dependencies": {
@@ -21,7 +22,8 @@
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.7",
     "esbuild": "0.28.2",
-    "typescript": "5.9.3",
-    "jsdom": "26.1.0"
+    "jsdom": "26.1.0",
+    "playwright-core": "1.63.0",
+    "typescript": "5.9.3"
   }
 }
