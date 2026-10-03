@@ -1,175 +1,18 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="Browse, play, and share recordings from our VGM jam sessions."
+    />
     <title>Music Jam Sessions · Recording Archive</title>
-    <link rel="icon" href="data:,">
-    <link rel="stylesheet" href="styles.css?v=20260730-table-sort">
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="assets/app.css" />
   </head>
   <body>
-    <header class="topbar">
-      <div>
-        <p class="archive-kicker">Recording archive · 2026</p>
-        <h1>Music Jam Sessions</h1>
-        <p class="subhead">Rehearsal videos, audio extracts, and session notes</p>
-      </div>
-      <div class="archive-utility">
-        <p class="archive-total"><strong id="archive-count">0</strong> takes · <strong id="archive-duration">0:00</strong></p>
-        <a class="csv-link" href="data/recordings.csv">CSV export</a>
-      </div>
-    </header>
-
-    <main class="layout">
-      <section class="search-strip" aria-label="Search recordings">
-        <label class="search-label">
-          <span>Search</span>
-          <input id="search" type="search" placeholder="Song, game, filename, or player">
-        </label>
-      </section>
-
-      <section class="controls" aria-label="Filters">
-        <div class="control-row">
-          <label>
-            <span>Media</span>
-            <select id="media-filter">
-              <option value="all">All</option>
-              <option value="video">Has video</option>
-              <option value="audio">Has audio</option>
-              <option value="audio-only">Audio only</option>
-            </select>
-          </label>
-          <label>
-            <span>Session</span>
-            <select id="session-filter">
-              <option value="all">All sessions</option>
-            </select>
-          </label>
-        </div>
-        <div id="session-band" class="session-row">
-          <div class="session-heading">
-            <span id="session-date" class="session-date">Archive index</span>
-            <strong id="session-label">All sessions</strong>
-          </div>
-          <div id="session-stats" class="session-stats">
-            <span><strong id="visible-count">0</strong> takes</span>
-            <span><strong id="total-duration">0:00</strong></span>
-            <span><strong id="video-count">0</strong> video</span>
-            <span><strong id="audio-count">0</strong> audio</span>
-          </div>
-          <nav class="session-links" aria-label="Session resources">
-            <a id="session-drive" href="#" target="_blank" rel="noopener" hidden>Drive folder</a>
-            <a id="session-playlist" href="#" target="_blank" rel="noopener" hidden>YouTube playlist</a>
-          </nav>
-        </div>
-      </section>
-
-      <section id="browser" class="browser">
-        <nav id="session-outline" class="session-outline" aria-label="Session outline" hidden>
-          <p class="session-outline-title">Session index</p>
-          <div id="session-outline-list"></div>
-        </nav>
-
-        <div class="list-wrap" aria-label="Recordings">
-          <div class="selection-bar">
-            <button id="select-mode" type="button">Select</button>
-            <button id="select-visible" type="button" hidden>Select all shown</button>
-            <button id="download-selected" type="button" hidden>Download selected</button>
-            <span id="selected-count" class="muted" hidden>0 selected</span>
-          </div>
-          <div class="mobile-sort" aria-label="Sort recordings">
-            <span>Sort</span>
-            <button type="button" data-sort-key="take">Take <span class="sort-indicator" aria-hidden="true"></span></button>
-            <button type="button" data-sort-key="recording">Recording <span class="sort-indicator" aria-hidden="true"></span></button>
-            <button type="button" data-sort-key="time">Time <span class="sort-indicator" aria-hidden="true"></span></button>
-          </div>
-          <table>
-            <thead>
-              <tr>
-                <th class="select-col"></th>
-                <th class="take-col" data-sort-column="take">
-                  <button type="button" data-sort-key="take">Take <span class="sort-indicator" aria-hidden="true"></span></button>
-                </th>
-                <th data-sort-column="recording">
-                  <button type="button" data-sort-key="recording">Recording <span class="sort-indicator" aria-hidden="true"></span></button>
-                </th>
-                <th>Song / Game</th>
-                <th>Players</th>
-                <th>Parts</th>
-                <th data-sort-column="time">
-                  <button type="button" data-sort-key="time">Time <span class="sort-indicator" aria-hidden="true"></span></button>
-                </th>
-                <th>Media</th>
-              </tr>
-            </thead>
-            <tbody id="recording-table"></tbody>
-          </table>
-          <div id="card-list" class="card-list"></div>
-        </div>
-
-        <aside id="detail" class="detail" aria-label="Selected recording">
-          <div class="detail-head">
-            <div>
-              <p id="selected-file" class="file-name"></p>
-              <h2 id="selected-caption"></h2>
-            </div>
-            <div class="detail-tools">
-              <span id="selected-length" class="pill"></span>
-              <button id="expand-detail" class="expand-detail" type="button" aria-label="Expand selected recording">
-                <img src="icons/maximize-2.svg" alt="" aria-hidden="true">
-                <span>Expand</span>
-              </button>
-              <button id="close-detail" class="close-detail" type="button">Minimize</button>
-            </div>
-          </div>
-
-          <div id="segment-controls" class="segment-controls" hidden>
-            <button id="play-toggle" class="play-toggle" type="button" aria-label="Play selected video">
-              <span class="play-icon" aria-hidden="true"></span>
-              <span class="sr-only">Play</span>
-            </button>
-            <span id="segment-current" class="time-label">0:00</span>
-            <input id="segment-seek" class="segment-seek" type="range" min="0" max="0" value="0" step="0.1" aria-label="Seek within selected recording">
-            <span id="segment-end" class="time-label">0:00</span>
-            <div id="section-indicator" class="section-indicator" hidden>
-              <div class="section-label-row">
-                <span id="section-label" class="section-label"></span>
-                <span class="section-time"><span id="full-current">0:00</span> / <span id="full-end">0:00</span></span>
-              </div>
-              <input id="full-seek" class="full-seek" type="range" min="0" max="0" value="0" step="0.1" aria-label="Seek within full recording">
-            </div>
-          </div>
-
-          <div class="tabs" role="tablist" aria-label="Media preview">
-            <button id="video-tab" class="tab active" type="button">Video</button>
-            <button id="audio-tab" class="tab" type="button">Audio</button>
-          </div>
-
-          <div id="preview" class="preview"></div>
-
-          <dl class="meta-grid">
-            <div><dt>Recorded</dt><dd id="selected-recorded"></dd></div>
-            <div><dt>Song</dt><dd id="selected-song"></dd></div>
-            <div><dt>Game</dt><dd id="selected-game"></dd></div>
-            <div><dt>Size</dt><dd id="selected-size"></dd></div>
-            <div><dt>Resolution</dt><dd id="selected-resolution"></dd></div>
-            <div><dt>Rotation</dt><dd id="selected-rotation"></dd></div>
-            <div><dt>Audio</dt><dd id="selected-audio"></dd></div>
-            <div><dt>Device</dt><dd id="selected-device"></dd></div>
-          </dl>
-
-          <div class="actions">
-            <a id="video-link" href="#" target="_blank" rel="noopener">Open YouTube</a>
-            <button id="copy-youtube" type="button">Copy YouTube link</button>
-            <button id="copy-page-link" type="button">Copy page link</button>
-            <a id="audio-link" href="#" target="_blank" rel="noopener">Open audio</a>
-            <a id="video-download" href="#" download target="_blank" rel="noopener">Download video</a>
-          </div>
-        </aside>
-      </section>
-    </main>
-
-    <script src="session-url.js?v=20260726"></script>
-    <script src="app.js?v=20260730-table-sort"></script>
+    <div id="root"></div>
+    <script type="module" src="assets/app.js"></script>
   </body>
 </html>
