@@ -403,6 +403,7 @@ mark {
   flex-shrink: 0;
 }
 .player {
+  scroll-margin-top: calc(var(--toolbar-height, 0px) + 20px);
   position: sticky;
   top: calc(var(--toolbar-height, 0px) + 20px);
   min-width: 0;

@@ -129,6 +129,66 @@ const filterBySong = async (page, value) => {
 };
 
 for (const name of Object.keys(viewports)) {
+  test(`${name}: expanding after scrolling keeps the player heading and controls visible`, { skip: !executablePath }, async () => {
+    const page = await open(name, '/');
+    try {
+      await page.evaluate(() => {
+        for (const list of document.querySelectorAll('.recording-list')) {
+          for (let i = 0; i < 25; i++) list.append(list.firstElementChild.cloneNode(true));
+        }
+        window.scrollTo(0, 600);
+      });
+      const previousScroll = await page.evaluate(() => window.scrollY);
+      assert.ok(previousScroll > 400);
+      await page.click('.expand-control');
+      const visible = () => page.waitForFunction(() => {
+        const heading = document.querySelector('.player-heading').getBoundingClientRect();
+        const button = document.querySelector('.expand-control').getBoundingClientRect();
+        const toolbar = document.querySelector('.toolbar').getBoundingClientRect();
+        const fixed = getComputedStyle(document.querySelector('.player')).position === 'fixed';
+        return heading.top >= (fixed ? 0 : toolbar.bottom) && button.bottom <= innerHeight;
+      }, null, { timeout: 1500 });
+      await visible();
+      assert.equal(await page.getAttribute('.expand-control', 'aria-expanded'), 'true');
+      if (name === 'mobile') assert.equal(await page.evaluate(() => window.scrollY), previousScroll, 'mobile expansion preserves archive scroll');
+      await page.shot('scrolled-expansion');
+      for (const viewport of name === 'desktop' ? [viewports.mobile, viewports.desktop] : [viewports.desktop, viewports.mobile]) {
+        await page.setViewportSize(viewport);
+        await visible();
+        // Native scroll anchoring may change the offset across layouts.
+        assert.equal(await page.locator('.expand-control').evaluate(el => el === document.activeElement), true);
+      }
+      await page.keyboard.press('Escape');
+      assert.equal(await page.getAttribute('.expand-control', 'aria-expanded'), 'false');
+      assert.equal(await page.locator('.expand-control').evaluate(el => el === document.activeElement), true);
+      assert.equal(page.errors.length, 0, page.errors.join('\n'));
+    } finally { await page.context().close(); }
+  });
+  test(`${name}: session jumps stay below filters and sort headings share the grouped ordering`, { skip: !executablePath }, async () => {
+    const page = await open(name, '/');
+    try {
+      await page.evaluate(() => {
+        for (const list of document.querySelectorAll('.recording-list')) {
+          for (let i = 0; i < 15; i++) list.append(list.firstElementChild.cloneNode(true));
+        }
+      });
+      await page.getByRole('navigation', { name: 'Jump to session' }).getByRole('button', { name: '31 May 2026' }).click();
+      await page.waitForFunction((id) => {
+        const band = document.getElementById(`heading-${id}`).closest('.session-band').getBoundingClientRect();
+        const toolbar = document.querySelector('.toolbar').getBoundingClientRect();
+        return Math.abs(band.top - toolbar.bottom) < 1;
+      }, SESSION_A, { timeout: 1500 });
+      // Reload removes DOM-only layout stress before testing actual React order.
+      await page.reload();
+      await page.waitForSelector('.recording-row');
+      const first = page.locator('.ledger-headings').first();
+      await first.getByRole('button', { name: /Sort by Recording/ }).click();
+      const titles = await page.locator('.session-group').evaluateAll(groups => groups.map(group => [...group.querySelectorAll('.recording-title')].map(el => el.textContent)));
+      assert.deepEqual(titles, [['Delta missing audio', 'Echo broken video'], ['Alpha section take', 'Bravo full take', 'Charlie short audio']]);
+      assert.equal(await page.locator('.ledger-headings button[aria-pressed="true"]').count(), 2);
+      assert.equal(page.errors.length, 0, page.errors.join('\n'));
+    } finally { await page.context().close(); }
+  });
   test(`${name}: player shortcuts leave composition and consumed events alone`, { skip: !executablePath }, async () => {
     const page = await open(name, `/?session=${SESSION_A}`);
     try {

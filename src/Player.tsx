@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   bounds,
   driveDownload,
@@ -91,6 +91,20 @@ export function Player({
   const [copied, setCopied] = useState("");
   const container = useRef<HTMLDivElement>(null);
   const expandButton = useRef<HTMLButtonElement>(null);
+  const surface = useRef<HTMLElement>(null);
+  useLayoutEffect(() => {
+    if (!expanded) return;
+    const reveal = () => {
+      const element = surface.current;
+      // The mobile player is a fixed overlay; leave its archive scroll alone.
+      if (element && window.getComputedStyle(element).position !== "fixed") {
+        element.scrollIntoView({ block: "start" });
+      }
+    };
+    reveal();
+    window.addEventListener("resize", reveal);
+    return () => window.removeEventListener("resize", reveal);
+  }, [expanded]);
   const backend = useRef<{
     play(): void;
     pause(): void;
@@ -332,6 +346,7 @@ export function Player({
   ];
   return (
     <aside
+      ref={surface}
       className={`player ${expanded ? "expanded" : ""}`}
       aria-label="Selected recording"
     >
