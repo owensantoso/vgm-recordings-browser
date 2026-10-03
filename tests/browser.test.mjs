@@ -129,6 +129,101 @@ const filterBySong = async (page, value) => {
 };
 
 for (const name of Object.keys(viewports)) {
+  test(`${name}: player shortcuts leave composition and consumed events alone`, { skip: !executablePath }, async () => {
+    const page = await open(name, `/?session=${SESSION_A}`);
+    try {
+      for (const key of [' ', 'ArrowLeft', 'ArrowRight']) {
+        for (const options of [{ isComposing: true }, { keyCode: 229 }]) {
+          const consumed = await page.evaluate(({ key, options }) => {
+            document.activeElement.blur();
+            const event = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...options });
+            document.body.dispatchEvent(event);
+            return event.defaultPrevented;
+          }, { key, options });
+          assert.equal(consumed, false, `${key}: ${JSON.stringify(options)}`);
+        }
+      }
+      await page.evaluate(() => {
+        const event = new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true });
+        event.preventDefault();
+        document.body.dispatchEvent(event);
+      });
+      assert.equal(await status(page), 'Paused', 'a consumed Space does not start playback');
+      await page.click('.expand-control');
+      for (const options of [{ isComposing: true }, { keyCode: 229 }, { consumed: true }]) {
+        await page.evaluate((options) => {
+          const event = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true, ...options });
+          if (options.consumed) event.preventDefault();
+          document.body.dispatchEvent(event);
+        }, options);
+        assert.equal(await page.getAttribute('.expand-control', 'aria-expanded'), 'true');
+      }
+      await page.keyboard.press('Escape');
+      assert.equal(await page.getAttribute('.expand-control', 'aria-expanded'), 'false');
+    } finally { await page.context().close(); }
+  });
+  test(`${name}: sort headings preserve direction and take numbers`, { skip: !executablePath }, async () => {
+    const page = await open(name, `/?session=${SESSION_A}`);
+    try {
+      assert.equal(await page.locator('.sort-label select').count(), 0);
+      const controls = page.locator('.ledger-headings');
+      assert.equal(await controls.count(), 1);
+      const takes = () => page.locator('.take-number').allTextContents();
+      assert.deepEqual(await takes(), ['03', '02', '01']);
+      await controls.getByRole('button', { name: /Sort by Take/ }).click();
+      assert.deepEqual(await takes(), ['01', '02', '03']);
+      await controls.getByRole('button', { name: /Sort by Recording/ }).click();
+      assert.deepEqual(await page.locator('.recording-title').allTextContents(), ['Alpha section take', 'Bravo full take', 'Charlie short audio']);
+      await controls.getByRole('button', { name: /Sort by Recording/ }).click();
+      assert.deepEqual(await takes(), ['03', '02', '01']);
+      await controls.getByRole('button', { name: /Sort by Time/ }).click();
+      assert.deepEqual(await takes(), ['02', '01', '03']);
+      await controls.getByRole('button', { name: /Sort by Time/ }).click();
+      assert.deepEqual(await takes(), ['03', '01', '02']);
+      assert.equal(await controls.getByRole('button', { name: /Sort by Time/ }).getAttribute('aria-pressed'), 'true');
+      assert.equal(page.errors.length, 0, page.errors.join('\n'));
+    } finally { await page.context().close(); }
+  });
+  test(`${name}: filters and session heading remain visible while scrolling and resizing`, { skip: !executablePath }, async () => {
+    const page = await open(name, `/?session=${SESSION_A}`);
+    try {
+      // Layout stress uses copies of the existing synthetic rows; no archive/media changes.
+      await page.evaluate(() => {
+        const list = document.querySelector('.recording-list');
+        for (let i = 0; i < 25; i++) list.append(list.firstElementChild.cloneNode(true));
+        window.scrollTo(0, document.querySelector('.session-band').getBoundingClientRect().top + window.scrollY + 100);
+      });
+      const pinned = () => page.waitForFunction(() => {
+        const toolbar = document.querySelector('.toolbar').getBoundingClientRect();
+        const band = document.querySelector('.session-band').getBoundingClientRect();
+        return Math.abs(toolbar.top) < 1 && Math.abs(band.top - toolbar.bottom) < 1;
+      }, null, { timeout: 1500 });
+      await pinned();
+      await page.setViewportSize(name === 'desktop' ? viewports.mobile : viewports.desktop);
+      await pinned();
+      const overlap = await page.evaluate(() => document.documentElement.scrollWidth > innerWidth);
+      assert.equal(overlap, false, 'no horizontal overflow after resize');
+      await page.shot('sticky-ledger');
+    } finally { await page.context().close(); }
+  });
+  test(`${name}: type-to-search leaves composing and consumed keys alone`, { skip: !executablePath }, async () => {
+    const page = await open(name, `/?session=${SESSION_A}`);
+    try {
+      for (const options of [{ isComposing: true }, { keyCode: 229 }, { consumed: true }]) {
+        await page.evaluate((options) => {
+          document.activeElement.blur();
+          const event = new KeyboardEvent('keydown', { key: 'a', bubbles: true, cancelable: true, ...options });
+          if (options.consumed) event.preventDefault();
+          document.body.dispatchEvent(event);
+        }, options);
+        assert.equal(await page.inputValue('input[type=search]'), '', JSON.stringify(options));
+      }
+      await page.evaluate(() => document.activeElement.blur());
+      await page.keyboard.press('b');
+      assert.equal(await page.inputValue('input[type=search]'), 'b');
+      assert.equal(await page.locator('input[type=search]').evaluate(el => el === document.activeElement), true);
+    } finally { await page.context().close(); }
+  });
   test(
     `${name}: deep link restores the section, selection swaps the only live player`,
     { skip: !executablePath && "no Chrome executable found; set CHROME_PATH" },

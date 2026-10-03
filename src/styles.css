@@ -140,6 +140,10 @@ main {
   padding: 0 36px 40px;
 }
 .toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: #f5f6f3;
   display: grid;
   grid-template-columns: minmax(230px, 1fr) minmax(200px, 0.75fr) 150px;
   gap: 24px;
@@ -171,6 +175,7 @@ select {
   align-items: start;
 }
 .ledger {
+  scroll-margin-top: calc(var(--toolbar-height, 0px) + 20px);
   min-width: 0;
   padding-right: 26px;
   border-right: 1px solid var(--rule);
@@ -198,16 +203,28 @@ select {
 .list-tools button {
   font-size: 14px;
 }
-.sort-label {
-  flex-direction: row;
-  align-items: center;
+.ledger-headings {
+  display: grid;
+  grid-template-columns: 133px minmax(0, 1fr) 90px;
+  gap: 16px;
+  padding: 4px 14px 4px 13px;
+  background: var(--paper);
+  border-bottom: 1px solid var(--rule);
 }
-.sort-label select {
-  height: 40px;
-  font-size: 16px;
-  width: 110px;
+.ledger-headings button {
+  border: 0;
+  text-align: left;
+  font-size: 13px;
+  padding: 8px 4px;
+  min-height: 44px;
+}
+.ledger-headings button:last-child {
+  text-align: right;
 }
 .session-band {
+  position: sticky;
+  top: var(--toolbar-height, 0px);
+  z-index: 2;
   display: flex;
   gap: 14px;
   align-items: center;
@@ -216,6 +233,7 @@ select {
   padding: 16px 18px;
 }
 .session-band h2 {
+  scroll-margin-top: calc(var(--toolbar-height, 0px) + 20px);
   font-size: 16px;
   font-weight: 500;
   margin-top: 5px;
@@ -386,7 +404,7 @@ mark {
 }
 .player {
   position: sticky;
-  top: 20px;
+  top: calc(var(--toolbar-height, 0px) + 20px);
   min-width: 0;
   padding: 23px 0 0 26px;
 }
@@ -620,6 +638,9 @@ mark {
     width: 110px;
     height: 65px;
   }
+  .ledger-headings {
+    grid-template-columns: 147px minmax(0, 1fr) 90px;
+  }
   .player-heading h2 {
     font-size: 30px;
   }
@@ -664,11 +685,9 @@ mark {
   .list-tools button {
     padding-inline: 7px;
   }
-  .sort-label {
-    font-size: 0;
-  }
-  .sort-label select {
-    width: 100px;
+  .ledger-headings {
+    grid-template-columns: 90px minmax(0, 1fr) 60px;
+    gap: 10px;
   }
   .session-band {
     padding: 12px;
@@ -728,6 +747,10 @@ mark {
   .take-button img {
     width: 90px;
     height: 60px;
+  }
+  .ledger-headings {
+    grid-template-columns: 120px minmax(0, 1fr) 90px;
+    gap: 14px;
   }
   .row-meta > span:not(.duration) {
     display: block;
@@ -808,9 +831,6 @@ mark {
   }
   .list-tools button {
     min-height: 44px;
-  }
-  .sort-label select {
-    height: 44px;
   }
 }
 @media (max-width: 480px) {
@@ -899,9 +919,10 @@ mark {
     font-size: 12px;
     padding-inline: 6px;
   }
-  .sort-label select {
-    width: 85px;
-    font-size: 16px;
+  .ledger-headings {
+    grid-template-columns: 83px minmax(0, 1fr) 48px;
+    gap: 10px;
+    padding-inline: 9px 6px;
   }
   .ledger-toolbar {
     gap: 6px;
@@ -941,9 +962,6 @@ mark {
 }
 .session-jumps button {
   font: 14px monospace;
-}
-.session-band h2 {
-  scroll-margin-top: 20px;
 }
 @media (min-width: 861px) {
   .expand-control {

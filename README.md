@@ -8,7 +8,11 @@ remain the source of truth.
 
 Node 24 is used in CI. Run `npm ci`, then `npm run dev`.
 `npm run check` checks strict TypeScript, data/URL regression tests, React player
-lifecycle tests, and the production build.
+lifecycle tests, real-browser synthetic-media tests, and the production build.
+The browser suite needs Chrome/Chromium (or a compatible Edge executable) and
+FFmpeg. Set `CHROME_PATH` to the browser executable when it is not discovered
+automatically, especially on Windows. Without a discovered browser the suite
+skips; check the test totals before treating a run as browser validation.
 
 - `src/App.tsx`: archive loading, filtering, sorting, selection, URL restoration,
   downloads, and the responsive ledger.
@@ -38,6 +42,9 @@ restart it after changing the HTML or CSV.
 ## Validation limits
 
 DOM lifecycle tests use fake media backends. They verify teardown, offset and
-play-state transfer, filtering, selection, and deep links—not decoding, YouTube
-availability, browser autoplay policy, iOS behavior, or visual quality. See the
+play-state transfer, filtering, selection, and deep links. The browser suite uses
+generated WAV/WebM and a fake YouTube API to exercise media decoding, controls,
+scrolling, responsive resizing, heading sorting, keyboard handling, and the
+player lifecycle. Neither suite proves real YouTube availability, native IME
+input, iOS behavior, production autoplay policy, or visual acceptance. See the
 remaining browser/device checks in `docs/DESIGN.md` before merging the migration.

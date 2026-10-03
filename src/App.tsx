@@ -68,6 +68,22 @@ export function App() {
   const [downloads, setDownloads] = useState<Set<string>>(new Set());
   const [downloadMessage, setDownloadMessage] = useState("");
   const search = useRef<HTMLInputElement>(null);
+  const toolbar = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const element = toolbar.current;
+    if (!element) return;
+    const measure = () => element.parentElement?.style.setProperty(
+      "--toolbar-height", `${element.getBoundingClientRect().height}px`,
+    );
+    measure();
+    const observer = typeof ResizeObserver === "undefined" ? undefined : new ResizeObserver(measure);
+    observer?.observe(element);
+    window.addEventListener("resize", measure);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, []);
   useEffect(() => {
     const controller = new AbortController();
     setLoading(true);
@@ -162,6 +178,9 @@ export function App() {
   useEffect(() => {
     function typeToSearch(e: KeyboardEvent) {
       if (
+        e.defaultPrevented ||
+        e.isComposing ||
+        e.keyCode === 229 ||
         e.ctrlKey ||
         e.metaKey ||
         e.altKey ||
@@ -187,6 +206,10 @@ export function App() {
   function filter(value: string) {
     setQuery(value);
     setAutoPlay(false);
+  }
+  function changeSort(value: SortKey) {
+    setAscending(sort === value ? !ascending : value === "recording");
+    setSort(value);
   }
   function choose(row: Recording) {
     setSelected(row.file);
@@ -254,7 +277,7 @@ export function App() {
         </div>
       </header>
       <main className={active ? "has-player" : ""}>
-        <section className="toolbar" aria-label="Search and filter recordings">
+        <section ref={toolbar} className="toolbar" aria-label="Search and filter recordings">
           <label className="search-field">
             Search
             <input
@@ -319,25 +342,6 @@ export function App() {
                   <span>· {formatTime(currentTotal)}</span>
                 </p>
                 <div className="list-tools">
-                  <label className="sort-label">
-                    Sort
-                    <select
-                      value={sort}
-                      onChange={(e) => setSort(e.target.value as SortKey)}
-                    >
-                      <option value="take">Take</option>
-                      <option value="recording">Recording</option>
-                      <option value="time">Duration</option>
-                    </select>
-                  </label>
-                  <button
-                    aria-label={
-                      ascending ? "Sort descending" : "Sort ascending"
-                    }
-                    onClick={() => setAscending(!ascending)}
-                  >
-                    {ascending ? "Ascending" : "Descending"}
-                  </button>
                   <button
                     aria-pressed={selecting}
                     onClick={() => {
@@ -458,6 +462,18 @@ export function App() {
                         )}
                       </nav>
                     </header>
+                    <div className="ledger-headings" aria-label="Sort recordings">
+                      {([ ["take", "Take"], ["recording", "Recording"], ["time", "Time"] ] as const).map(([key, label]) => (
+                        <button
+                          key={key}
+                          aria-label={`Sort by ${label}${sort === key ? `, ${ascending ? "ascending" : "descending"}` : ""}`}
+                          aria-pressed={sort === key}
+                          onClick={() => changeSort(key)}
+                        >
+                          {label} <span aria-hidden="true">{sort === key ? ascending ? "↑" : "↓" : "↕"}</span>
+                        </button>
+                      ))}
+                    </div>
                     <ol className="recording-list">
                       {records.map((row) => {
                         const hiddenMatch = query.trim()

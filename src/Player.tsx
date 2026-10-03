@@ -281,6 +281,7 @@ export function Player({
   }
   useEffect(() => {
     function keydown(event: KeyboardEvent) {
+      if (event.defaultPrevented || event.isComposing || event.keyCode === 229) return;
       if (event.key === "Escape" && expanded) {
         setExpanded(false);
         expandButton.current?.focus();
