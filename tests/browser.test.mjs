@@ -132,6 +132,7 @@ for (const name of Object.keys(viewports)) {
   test(`${name}: player shortcuts leave composition and consumed events alone`, { skip: !executablePath }, async () => {
     const page = await open(name, `/?session=${SESSION_A}`);
     try {
+      await waitStatus(page, 'Paused');
       for (const key of [' ', 'ArrowLeft', 'ArrowRight']) {
         for (const options of [{ isComposing: true }, { keyCode: 229 }]) {
           const consumed = await page.evaluate(({ key, options }) => {
