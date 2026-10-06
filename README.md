@@ -27,6 +27,7 @@ The app binary is not normally a shell command on PATH.
 - `src/practice.ts` and `src/PracticeControls.tsx`: source-bound A/B ranges, Repeat and paused-on-open practice links.
 - `src/PracticeWorkspace.tsx` and `src/WaveformLane.tsx`: main-page timeline, real stem envelopes, source sections and timed chords/notes.
 - `src/ChunkedStemPlaybackEngine.ts`: synchronized frame groups, bounded audio buffers, loops and asynchronous preparation.
+- `src/SpeedControl.tsx`, `src/StemRateOutput.ts` and `src/stem-rate-worklet.ts`: shared speed control and bounded pitch-preserving stem output.
 - `src/recordings.ts`: typed CSV boundary, search/sort, section bounds, and URLs.
 - `src/styles.css`: fixed shell, rail/dock comparison and reserved media regions.
 - `src/Catalog.tsx`: catalog types and stable song/session/search routes.
@@ -84,6 +85,10 @@ persist in private SQLite. Beneath the Mask has full-song Logic-separated stems,
 losslessly encoded as FLAC and loaded in short synchronized chunks within a
 300 MiB audio-buffer budget. Audio selects the instrument mix automatically;
 use the speaker/headphone icons for mute/solo, or Original mix to compare.
+The speed button adjusts audio in 0.1× wheel steps while preserving pitch;
+click toggles 1×/last speed, brackets adjust and backslash toggles. YouTube video
+uses its supported rates. Take thumbnails start Video when available; song lists
+have a readable width, and take rows show session context and separate song art.
 Space toggles playback and arrows seek five seconds across button focus, while preserving text entry. Bars, staff notation,
 automatic musical analysis and friend accounts remain deferred. The private
 runtime must mount `createPracticeHandler` from `scripts/practice-store.mjs`;

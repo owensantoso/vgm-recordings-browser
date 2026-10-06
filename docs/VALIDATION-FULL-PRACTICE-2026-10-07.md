@@ -41,7 +41,7 @@ consistency, not isolated-instrument separation quality.
 ## Automated and live verification
 
 The complete command is `CHROME_PATH='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' npm run check`.
-The final complete command exited 0: strict TypeScript, 75 domain/catalog/store/
+Before the speed/library increment, the complete command exited 0: strict TypeScript, 75 domain/catalog/store/
 engine tests, one React lifecycle test, 63 Chrome browser scenarios and production
 build pass with zero failures/skips.
 One React lifecycle test passes, preserving a provider while browsing songs,
@@ -87,3 +87,47 @@ The feature branch and draft PR remain separate from public main. The initial
 GitHub run exposed a missing FFmpeg dependency on the Ubuntu runner; the check
 workflow now installs the synthetic-media encoder before running the suite,
 and the fixture reports spawn errors without masking them with a TypeError.
+
+## Speed and library increment
+
+Original pitch is the confirmed requirement. The transport has a 0.5–2× speed
+control with 0.1× audio wheel/keyboard steps, 1×/last-speed click toggle and
+bracket/backslash shortcuts. Native audio preserves pitch; stems share one
+SoundTouchJS processor after the synchronized mix. Video steps through
+provider-supported rates and displays only the confirmed rate. Manual take
+thumbnail/Play now opens Video when present; paused source links remain paused.
+
+Songs/Repertoire lists are capped at 1,160 pixels without constraining the
+practice timeline. Sticky take headers include sourced session name/location.
+Footage thumbnails remain primary; smaller original artwork links to the song.
+The secondary art is hidden on narrow screens to preserve take-title space.
+
+Actual Chrome processor probes held a 440 Hz input at the 439.45 Hz Fourier
+analysis bin for 0.5, 0.8, 1, 1.2 and 2×. Suspended creation/reset, 0.25-second
+loops at 0.5/2×, end drain, Pause during drain and destroy during context closure
+passed without processor errors. Non-1× adds 200 ms processing preroll; 1×
+bypasses processing. These probes support pitch/lifecycle correctness, not
+subjective music quality or physical-phone CPU suitability.
+
+A separate real Tailnet tab played the six full-song FLAC stems at 0.8×,
+retained mute/solo through speed toggles, looped original seconds 28–32 across
+the chunk boundary, and kept paused intent while toggling 1×/0.8×. It also
+played the real Yoshi Circuit take from its footage thumbnail in Video, showed
+confirmed 0.75× for the requested 0.8×, and stepped to 1×. No console warnings
+or errors were observed. User-owned tab state was preserved.
+
+The later karaoke pitch changer is documented as deferred: whole semitones for
+pitched stems, percussion unchanged by default, reviewed classification for
+mixed Other material. No pitch changer ships in this increment.
+
+Final local complete check exited 0 with strict TypeScript, 88 domain/store/
+engine/helper tests, one React lifecycle test, 68 Chrome browser scenarios and
+production build; zero failures/skips. New browser cases cover native preserved
+pitch/rate, wheel and shortcuts, remembered-speed toggling, provider-owned
+Video rate changes, actual FLAC/worklet loops, paused source clocks, retained
+mixes, thumbnail Video playback, delayed catalog session context, wide song
+list bounds and narrow/short layouts. Superseded engine reset failures and
+retired processor errors/timeouts have focused positive/negative regressions;
+current failures remain visible. The CI duration assertion now checks the
+measured provider duration within tolerance, allowing the encoded container's
+small tail instead of demanding a literal six-second string.

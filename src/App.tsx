@@ -42,6 +42,15 @@ export function App() {
   });
   const [autoPlay, setAutoPlay] = useState(false);
   const [playRequest, setPlayRequest] = useState(0);
+  const [preferredMode, setPreferredMode] = useState<"audio" | "video" | undefined>();
+  const [playbackRate, setPlaybackRate] = useState(1);
+  const [changedRate, setChangedRate] = useState(1);
+  function changeRate(rate: number) {
+    if (!Number.isFinite(rate)) return;
+    const next = Math.max(.5, Math.min(2, rate));
+    setPlaybackRate(next);
+    if (next !== 1) setChangedRate(next);
+  }
   const search = useRef<HTMLInputElement>(null);
   const main = useRef<HTMLElement>(null);
   const [videoOpen, setVideoOpen] = useState(false);
@@ -182,6 +191,8 @@ export function App() {
     if (different) practiceTarget.current = { t: null, repeat: null, section: null };
     setSelected(id);
     setAutoPlay(play);
+    const take = rows.find(row => row.file === id);
+    setPreferredMode(play && take?.has_video === "yes" ? "video" : undefined);
     setPlayRequest((current) => current + 1);
     const url = new URL(location.href);
     url.searchParams.set("play", id);
@@ -387,6 +398,10 @@ export function App() {
             row={active}
             practiceHost={browse.view === "songs" && browse.songTab === "practice" && activeSong?.id === browse.song ? practiceHost : null}
             autoPlay={autoPlay}
+            preferredMode={preferredMode}
+            playbackRate={playbackRate}
+            changedRate={changedRate}
+            onRateChange={changeRate}
             playRequest={playRequest}
             identity={{
               title: activeSong?.title,

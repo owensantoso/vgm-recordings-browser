@@ -2532,3 +2532,99 @@ dd {
   .full-practice-shell.layout-dock.media-open .practice-range-form,
   .full-practice-shell.layout-dock.media-open .section-form { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* Library browsing keeps actions near their song; the practice score stays full width. */
+.library-browse,
+.search-results > .library-section:has(> .song-list) {
+  width: 100%;
+  max-width: 1160px;
+}
+.take-thumbnail-button {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 59px;
+  min-width: 59px;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: none;
+  border-radius: 5px;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+.take-thumbnail-play {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: white;
+  background: rgb(22 34 20 / 22%);
+}
+.take-thumbnail-button:hover .take-thumbnail-play,
+.take-thumbnail-button:focus-visible .take-thumbnail-play {
+  background: rgb(22 34 20 / 48%);
+}
+.take-song-art {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  min-width: 38px;
+  min-height: 44px;
+  flex-shrink: 0;
+  color: var(--muted);
+  font-size: 8px;
+  line-height: 1;
+}
+.take-song-art .song-thumbnail {
+  width: 34px;
+  height: 34px;
+  border-radius: 4px;
+}
+.take-song-art .song-thumbnail svg { width: 16px; }
+.session-band .session-band-identity {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  min-width: 0;
+}
+.session-band-name {
+  color: var(--muted);
+  font-weight: 400;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 650px) {
+  .take-thumbnail-button { width: 44px; min-width: 44px; }
+  .take-song-art { display: none; }
+  .session-band .session-band-identity { flex: 1 1 150px; gap: 3px 8px; }
+}
+
+/* Practice speed lives beside the transport, with a compact, readable value. */
+.full-practice-shell .transport .speed-control {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  flex: 0 0 auto;
+  min-width: 64px;
+  height: 32px;
+  padding: 4px 8px;
+  background: #f0f4e9;
+  color: var(--accent);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.speed-control[aria-pressed="true"] { border-color: #92ac80; background: #e3edd9; }
+@media (min-width: 651px) and (max-width: 1300px) {
+  .full-practice-shell.layout-dock .compact-player { grid-template-columns: minmax(100px, .7fr) minmax(245px, 1fr) auto; gap: 12px; }
+  .full-practice-shell.layout-dock .compact-player .transport { gap: 7px; }
+}
+@media (max-width: 650px) {
+  .full-practice-shell .transport .speed-control { min-width: 59px; height: 44px; padding: 4px 6px; }
+  .full-practice-shell.layout-dock .compact-player .transport { gap: 8px; }
+}
+@media (max-height: 500px) and (max-width: 650px) {
+  .full-practice-shell .transport .speed-control { height: 31px; }
+}

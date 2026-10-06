@@ -270,6 +270,14 @@ function youtubeApi(videoSource) {
     getPlayerState() { return this.state; }
     getCurrentTime() { return this.cuedPosition === undefined ? this.video.currentTime : 0; }
     getDuration() { return this.video.duration; }
+    getAvailablePlaybackRates() { return [.25, .5, .75, 1, 1.5, 2]; }
+    getPlaybackRate() { return this.video.playbackRate; }
+    setPlaybackRate(rate) {
+      if (!this.getAvailablePlaybackRates().includes(rate)) return;
+      this.video.preservesPitch = true;
+      this.video.playbackRate = rate;
+      this.options.events.onPlaybackRateChange?.({data:rate});
+    }
     destroy() {
       this.destroyed = true;
       this.video.pause();
@@ -289,6 +297,7 @@ function youtubeApi(videoSource) {
     }
     return fired;
   };
+  window.__setYoutubeRate = rate => players.findLast(player => !player.destroyed)?.setPlaybackRate(rate);
   window.YT = { Player };
   window.onYouTubeIframeAPIReady?.();
 })();`;
@@ -317,6 +326,9 @@ export const initScript = `(() => {
       ready: element.readyState >= 1,
       ended: element.ended,
       time: element.currentTime,
+      duration: element.duration,
+      playbackRate: element.playbackRate,
+      preservesPitch: element.preservesPitch,
       attached: element.isConnected,
     }));
 })();`;
@@ -439,6 +451,14 @@ export async function createFixture(directory, {flac=false,seconds=2.5}={}) {
     format: "esm",
     target: "es2022",
     sourcemap: "inline",
+    logLevel: "silent",
+  });
+  await build({
+    entryPoints: ["src/stem-rate-worklet.ts"],
+    bundle: true,
+    outfile: join(directory, "assets", "stem-rate-worklet.js"),
+    format: "esm",
+    target: "es2022",
     logLevel: "silent",
   });
   const sourceBytes = await readFile(join(directory, 'reference-audio', referenceAudio.audio_file));

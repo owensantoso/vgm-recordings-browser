@@ -21,8 +21,9 @@ on GitHub Pages. Missing receipt files stay unavailable; malformed or mismatched
 receipt data fails the build. The private preview runtime serves `private-dist`.
 
 The shell retains one active source while browsing/searching. Local references
-and takes default to Audio; Video explicitly switches provider at the retained
-position and play intent. Player owns source duration, range and Repeat; draft
+default to Audio. Manually playing a take with video now opens Video; paused
+deep links retain their audio-first behavior. Video explicitly switches provider
+at the retained position and play intent. Player owns source duration, range and Repeat; draft
 A/B fields are local to PracticeControls. Only Apply changes the active range.
 The song Practice page holds the timeline, fractional A/B fields, sections and
 notes; the persistent bottom player handles transport while browsing. Repeat
@@ -208,6 +209,47 @@ timeline; copied links target their exact source/range and open paused. Musical
 content is entered by the user. This is a timed chord/notes view, not a fabricated
 bar grid or staff score. Authentication, friend membership, author attribution,
 sharing permissions and annotation alignment onto cover takes remain deferred.
+
+## Pitch-preserving speed controls
+
+Confirmed October 7: practice speed preserves the original pitch. The bottom
+transport defaults to 1× and supports 0.5–2× audio playback. Scrolling over its
+speed button adjusts by 0.1×; click toggles 1× and the last changed speed.
+`[` and `]` adjust speed and `\` toggles. Text entry retains these keys. Speed
+and remembered speed belong to the shared App transport and survive browsing
+and source changes during this page session. Initial remembered speed is 1×.
+
+Native audio uses `preservesPitch`. Synchronized stem sources change rate on
+one source clock, followed by one shared SoundTouchJS output that compensates
+pitch for the entire mix. Original-speed audio bypasses processing. Non-1×
+processing uses a 200 ms preroll, accounted for in the visible source clock;
+sections, loops, annotations and deep links remain in original source seconds.
+Rate changes reset the render timeline without redownloading decoded chunks
+or changing gains/mute/solo. Pause and newer seek/rate requests supersede older
+pending starts. Reset, drain and teardown are acknowledged; processing queues
+are bounded and processor failures pause with an explicit fallback.
+
+Video uses YouTube's supported rates and shows its confirmed playback rate,
+which may differ from the requested audio rate. Wheel/keyboard steps select a
+supported video rate. The audio rate is retained when returning to Audio.
+SoundTouchJS is a small bundled processor, not an offline separation model.
+Audible artifacts at changed speeds remain a listening acceptance gate.
+
+## Ideas: karaoke-style transposition (deferred)
+
+Confirmed October 7: adjustable practice speed must preserve original pitch.
+A later, lower-priority feature should independently transpose playback in whole
+semitone steps, like a karaoke key changer. Apply the pitch change to pitched
+stems and exclude percussion by default. Separation makes this possible without
+shifting drum transients along with vocals/harmony. Mixed Other stems need
+reviewed classification rather than an assumed pitched/percussive category.
+
+This is an idea, not current implementation. Transposition must not overwrite
+the catalog's original/reference key or a take's played key; it is a playback
+choice. Sections, loops and deep links keep the original source clock. Future
+chart/chord display transposition can reflect the playback choice after the
+chart model exists. No pitch controls or automatic musical analysis are part
+of the current speed increment.
 
 ## Evidence boundary
 

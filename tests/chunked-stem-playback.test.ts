@@ -4,6 +4,20 @@ import { createHash } from 'node:crypto';
 import { loadChunkedStemPlayback } from '../src/ChunkedStemPlaybackEngine.ts';
 import type { ChunkedStemStatus } from '../src/ChunkedStemPlaybackEngine.ts';
 import type { StemSet } from '../src/practiceData.ts';
+import type { StemRateOutput } from '../src/StemRateOutput.ts';
+
+class RateOutput {
+  input = {} as AudioNode; rate = 1; delay = 0; paused = 0; destroyed = 0; starts: number[] = []; resets: number[] = []; drains: number[] = [];
+  resetGate: Promise<void> | null = null; drainGate: Promise<void> | null = null;
+  get latencySeconds() { return this.rate === 1 ? 0 : this.delay; }
+  async reset(rate = this.rate) { this.resets.push(rate); this.rate = rate; await this.resetGate; }
+  start(when: number) { this.starts.push(when); }
+  pause() { ++this.paused; }
+  async drain(when: number) { this.drains.push(when); await this.drainGate; }
+  async destroy() { ++this.destroyed; }
+  onError(_listener: (error: Error) => void) { return () => {}; }
+}
+
 
 const rate = 44100, frames = rate * 30, count = 6;
 const payload = (group: number, track: number) => new Uint8Array([group, track, 7, 9]);
@@ -22,6 +36,7 @@ class Gain {
 }
 class Source {
   buffer: { group: number } | null = null; onended: (() => void) | null = null;
+  playbackRate = { value: 1 };
   loop = false; loopStart = 0; loopEnd = 0; stopped = false; disconnected = false;
   started: [number, number, number | undefined] | null = null;
   connect(_gain: unknown) {}
@@ -42,10 +57,12 @@ class Context {
   }
 }
 function harness() {
+  const output = new RateOutput();
   const context = new Context(), paths: string[] = [], statuses: ChunkedStemStatus[] = [];
   let tick = () => {}, timerClosed = false;
   const holds = new Map<number, Promise<void>>(), failGroups = new Set<number>();
   const dependencies = {
+    createRateOutput: async () => output as StemRateOutput,
     createContext: () => context as unknown as AudioContext,
     schedule: (value: () => void) => { tick = value; return () => { timerClosed = true; }; },
     fetch: (async (path: string, options: RequestInit) => {
@@ -62,7 +79,7 @@ function harness() {
       return failGroups.has(group) ? new Response('', { status: 503 }) : new Response(payload(group, track));
     }) as typeof fetch,
   };
-  return { context, paths, statuses, dependencies, holds, failGroups, tick: () => tick(), timerClosed: () => timerClosed };
+  return { output, context, paths, statuses, dependencies, holds, failGroups, tick: () => tick(), timerClosed: () => timerClosed };
 }
 async function until(predicate: () => boolean) {
   for (let i = 0; i < 1000 && !predicate(); ++i) await new Promise<void>(resolve => setImmediate(resolve));
@@ -233,4 +250,112 @@ test('invalid or oversize groups reject before allocating an audio context', asy
     await assert.rejects(loadChunkedStemPlayback(set, new AbortController().signal, h.dependencies));
     assert.equal(h.context.gains.length, 0);
   }
+});
+
+test('speed scales the original clock and input horizons while short loops retain source boundaries', async () => {
+  for (const rate of [0.5, 0.8, 1.2, 2]) {
+    const h = await ready(); h.output.delay = 0.2;
+    h.player.setLoop({ start: 10, end: 10.25 }); await h.player.seek(10);
+    await h.player.setRate(rate); await h.player.play();
+    const nodes = h.context.sources.slice(-count), anchor = nodes[0].started![0];
+    assert.ok(nodes.every(node => node.playbackRate.value === rate && node.loopStart === 10 && node.loopEnd === 10.25));
+    assert.equal(h.output.starts.at(-1), anchor);
+    h.context.currentTime = anchor + 0.19; assert.equal(h.player.time(), 10, 'preroll is not audible source time');
+    h.context.currentTime = anchor + 0.2 + 0.6 / rate;
+    assert.ok(Math.abs(h.player.time() - 10.1) < 1e-9);
+    const before = h.player.time(), paths = h.paths.length;
+    h.player.setMix('bass', { level: 0.4, muted: false, solo: true });
+    await h.player.setRate(rate === 2 ? 0.5 : 2);
+    assert.ok(Math.abs(h.player.time() - before) < 1e-9);
+    assert.ok(nodes.every(node => node.stopped)); assert.equal(h.paths.length, paths, 'rate changes retain decoded chunks');
+    assert.equal(h.context.gains[2].targets.at(-1), 0.4);
+    h.player.pause(); const paused = h.player.time(), length = h.context.sources.length;
+    await h.player.setRate(1); h.context.currentTime += 10;
+    assert.equal(h.player.time(), paused); assert.equal(h.context.sources.length, length);
+    await assert.rejects(h.player.setRate(0.49)); await assert.rejects(h.player.setRate(2.01));
+    await h.player.destroy(); assert.equal(h.output.destroyed, 1);
+  }
+});
+
+test('cross-chunk rate scheduling divides wall duration once and waits for audible end tail', async () => {
+  for (const rate of [0.5, 0.8, 1.2, 2]) {
+    const h = await ready(); h.output.delay = 0.2;
+    h.player.setLoop({ start: 29.9, end: 30.2 }); await h.player.seek(29.9);
+    await h.player.setRate(rate); await h.player.play();
+    const anchor = h.context.sources[0].started![0];
+    assert.ok(Math.abs(h.context.sources[0].started![2]! - 0.1) < 1e-9, 'duration argument remains source seconds');
+    assert.ok(Math.abs(h.context.sources[count].started![0] - (anchor + 0.1 / rate)) < 1e-9);
+    h.context.currentTime = anchor + 0.15 / rate; h.tick();
+    assert.ok(Math.abs(h.context.sources[count * 2].started![0] - (anchor + 0.3 / rate)) < 1e-9);
+    h.player.pause(); h.player.setLoop(null); await h.player.seek(119); await h.player.play();
+    const last = h.context.sources.at(-1)!, end = last.started![0] + 1 / rate;
+    h.context.currentTime = end; h.tick();
+    assert.equal(h.player.getStatus().state, 'playing', 'input end still has audible delayed output');
+    assert.ok(h.player.time() < 120); assert.equal(h.output.drains.at(-1), end);
+    h.context.currentTime = end + 0.2; h.tick();
+    assert.equal(h.player.getStatus().state, 'ended'); assert.equal(h.player.time(), 120);
+    assert.ok(h.statuses.every(status => status.decodedBytes + status.reservedBytes <= frames * 2 * 4 * count * 3));
+    await h.player.destroy();
+  }
+});
+
+test('speed change during deferred seek keeps the latest source position and Pause cancels reset completion', async () => {
+  const h = await ready(); let release!: () => void;
+  h.holds.set(3, new Promise(resolve => { release = resolve; }));
+  await h.player.play();
+  const seek = h.player.seek(95); await until(() => h.paths.some(path => path.includes('c3_')));
+  const rate = h.player.setRate(2); release(); await Promise.all([seek, rate]);
+  assert.equal(h.player.time(), 95); assert.ok(h.player.getStatus().playing);
+  assert.ok(h.context.sources.slice(-count).every(node => node.playbackRate.value === 2 && node.started![1] === 5));
+  h.output.resetGate = new Promise(resolve => { release = resolve; });
+  const changing = h.player.setRate(0.5); await until(() => h.output.resets.at(-1) === 0.5);
+  h.player.pause(); release(); await changing;
+  assert.equal(h.player.getStatus().playing, false); assert.equal(h.player.time(), 95);
+  await h.player.destroy();
+});
+
+test('double-speed lookahead traverses long loops without enlarging the three-group memory bound', async () => {
+  const h = await ready(); h.output.delay = 0.2;
+  h.player.setLoop({ start: 5, end: 100 }); await h.player.seek(5); await h.player.setRate(2); await h.player.play();
+  const anchor = h.context.sources[0].started![0];
+  for (const sourceTime of [29.4, 30.1, 59.4, 60.1, 89.4, 90.1, 99.4]) {
+    h.context.currentTime = anchor + (sourceTime - 5) / 2; h.tick();
+    await until(() => h.player.getStatus().reservedBytes === 0);
+    assert.equal(h.player.getStatus().error, '');
+  }
+  assert.ok(h.statuses.every(status => status.decodedBytes + status.reservedBytes <= frames * 2 * 4 * count * 3));
+  assert.ok(h.context.sources.some(node => node.started && Math.abs(node.started[0] - (anchor + 95 / 2)) < 1e-9 && node.started[1] === 5));
+  await h.player.destroy();
+});
+
+test('abort while the async pitch output is being created destroys late output and closes context once', async () => {
+  const h = harness(), controller = new AbortController(); let release!: () => void, started!: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; }), creating = new Promise<void>(resolve => { started = resolve; });
+  const loading = loadChunkedStemPlayback(fixture(), controller.signal, { ...h.dependencies, createRateOutput: async () => { started(); await gate; return h.output as StemRateOutput; } });
+  await creating; controller.abort(); release(); await assert.rejects(loading, { name: 'AbortError' });
+  assert.equal(h.context.closed, 1); assert.equal(h.output.destroyed, 1); assert.equal(h.context.sources.length, 0);
+});
+
+test('obsolete speed reset failure cannot reject into a newer successful seek', async () => {
+  const h = await ready(); await h.player.play();
+  let reject!: (error: Error) => void, started!: () => void;
+  const resetting = new Promise<void>(resolve => { started = resolve; });
+  const reset = h.output.reset.bind(h.output); let blocked = true;
+  h.output.reset = async rate => {
+    if (blocked) { blocked = false; started(); await new Promise<void>((_resolve, fail) => { reject = fail; }); return; }
+    await reset(rate);
+  };
+  const changing = h.player.setRate(0.8); const result = changing.then(() => 'resolved', () => 'rejected');
+  await resetting; await h.player.seek(95); reject(new Error('obsolete reset failure'));
+  assert.equal(await result, 'resolved'); assert.equal(h.player.time(), 95);
+  assert.equal(h.player.getStatus().state, 'playing'); assert.equal(h.player.getStatus().error, '');
+  await h.player.destroy();
+});
+
+test('current speed reset failure remains visible and rejects instead of being mistaken for cancellation', async () => {
+  const h = await ready(); await h.player.play();
+  h.output.reset = async () => { throw new Error('current processor failure'); };
+  await assert.rejects(h.player.setRate(0.8), /current processor failure/);
+  assert.equal(h.player.getStatus().state, 'error'); assert.equal(h.player.getStatus().playing, false);
+  assert.match(h.player.getStatus().error, /current processor failure/); await h.player.destroy();
 });

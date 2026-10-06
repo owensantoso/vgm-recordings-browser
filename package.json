@@ -17,6 +17,7 @@
     "build:private": "npm run catalog && node scripts/build.mjs --private-audio"
   },
   "dependencies": {
+    "@soundtouchjs/core": "2.1.1",
     "lucide-react": "1.52.0",
     "react": "19.2.8",
     "react-dom": "19.2.8"

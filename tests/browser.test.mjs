@@ -101,6 +101,11 @@ async function open(name, path, options = {}) {
     const pending=new Promise(resolve=>{releaseArchive=resolve;});
     await context.route('**/data/recordings.csv',async route=>{await pending;await route.continue();});
   }
+  let releaseCatalog;
+  if(options.delayCatalog){
+    const pending=new Promise(resolve=>{releaseCatalog=resolve;});
+    await context.route('**/data/catalog.json',async route=>{await pending;await route.continue();});
+  }
   if(options.nativeEnd) await context.addInitScript(()=>{
     // Let the real audio end once before progress polling can intercept B.
     // This isolates the native ended handler; other tests exercise normal polling.
@@ -128,6 +133,7 @@ async function open(name, path, options = {}) {
   const page = await context.newPage();
   page.archiveReady=page.waitForResponse(response=>response.url().endsWith("/data/recordings.csv")).then(response=>response.finished()).catch(()=>{});
   page.releaseArchive=releaseArchive;
+  page.releaseCatalog=releaseCatalog;
   page.releaseStems=releaseStems;
   page.fixture=activeFixture;
   page.setDefaultTimeout(6000);
@@ -200,6 +206,13 @@ const overview = async page => {
 const playTake = async (page, file) => {
   if(await rowButton(page,file).count()===0)await overview(page);
   await rowButton(page,file).click();
+  // Audio lifecycle scenarios make their mode explicit; manual takes open Video.
+  const audio = page.getByRole('group',{name:'Playback options'}).getByRole('button',{name:'Audio',exact:true});
+  if(await audio.getAttribute('aria-pressed')!=='true'){
+    await audio.click();await waitLive(page,'audio',undefined);
+    await page.waitForFunction(()=>!document.querySelector('.play-button').disabled);
+    if(await playLabel(page)==='Play selected recording')await page.click('.play-button');
+  }
 };
 const playReference = async (page,name) => {
   const button=page.getByRole('button',{name,exact:true});
@@ -315,7 +328,11 @@ for (const name of Object.keys(viewports)) {
         /Original soundtrack/,
       );
       await page.waitForFunction(
-        () => document.querySelector(".transport input").max === "6",
+        () => {
+          const duration=Number(document.querySelector(".transport input").max);
+          const provider=window.__mediaState().find(media=>media.kind==='youtube'&&media.src);
+          return provider && duration > 5.9 && duration < 6.2 && Math.abs(duration-provider.duration)<.001;
+        },
       );
       assert.equal(
         await page.locator(".transport .time").last().innerText(),
@@ -1604,5 +1621,77 @@ test('full practice: global transport keys work after buttons and gains, clamp s
     await page.getByRole('button',{name:'Add note',exact:true}).click();const note=page.getByRole('textbox',{name:'Note',exact:true});await note.fill('Typing');await note.focus();const time=await page.getByRole('slider',{name:'Seek song timeline',exact:true}).inputValue();await page.keyboard.press('Space');await page.keyboard.press('ArrowRight');assert.equal(await status(page),'Paused');assert.equal(await page.getByRole('slider',{name:'Seek song timeline',exact:true}).inputValue(),time);assert.match(await note.inputValue(),/ /);
     await page.getByRole('group',{name:'Playback options'}).getByRole('button',{name:'Video',exact:true}).click();await waitLive(page,'youtube',false);
     await page.evaluate(()=>{const video=window.__media.find(media=>media.dataset.kind==='youtube'&&media.getAttribute('src'));video.tabIndex=0;video.focus();});await page.keyboard.press('Space');await page.keyboard.press('ArrowRight');assert.equal(await status(page),'Paused','native video keys bypass the global document transport');assert.equal((await playing(page)).length,0);noErrors(page);
+  }finally{await page.context().close();}
+});
+
+const speedButton = page => page.getByRole('button',{name:/^Playback speed .* times; toggle original speed$/});
+const speedIs = (page,rate) => page.waitForFunction(rate=>document.querySelector('.speed-control')?.getAttribute('aria-label')===`Playback speed ${rate} times; toggle original speed`,rate);
+
+for (const name of ['desktop','mobile']) test(`library refinement: ${name} take thumbnails open Video, song artwork navigates and session context stays visible`,{skip:!executablePath},async()=>{
+  const page=await open(name,'/?view=recordings',{delayCatalog:true});
+  try{
+    await page.archiveReady;await page.locator('.session-band-name').first().waitFor();
+    assert.match(await page.locator('.session-band').filter({hasText:'Synthetic First Session'}).innerText(),/31 May 2026.*Synthetic First Session.*3 takes/s);
+    page.releaseCatalog();await page.locator('.take-song-art').first().waitFor({state:'attached'});
+    const row=page.locator('.recording-row').filter({has:rowButton(page,'SYN_0001.MOV')});
+    const thumb=row.getByRole('button',{name:'Play take SYN_0001.MOV from thumbnail',exact:true});
+    const rect=await thumb.boundingBox();assert.ok(rect.width>=44&&rect.height>=44);
+    await thumb.click();await waitLive(page,'youtube',true);assert.equal(await heading(page),'Alpha Song');
+    const art=row.getByRole('link',{name:'Open Alpha Song song page',exact:true,includeHidden:true});
+    if(name==='desktop'){
+      assert.equal(await art.isVisible(),true);assert.match(await art.locator('img').getAttribute('src'),/Fixture0001/);
+      await art.click();assert.equal(new URL(page.url()).searchParams.get('song'),'synthetic-alpha');await waitLive(page,'youtube',true);
+    }else assert.equal(await art.isVisible(),false);
+    await nav(page,'Songs');if(name==='desktop')await page.setViewportSize({width:3010,height:1000});
+    const list=await page.locator('.song-list').boundingBox();assert.ok(list.width<=1160.5,JSON.stringify(list));
+    const first=page.locator('.song-row').first();const action=await first.locator('.row-play-actions').boundingBox();assert.ok(action.x+action.width<=list.x+1161);
+    await filterBySong(page,'Alpha');await page.locator('.search-results .song-list').waitFor();assert.ok((await page.locator('.search-results .song-list').boundingBox()).width<=1160.5);await noOverflow(page);noErrors(page);
+  }finally{page.releaseCatalog();await page.context().close();}
+});
+
+test('playback speed: native audio preserves pitch, wheel clamps, toggle remembers and keys protect text',{skip:!executablePath},async()=>{
+  const page=await open('mobile','/?view=recordings');
+  try{
+    await playTake(page,'SYN_0002.MOV');await waitLive(page,'audio',true);await page.click('.play-button');await waitLive(page,'audio',false);
+    const speed=speedButton(page);await speed.hover();const scroll=await page.locator('.workspace-main').evaluate(main=>main.scrollTop);
+    await page.mouse.wheel(0,120);await speedIs(page,.9);await page.mouse.wheel(0,120);await speedIs(page,.8);
+    assert.equal(await page.locator('.workspace-main').evaluate(main=>main.scrollTop),scroll);
+    assert.equal((await live(page))[0].playbackRate,.8);assert.equal((await live(page))[0].preservesPitch,true);
+    await speed.click();await speedIs(page,1);await speed.click();await speedIs(page,.8);
+    await speed.focus();await page.keyboard.press(']');await speedIs(page,.9);await page.keyboard.press('[');await speedIs(page,.8);await page.keyboard.press('\\');await speedIs(page,1);await page.keyboard.press('\\');await speedIs(page,.8);
+    for(let i=0;i<8;i++)await page.keyboard.press('[');await speedIs(page,.5);for(let i=0;i<18;i++)await page.keyboard.press(']');await speedIs(page,2);
+    await page.getByRole('searchbox').focus();await page.keyboard.type('[ ] \\');await speedIs(page,2);assert.equal(await status(page),'Paused');
+    for(const viewport of [{width:375,height:375},{width:767,height:375},{width:375,height:812}]){
+      await page.setViewportSize(viewport);await noOverflow(page);const bounds=await speed.boundingBox();assert.ok(bounds.width>=44&&bounds.height>=31&&bounds.x>=0&&bounds.y>=0&&bounds.x+bounds.width<=viewport.width&&bounds.y+bounds.height<=viewport.height,JSON.stringify({viewport,bounds}));
+      await speed.click();await speedIs(page,1);await speed.click();await speedIs(page,2);
+    }
+    noErrors(page);
+  }finally{await page.context().close();}
+});
+
+test('playback speed: Video confirms supported steps and provider changes reset then restore',{skip:!executablePath},async()=>{
+  const page=await open('desktop','/?view=recordings');
+  try{
+    await rowButton(page,'SYN_0002.MOV').click();await waitLive(page,'youtube',true);await page.click('.play-button');await waitLive(page,'youtube',false);
+    await page.evaluate(()=>window.__setYoutubeRate(1.5));await speedIs(page,1.5);
+    await speedButton(page).click();await speedIs(page,1);assert.equal((await live(page))[0].playbackRate,1);
+    await speedButton(page).click();await speedIs(page,1.5);assert.equal((await live(page))[0].playbackRate,1.5);
+    await speedButton(page).hover();await page.mouse.wheel(0,120);await speedIs(page,1);await page.mouse.wheel(0,120);await speedIs(page,.75);
+    assert.equal(await speedButton(page).getAttribute('aria-label'),'Playback speed 0.75 times; toggle original speed');assert.equal((await live(page))[0].playbackRate,.75);noErrors(page);
+  }finally{await page.context().close();}
+});
+
+test('playback speed: FLAC instrument loops retain source time, mix, rate and pause through browsing',{skip:!executablePath},async()=>{
+  const page=await open('desktop',privatePath('&t=1%2C2&repeat=1'),{referenceAudio:true,practice:true,long:true});
+  try{
+    await waitStatus(page,'Paused');await speedButton(page).hover();await page.mouse.wheel(0,120);await speedIs(page,.9);await page.mouse.wheel(0,120);await speedIs(page,.8);
+    const contexts=(await stemState(page)).contexts.length;await page.click('.play-button');await waitStatus(page,'Playing');
+    await page.waitForTimeout(500);const timeline=page.getByRole('slider',{name:'Seek song timeline',exact:true});const sourceTime=Number(await timeline.inputValue());assert.ok(sourceTime>=1&&sourceTime<=2);
+    await page.getByRole('button',{name:'Mute Vocals',exact:true}).click();await speedButton(page).click();await speedIs(page,1);await speedButton(page).click();await speedIs(page,.8);
+    await page.waitForTimeout(2500);const loopTime=Number(await timeline.inputValue());assert.ok(loopTime>=1&&loopTime<=2,`source clock ${loopTime}`);assert.equal(await status(page),'Playing');assert.equal((await stemState(page)).contexts.length,contexts);
+    await page.click('.play-button');await waitStatus(page,'Paused');
+    // The source pauses synchronously; its displayed clock refreshes at10Hz.
+    await page.waitForTimeout(150);const paused=Number(await timeline.inputValue());await page.waitForTimeout(300);const after=Number(await timeline.inputValue());assert.ok(Math.abs(after-paused)<.03,JSON.stringify({paused,after}));
+    await nav(page,'Sessions');await speedIs(page,.8);await page.click('.player-song');await timeline.waitFor();assert.equal(await page.getByRole('button',{name:'Unmute Vocals',exact:true}).getAttribute('aria-pressed'),'true');assert.equal(await status(page),'Paused');noErrors(page);
   }finally{await page.context().close();}
 });

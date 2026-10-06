@@ -70,6 +70,7 @@ function EntityLink({
   navigate,
   children,
   className = "",
+  ariaLabel,
 }: {
   view: View;
   song?: string;
@@ -77,10 +78,12 @@ function EntityLink({
   navigate: Navigate;
   children: React.ReactNode;
   className?: string;
+  ariaLabel?: string;
 }) {
   return (
     <a
       className={className}
+      aria-label={ariaLabel}
       href={catalogHref(location.href, view, song, session)}
       onClick={(e) => {
         e.preventDefault();
@@ -332,6 +335,10 @@ export function TakeList({
           song = catalog?.songs.find((song) => song.id === link?.song_id);
         const name = song?.title || title(row),
           context = contextByFile.get(row.file);
+        const original = song && catalog?.references.find(
+          (ref) => ref.song_id === song.id && ref.kind === "original" &&
+            (ref.youtube_id || youtubeId(ref.url)),
+        );
         return (
           <li
             className="recording-row"
@@ -350,13 +357,25 @@ export function TakeList({
                 numbers.get(row.file)
               )}
             </span>
-            <img
-              src={row.thumbnail}
-              alt=""
-              className="take-thumbnail"
-              width="64"
-              height="42"
-            />
+            <button
+              className="take-thumbnail-button"
+              onClick={() => play(row)}
+              aria-label={`Play take ${row.file} from thumbnail`}
+              title={`Play our take · ${name}`}
+            >
+              <img src={row.thumbnail} alt="" className="take-thumbnail" width="64" height="42" />
+              <span className="take-thumbnail-play" aria-hidden="true"><Play size={15} fill="currentColor" /></span>
+            </button>
+            {song && <EntityLink
+              view="songs"
+              song={song.id}
+              navigate={navigate}
+              className="take-song-art"
+              ariaLabel={`Open ${song.title} song page`}
+            >
+              <SongThumbnail videoId={original ? original.youtube_id || youtubeId(original.url) : null} />
+              <span aria-hidden="true">Song</span>
+            </EntityLink>}
             <div className="take-copy">
               <EntityLink
                 view={song ? "songs" : "sessions"}
@@ -592,7 +611,7 @@ export function SongsPage({
       !catalog?.recordings.find((link) => link.file === row.file)?.song_id,
   );
   return (
-    <section id="songbook">
+    <section className="library-browse" id="songbook">
       <PageHeader
         title={repertoire ? "Repertoire" : "Songs"}
         meta={
@@ -832,11 +851,16 @@ export function TakesPage({
           <button onClick={() => setMedia("all")}>Show all media</button>
         </div>
       )}
-      {groups(records).map(([id, takes]) => (
+      {groups(records).map(([id, takes]) => {
+        const groupedSession = catalog?.sessions.find((item) => item.id === id);
+        const sessionName = (groupedSession?.label || takes[0].session_label || "")
+          .replace(/^\d{4}-\d{2}-\d{2}\s*/, "");
+        return (
         <section className="session-group" key={id}>
           <header className="session-band">
-            <EntityLink view="sessions" session={id} navigate={navigate}>
-              {date(takes[0].recorded_create_date)}
+            <EntityLink view="sessions" session={id} navigate={navigate} className="session-band-identity">
+              <span>{date(groupedSession?.date || takes[0].recorded_create_date)}</span>
+              {sessionName && <span className="session-band-name">{sessionName}</span>}
             </EntityLink>
             <span>{takes.length} takes</span>
             {takes[0].youtube_playlist_url && (
@@ -889,7 +913,7 @@ export function TakesPage({
             }
           />
         </section>
-      ))}
+      );})}
     </section>
   );
 }

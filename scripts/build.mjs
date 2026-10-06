@@ -74,14 +74,21 @@ if (privateCatalog) {
   );
 }
 const options = {
-  entryPoints: ["src/main.tsx"],
+  entryPoints: { app: "src/main.tsx", "stem-rate-worklet": "src/stem-rate-worklet.ts" },
   bundle: true,
   outdir: `${output}/assets`,
-  entryNames: "app",
+  entryNames: "[name]",
   format: "esm",
   target: "es2022",
   minify: !process.argv.includes("--serve"),
 };
+await mkdir(`${output}/assets`, { recursive: true });
+await cp("node_modules/@soundtouchjs/core/LICENSE", `${output}/assets/SOUNDTOUCH-LICENSE.txt`);
+await writeFile(`${output}/assets/SOUNDTOUCH-SOURCE.txt`,
+  "SoundTouchJS core 2.1.1 and interpolation-strategy-lanczos 2.1.1 (MPL-2.0).\n" +
+  "Unmodified package source: https://registry.npmjs.org/@soundtouchjs/core/-/core-2.1.1.tgz\n" +
+  "https://registry.npmjs.org/@soundtouchjs/interpolation-strategy-lanczos/-/interpolation-strategy-lanczos-2.1.1.tgz\n" +
+  "Project: https://github.com/cutterbl/SoundTouchJS\n");
 if (process.argv.includes("--serve")) {
   if (privateAudio)
     throw new Error(

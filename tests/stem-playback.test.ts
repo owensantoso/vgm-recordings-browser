@@ -3,6 +3,20 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { StemPlaybackEngine, loadStemPlayback } from '../src/StemPlaybackEngine.ts';
 import type { StemSet } from '../src/practiceData.ts';
+import type { StemRateOutput } from '../src/StemRateOutput.ts';
+
+class RateOutput {
+  input = {} as AudioNode; rate = 1; delay = 0; paused = 0; destroyed = 0; starts: number[] = []; resets: number[] = []; drains: number[] = [];
+  resetGate: Promise<void> | null = null; drainGate: Promise<void> | null = null;
+  get latencySeconds() { return this.rate === 1 ? 0 : this.delay; }
+  async reset(rate = this.rate) { this.resets.push(rate); this.rate = rate; await this.resetGate; }
+  start(when: number) { this.starts.push(when); }
+  pause() { ++this.paused; }
+  async drain(when: number) { this.drains.push(when); await this.drainGate; }
+  async destroy() { ++this.destroyed; }
+  onError(_listener: (error: Error) => void) { return () => {}; }
+}
+
 
 const payload = new Uint8Array([1, 2, 3, 4]);
 const hash = createHash('sha256').update(payload).digest('hex');
@@ -26,6 +40,7 @@ class FakeGain {
 }
 class FakeSource {
   buffer: unknown = null;
+  playbackRate = { value: 1 };
   loop = false;
   loopStart = 0;
   loopEnd = 0;
@@ -207,6 +222,7 @@ test('pause or destroy cancels pending resume, and concurrent Play creates only 
 test('loader fetches exact stem paths, verifies payload and decoded metadata', async () => {
   const context = new FakeContext(), paths: string[] = [], set = fixture();
   const player = await loadStemPlayback(set, new AbortController().signal, {
+    createRateOutput: async () => new RateOutput() as StemRateOutput,
     createContext: options => { assert.equal(options.sampleRate, 44100); return context as unknown as AudioContext; },
     fetch: (async (path: string, options: RequestInit) => { paths.push(path); assert.equal(options.credentials, 'same-origin'); return new Response(payload); }) as typeof fetch,
   });
@@ -224,7 +240,8 @@ test('loader closes context on fetch, hash, length and each decoded format misma
     if (failure === 'rate') context.decode.sampleRate = 48000;
     if (failure === 'channels') context.decode.numberOfChannels = 1;
     await assert.rejects(loadStemPlayback(fixture(), new AbortController().signal, {
-      createContext: () => context as unknown as AudioContext,
+      createRateOutput: async () => new RateOutput() as StemRateOutput,
+    createContext: () => context as unknown as AudioContext,
       fetch: (async () => failure === 'fetch' ? new Response('', { status: 503 }) : new Response(
         failure === 'hash' ? new Uint8Array([4, 3, 2, 1]) : failure === 'bytes' ? new Uint8Array([1]) : payload)) as typeof fetch,
     }), /load|hash|verification|shared audio format/);
@@ -237,6 +254,7 @@ test('aborted loads close their context and abort every outstanding fetch', asyn
   const context = new FakeContext(), controller = new AbortController();
   let started = 0, aborted = 0;
   const loading = loadStemPlayback(fixture(), controller.signal, {
+    createRateOutput: async () => new RateOutput() as StemRateOutput,
     createContext: () => context as unknown as AudioContext,
     fetch: ((_path: string, options: RequestInit) => new Promise((_resolve, reject) => {
       ++started;
@@ -264,6 +282,7 @@ test('abort during decode cannot return a live engine after asynchronous decodin
     return { ...context.decode };
   };
   const loading = loadStemPlayback(fixture(), controller.signal, {
+    createRateOutput: async () => new RateOutput() as StemRateOutput,
     createContext: () => context as unknown as AudioContext,
     fetch: (async () => new Response(payload)) as typeof fetch,
   });
@@ -286,4 +305,64 @@ test('decoded memory, track identity and coverage bounds fail before allocating 
     await assert.rejects(loadStemPlayback(set, new AbortController().signal, { createContext: () => { created = true; return new FakeContext() as unknown as AudioContext; } }));
     assert.equal(created, false);
   }
+});
+
+test('excerpt speed uses the original clock, preserves loop/mix, and waits for reset before resuming', async () => {
+  for (const rate of [0.5, 0.8, 1.2, 2]) {
+    const set = fixture(), context = new FakeContext(), output = new RateOutput(); output.delay = 0.2;
+    const player = new StemPlaybackEngine(set, context as unknown as AudioContext, set.tracks.map(() => ({ ...context.decode }) as AudioBuffer), output as StemRateOutput);
+    player.setLoop({ start: 60, end: 60.25 }); player.seek(60); await player.setRate(rate); await player.play();
+    assert.ok(context.sources.every(source => source.playbackRate.value === rate && source.loopStart === 30 && source.loopEnd === 30.25));
+    advance(context, 0.19); assert.equal(player.time(), 60);
+    advance(context, 0.2 + 0.6 / rate); assert.ok(Math.abs(player.time() - 60.1) < 1e-9);
+    player.setMix('bass', { level: 0.3, muted: false, solo: true });
+    const before = player.time(), nodes = context.sources.slice(); await player.setRate(rate === 2 ? 0.5 : 2);
+    assert.ok(Math.abs(player.time() - before) < 1e-9); assert.ok(nodes.every(node => node.stopped === 1));
+    assert.equal(gains(context)[1], 0.3);
+    player.pause(); const paused = player.time(), length = context.sources.length; await player.setRate(1);
+    context.currentTime += 5; assert.equal(player.time(), paused); assert.equal(context.sources.length, length);
+    await assert.rejects(player.setRate(0.49)); await assert.rejects(player.setRate(2.01));
+    await player.destroy(); assert.equal(output.destroyed, 1);
+  }
+});
+
+test('excerpt delayed output drains once; stale tail and rate reset cannot resurrect paused sources', async () => {
+  const set = fixture(), context = new FakeContext(), output = new RateOutput(); output.delay = 0.2;
+  const player = new StemPlaybackEngine(set, context as unknown as AudioContext, set.tracks.map(() => ({ ...context.decode }) as AudioBuffer), output as StemRateOutput);
+  let release!: () => void; output.drainGate = new Promise(resolve => { release = resolve; });
+  player.seek(119); await player.setRate(2); await player.play();
+  const nodes = context.sources.slice(), end = nodes[0].started![0] + 0.5;
+  context.currentTime = end; nodes.forEach(source => source.onended?.());
+  assert.equal(output.drains.length, 1); assert.equal(output.drains[0], end); assert.ok(player.time() < 120);
+  player.pause(); const paused = player.time(); release(); await Promise.resolve();
+  assert.equal(player.time(), paused);
+  await player.play(); output.resetGate = new Promise(resolve => { release = resolve; });
+  const changing = player.setRate(0.5); player.pause(); const count = context.sources.length; release(); await changing;
+  assert.equal(context.sources.length, count); await player.destroy();
+});
+
+test('obsolete excerpt speed reset failure cannot reject into a newer successful seek', async () => {
+  const set = fixture(), context = new FakeContext(), output = new RateOutput();
+  const player = new StemPlaybackEngine(set, context as unknown as AudioContext, set.tracks.map(() => ({ ...context.decode }) as AudioBuffer), output as StemRateOutput);
+  await player.play(); let reject!: (error: Error) => void, started!: () => void;
+  const resetting = new Promise<void>(resolve => { started = resolve; });
+  const reset = output.reset.bind(output); let blocked = true;
+  output.reset = async rate => {
+    if (blocked) { blocked = false; started(); await new Promise<void>((_resolve, fail) => { reject = fail; }); return; }
+    await reset(rate);
+  };
+  const changing = player.setRate(0.8); const result = changing.then(() => 'resolved', () => 'rejected');
+  await resetting; await player.seek(95); reject(new Error('obsolete reset failure'));
+  assert.equal(await result, 'resolved'); assert.equal(player.time(), 95);
+  assert.ok(context.sources.slice(-6).every(node => node.started![1] === 65 && node.stopped === 0));
+  await player.destroy();
+});
+
+test('current excerpt speed reset failure rejects and clears playback intent', async () => {
+  const set = fixture(), context = new FakeContext(), output = new RateOutput();
+  const player = new StemPlaybackEngine(set, context as unknown as AudioContext, set.tracks.map(() => ({ ...context.decode }) as AudioBuffer), output as StemRateOutput);
+  await player.play(); output.reset = async () => { throw new Error('current processor failure'); };
+  await assert.rejects(player.setRate(0.8), /current processor failure/);
+  const count = context.sources.length; await player.seek(95); assert.equal(context.sources.length, count);
+  await assert.rejects(player.play(), /current processor failure/); await player.destroy();
 });

@@ -1,0 +1,4 @@
+SoundTouchJS core 2.1.1 and interpolation-strategy-lanczos 2.1.1 (MPL-2.0).
+Unmodified package source: https://registry.npmjs.org/@soundtouchjs/core/-/core-2.1.1.tgz
+https://registry.npmjs.org/@soundtouchjs/interpolation-strategy-lanczos/-/interpolation-strategy-lanczos-2.1.1.tgz
+Project: https://github.com/cutterbl/SoundTouchJS

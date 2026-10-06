@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { PracticeWorkspace } from "./PracticeWorkspace";
+import { nextPlaybackRate, SpeedControl } from "./SpeedControl";
 import { loadChunkedStemPlayback } from "./ChunkedStemPlaybackEngine";
 import type { ChunkedStemPlaybackEngine } from "./ChunkedStemPlaybackEngine";
 import {
@@ -42,6 +43,9 @@ type YoutubePlayer = {
   getPlayerState(): number;
   getCurrentTime(): number;
   getDuration?(): number;
+  setPlaybackRate?(rate: number): void;
+  getPlaybackRate?(): number;
+  getAvailablePlaybackRates?(): number[];
   destroy(): void;
 };
 type YoutubeApi = {
@@ -54,6 +58,7 @@ type YoutubeApi = {
         onReady(): void;
         onStateChange(event: { data: number }): void;
         onError(): void;
+        onPlaybackRateChange?(event: { data: number }): void;
       };
     },
   ) => YoutubePlayer;
@@ -99,6 +104,10 @@ export function Player({
   row,
   autoPlay,
   playRequest,
+  preferredMode,
+  playbackRate = 1,
+  changedRate = 1,
+  onRateChange = () => {},
   identity,
   onSong,
   onVideoVisibility,
@@ -109,6 +118,10 @@ export function Player({
   practiceHost: HTMLElement | null;
   autoPlay: boolean;
   playRequest: number;
+  preferredMode?: "audio" | "video";
+  playbackRate?: number;
+  changedRate?: number;
+  onRateChange?(rate: number): void;
   identity: {
     title?: string;
     kind: string;
@@ -169,7 +182,7 @@ export function Player({
   const rangeRef = useRef(range);
   rangeRef.current = range;
   const [mode, setMode] = useState<"video" | "audio" | "stems">(
-    row.has_audio === "yes" ? "audio" : "video",
+    preferredMode || (row.has_audio === "yes" ? "audio" : "video"),
   );
   const repeatRef = useRef(repeat);
   repeatRef.current = repeat && mode !== "video";
@@ -181,7 +194,12 @@ export function Player({
   const covered = (next: LoopRange) => Boolean(stemSet && next.start >= stemSet.start && next.end <= stemSet.end);
   const stemRangeValid = mode !== "stems" || covered(range);
   const resolvingSection = linkedSection.current && !targetHandled.current && !sectionsError;
-  const [videoVisible, setVideoVisible] = useState(row.has_audio !== "yes");
+  const [videoVisible, setVideoVisible] = useState(preferredMode === "video" || row.has_audio !== "yes");
+  const rateRef = useRef(playbackRate);
+  rateRef.current = playbackRate;
+  const [videoRate, setVideoRate] = useState(1);
+  const lastVideoRate = useRef(1);
+  const [videoRates, setVideoRates] = useState<number[]>([1]);
   useEffect(() => {
     onVideoVisibility(mode === "video" && videoVisible);
     return () => onVideoVisibility(false);
@@ -199,6 +217,7 @@ export function Player({
     seek(t: number): void;
     time(): number;
     duration(): number;
+    setRate?(rate: number): void;
   } | null>(null);
   const position = useRef(range.start);
   const wantsPlay = useRef(autoPlay && !linkedSection.current);
@@ -275,6 +294,7 @@ export function Player({
       readyRef.current = true;
       setReady(true);
       backend.current?.seek(position.current);
+      backend.current?.setRate?.(rateRef.current);
       if (wantsPlay.current && !initialAudioSelection.current) backend.current?.play();
     }
     if (mode === "stems") {
@@ -312,16 +332,29 @@ export function Player({
             wantsPlay.current = true;
             void engine!.play().then(() => {
               if (!disposed && request === playEpoch && wantsPlay.current && !("subscribe" in engine!)) updatePlaying(true);
-            }).catch(failure => fail(failure instanceof Error ? failure.message : "Stems could not start."));
+            }).catch(failure => {
+              if (!disposed && request === playEpoch && wantsPlay.current) fail(failure instanceof Error ? failure.message : "Stems could not start.");
+            });
           },
           pause: () => { ++playEpoch; engine!.pause(); },
           seek: value => {
-            try { void Promise.resolve(engine!.seek(value)).catch(failure => fail(failure instanceof Error ? failure.message : "The audio could not seek.")); }
+            const request = ++playEpoch;
+            try { void Promise.resolve(engine!.seek(value)).catch(failure => {
+              if (!disposed && request === playEpoch) fail(failure instanceof Error ? failure.message : "The audio could not seek.");
+            }); }
             catch (failure) { fail(failure instanceof Error ? failure.message : "The audio could not seek."); }
           },
           time: () => engine!.time(),
           duration: () => rangeRef.current.full,
+          setRate: rate => {
+            if (rate === engine!.getRate()) return;
+            const request = ++playEpoch;
+            void engine!.setRate(rate).catch(failure => {
+              if (!disposed && request === playEpoch) fail(failure instanceof Error ? failure.message : "Speed could not change.");
+            });
+          },
         };
+        await engine.setRate(rateRef.current);
         await engine.seek(position.current);
         if (disposed) return;
         readyRef.current = true;
@@ -339,6 +372,8 @@ export function Player({
         row.audio_path || `audio/${encodeURIComponent(row.audio_file)}`,
       );
       audio.preload = "metadata";
+      audio.preservesPitch = true;
+      audio.playbackRate = rateRef.current;
       let playEpoch = 0;
       function playAudio(message: string) {
         const request = ++playEpoch;
@@ -355,6 +390,7 @@ export function Player({
         },
         time: () => audio.currentTime,
         duration: () => audio.duration,
+        setRate: rate => { audio.preservesPitch = true; audio.playbackRate = rate; },
       };
       audio.onloadedmetadata = loaded;
       audio.onplay = () => {
@@ -404,6 +440,15 @@ export function Player({
             events: {
               onReady: () => {
                 if (disposed || !player) return;
+                const rates = player.getAvailablePlaybackRates?.().filter(rate => rate >= .5 && rate <= 2) || [1];
+                setVideoRates(rates.length ? rates : [1]);
+                setVideoRate(player.getPlaybackRate?.() || 1);
+                function setVideoSpeed(rate: number) {
+                  if (!player) return;
+                  const supported = player.getAvailablePlaybackRates?.().filter(value => value >= .5 && value <= 2) || [1];
+                  const nearest = supported.reduce((best, value) => Math.abs(value - rate) < Math.abs(best - rate) ? value : best, supported[0] || 1);
+                  player.setPlaybackRate?.(nearest);
+                }
                 backend.current = {
                   play: () => player?.playVideo(),
                   pause: () => player?.pauseVideo(),
@@ -427,6 +472,7 @@ export function Player({
                   // zero before Play even while its previous paused state remains.
                   time: () => cuedPosition ?? (player?.getCurrentTime() || 0),
                   duration: () => player?.getDuration?.() || 0,
+                  setRate: setVideoSpeed,
                 };
                 const iframe = container.current?.querySelector("iframe");
                 if (iframe) iframe.title = `${title(row)} — YouTube video`;
@@ -434,8 +480,15 @@ export function Player({
               },
               onStateChange: (event) => {
                 if (event.data === 1) cuedPosition = undefined;
+                if (!disposed && event.data === 5) backend.current?.setRate?.(rateRef.current);
                 if (!disposed && [0, 1, 2].includes(event.data))
                   updatePlaying(event.data === 1);
+              },
+              onPlaybackRateChange: event => {
+                if (!disposed && Number.isFinite(event.data) && event.data > 0) {
+                  setVideoRate(event.data);
+                  if (event.data !== 1) lastVideoRate.current = event.data;
+                }
               },
               onError: () =>
                 fail(
@@ -514,9 +567,22 @@ export function Player({
 
   useEffect(() => {
     if (!autoPlay || !playRequest || initialAudioSelection.current || (linkedSection.current && !targetHandled.current)) return;
+    if (preferredMode && preferredMode !== mode) {
+      position.current = backend.current?.time() ?? position.current;
+      backend.current?.pause();
+      wantsPlay.current = true;
+      setMode(preferredMode);
+      setVideoVisible(preferredMode === "video");
+      return;
+    }
     wantsPlay.current = true;
+    if (mode === "video") setVideoVisible(true);
     if (readyRef.current) backend.current?.play();
   }, [playRequest, autoPlay]);
+
+  useEffect(() => {
+    if (readyRef.current) backend.current?.setRate?.(playbackRate);
+  }, [playbackRate, ready, mode]);
 
   useEffect(() => {
     if (targetHandled.current || !baseRange.full || (linkedSection.current && !practiceData)) return;
@@ -745,6 +811,11 @@ export function Player({
       if (event.key === " ") {
         event.preventDefault(); spacePauseKey.current = true; toggle(); return;
       }
+      if (["[", "]", "\\"].includes(event.key)) {
+        event.preventDefault();
+        event.key === "\\" ? toggleSpeed() : stepSpeed(event.key === "]" ? 1 : -1);
+        return;
+      }
       if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
         event.preventDefault();
         seekTimeline(position.current + (event.key === "ArrowLeft" ? -5 : 5));
@@ -776,6 +847,22 @@ export function Player({
     setOriginalPreferred(original);
     switchMode(!original && stemSet ? "stems" : "audio");
   }
+  const displayedRate = mode === "video" ? videoRate : playbackRate;
+  function applySpeed(rate: number) {
+    // Provider controls can change the confirmed speed without changing our
+    // preference. A repeated preference must still command the video backend.
+    if (mode === "video") backend.current?.setRate?.(rate);
+    onRateChange(rate);
+  }
+  function stepSpeed(direction: number) {
+    if (!readyRef.current || !controllable || error) return;
+    applySpeed(nextPlaybackRate(displayedRate, direction, mode === "video" ? videoRates : undefined));
+  }
+  function toggleSpeed() {
+    if (!readyRef.current || !controllable || error) return;
+    const remembered = mode === "video" && videoRates.includes(lastVideoRate.current) && lastVideoRate.current !== 1 ? lastVideoRate.current : changedRate;
+    applySpeed(displayedRate === 1 ? remembered : 1);
+  }
   function seekTimeline(seconds: number) {
     const next = Math.max(0, Math.min(baseRange.full, seconds));
     seek(next, !(repeat && next >= range.start && next < range.end));
@@ -799,7 +886,7 @@ export function Player({
   return <>
     <aside className={`player compact-player ${mode === "video" ? "video-mode" : "audio-mode"} ${mode === "stems" ? "stem-mode" : ""} ${videoVisible ? "video-open" : ""}`} aria-label="Music player">
       <header className="player-heading"><div><span className="player-status">{buffering ? "BUFFERING" : playing ? "NOW PLAYING" : "READY TO PLAY"}</span><button className="player-song" disabled={!identity.songId} onClick={onSong}>{identity.title || title(row)}</button><p className="player-game">{isTake ? "Our take" : identity.kind === "original" ? "Original soundtrack" : identity.kind}{identity.artist ? ` · ${identity.artist}` : ""}</p></div></header>
-      <div className="transport"><button className="play-button" onClick={toggle} disabled={!available || !controllable} aria-label={playing || (buffering && wantsPlay.current) ? "Pause selected recording" : "Play selected recording"}>{playing || (buffering && wantsPlay.current) ? <Pause size={19} fill="currentColor" /> : <Play size={19} fill="currentColor" />}</button><span className="time">{formatTime(time)}</span><input aria-label="Seek full recording" type="range" min="0" max={baseRange.full} step="any" value={Math.max(0, Math.min(baseRange.full, time))} disabled={!available || !controllable || !baseRange.full} onChange={event => seekTimeline(Number(event.target.value))} /><span className="time">{baseRange.full ? formatTime(baseRange.full) : "—:—"}</span></div>
+      <div className="transport"><button className="play-button" onClick={toggle} disabled={!available || !controllable} aria-label={playing || (buffering && wantsPlay.current) ? "Pause selected recording" : "Play selected recording"}>{playing || (buffering && wantsPlay.current) ? <Pause size={19} fill="currentColor" /> : <Play size={19} fill="currentColor" />}</button><SpeedControl rate={displayedRate} disabled={!available || !controllable || (mode === "video" && videoRates.length < 2)} video={mode === "video"} onStep={stepSpeed} onToggle={toggleSpeed} /><span className="time">{formatTime(time)}</span><input aria-label="Seek full recording" type="range" min="0" max={baseRange.full} step="any" value={Math.max(0, Math.min(baseRange.full, time))} disabled={!available || !controllable || !baseRange.full} onChange={event => seekTimeline(Number(event.target.value))} /><span className="time">{baseRange.full ? formatTime(baseRange.full) : "—:—"}</span></div>
       <div className="media-switch" role="group" aria-label="Playback options"><button aria-pressed={mode !== "video"} disabled={row.has_audio !== "yes"} onClick={() => chooseAudio()}><AudioLines size={15} /> Audio</button><button aria-pressed={mode === "video" && videoVisible} disabled={row.has_video !== "yes"} onClick={() => mode === "video" && videoVisible ? closeVideo() : switchMode("video")}><Video size={15} /> Video</button><button className="open-practice-button" onClick={onSong} aria-label="Open practice">Practice</button><span className="mode-status" role="status">{error ? "Unavailable" : buffering ? "Buffering…" : audioRoutingPending || !ready ? "Loading…" : playing ? "Playing" : "Paused"}</span></div>
       {error && <p className="playback-error" role="alert">{error}{row.audio_file && <button onClick={() => chooseAudio(true)}>Original mix</button>}</p>}
       {practiceError && !practiceHost && <p className="practice-link-error" role="alert">{practiceError}</p>}

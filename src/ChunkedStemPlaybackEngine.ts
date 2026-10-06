@@ -1,5 +1,6 @@
 import type { StemSet, StemChunk } from './practiceData';
 import type { StemLoop, StemMix, StemPlaybackDependencies } from './StemPlaybackEngine';
+import type { StemRateOutput } from './StemRateOutput';
 
 export interface ChunkedStemStatus {
   state: 'loading' | 'ready' | 'playing' | 'paused' | 'buffering' | 'ended' | 'error';
@@ -62,6 +63,7 @@ export class ChunkedStemPlaybackEngine {
   private loadGeneration = 0;
   private timelineGeneration = 0;
   private intent = 0;
+  private operation = 0;
   private wantedPlay = false;
   private playing = false;
   private position: number;
@@ -70,6 +72,10 @@ export class ChunkedStemPlaybackEngine {
   private cursorTime = 0;
   private cursorPosition = 0;
   private nativeLoop = false;
+  private rate = 1;
+  private output: StemRateOutput | null = null;
+  private detachOutputError = () => {};
+  private drainingGeneration = -1;
   private loop: StemLoop | null = null;
   private state: ChunkedStemStatus['state'] = 'loading';
   private error = '';
@@ -95,19 +101,28 @@ export class ChunkedStemPlaybackEngine {
   }
   time(): number {
     if (!this.playing) return this.position;
-    if (this.context.currentTime >= this.cursorTime) return this.cursorPosition;
-    const elapsed = Math.max(0, Math.min(this.context.currentTime, this.cursorTime) - this.anchorTime);
+    const audibleTime = this.context.currentTime - (this.output?.latencySeconds ?? 0);
+    if (audibleTime >= this.cursorTime) return this.cursorPosition;
+    const elapsed = Math.max(0, Math.min(audibleTime, this.cursorTime) - this.anchorTime) * this.rate;
     if (this.loop) return this.loop.start + ((this.anchorPosition - this.loop.start + elapsed) % (this.loop.end - this.loop.start));
     return Math.min(this.set.end, this.anchorPosition + elapsed);
   }
   duration(): number { return this.set.end; }
+  getRate(): number { return this.rate; }
   isBuffering(): boolean { return this.getStatus().buffering; }
 
   async initialize(signal: AbortSignal): Promise<void> {
     const abort = () => { void this.destroy().catch(() => {}); };
     signal.addEventListener('abort', abort, { once: true }); this.detachAbort = () => signal.removeEventListener('abort', abort);
     if (signal.aborted) { await this.destroy(); throw cancelled(); }
-    try { await this.warm(this.position); if (this.destroyed || signal.aborted) throw cancelled(); this.notify('ready'); }
+    try {
+      const createOutput = this.dependencies.createRateOutput ?? (await import('./StemRateOutput')).createStemRateOutput;
+      this.output = await createOutput(this.context);
+      if (this.destroyed || signal.aborted) { await this.output.destroy(); throw cancelled(); }
+      this.master.disconnect(); this.master.connect(this.output.input);
+      this.detachOutputError = this.output.onError(error => this.fail(error));
+      await this.warm(this.position); if (this.destroyed || signal.aborted) throw cancelled(); this.notify('ready');
+    }
     catch (error) {
       const failure = signal.aborted ? cancelled() : this.error ? new Error(this.error) : error;
       await this.destroy(); throw failure;
@@ -115,6 +130,7 @@ export class ChunkedStemPlaybackEngine {
   }
   async play(): Promise<void> {
     this.assertAlive(); if (this.playing) return;
+    const operation = ++this.operation;
     const request = ++this.intent; this.wantedPlay = true;
     // Resume in the caller's gesture, before waiting for network preparation.
     const resumed = this.context.resume();
@@ -126,33 +142,60 @@ export class ChunkedStemPlaybackEngine {
       else if (this.position >= this.set.end) this.position = this.set.start;
       this.notify('buffering'); await this.warm(this.position);
       if (this.destroyed || request !== this.intent || !this.wantedPlay) return;
+      await this.output?.reset(this.rate);
+      if (this.destroyed || request !== this.intent || !this.wantedPlay) return;
       this.startTimeline();
     } catch (error) {
-      if (!this.destroyed) { if (request === this.intent && this.state !== 'error') this.fail(error); throw error; }
+      if (!this.destroyed && operation === this.operation) { if (request === this.intent && this.state !== 'error') this.fail(error); throw error; }
     }
   }
   pause(): void {
     if (this.destroyed) return;
+    ++this.operation;
     ++this.intent; this.wantedPlay = false; this.position = this.time(); this.stopTimeline(); this.notify('paused');
   }
   async seek(originalSeconds: number): Promise<void> {
     this.assertAlive(); this.validatePosition(originalSeconds);
+    const operation = ++this.operation;
     const resume = this.wantedPlay, request = ++this.intent;
     this.stopTimeline(); this.position = originalSeconds;
     if (resume && this.loop && (this.position < this.loop.start || this.position >= this.loop.end)) this.position = this.loop.start;
-    const preparing = this.prepare(this.position, request); this.preparation = preparing;
+    const preparing = this.guardOperation(this.prepare(this.position, request), operation); this.preparation = preparing;
     await preparing;
-    if (!this.destroyed && request === this.intent && resume && this.wantedPlay) this.startTimeline();
+    if (!this.destroyed && request === this.intent && resume && this.wantedPlay) await this.guardOperation(this.restart(request), operation);
+  }
+  async setRate(rate: number): Promise<void> {
+    this.assertAlive();
+    if (!Number.isFinite(rate) || rate < 0.5 || rate > 2) throw new Error('Stem speed must be between 0.5 and 2.');
+    if (rate === this.rate) return;
+    const operation = ++this.operation;
+    const position = this.time(), resume = this.wantedPlay, request = ++this.intent;
+    this.stopTimeline(); this.position = position; this.rate = rate;
+    // Decoded chunks and the mix survive rate changes; only the render timeline resets.
+    const previous = this.preparation;
+    const preparing = this.guardOperation((async () => {
+      await previous;
+      if (this.destroyed || request !== this.intent) return;
+      await this.warm(this.position);
+      if (this.destroyed || request !== this.intent) return;
+      await this.output?.reset(rate);
+    })(), operation);
+    this.preparation = preparing; this.notify(resume ? 'buffering' : 'paused');
+    try {
+      await preparing;
+      if (!this.destroyed && request === this.intent && resume && this.wantedPlay) this.startTimeline();
+    } catch (error) { if (!this.destroyed && operation === this.operation) { if (request === this.intent) this.fail(error); throw error; } }
   }
   setLoop(loop: StemLoop | null): void {
     this.assertAlive();
     if (loop) { this.validatePosition(loop.start); this.validatePosition(loop.end); if (loop.end < loop.start + 0.25) throw new Error('Choose a stem loop of at least 0.25 seconds.'); }
     if (this.loop?.start === loop?.start && this.loop?.end === loop?.end) return;
+    const operation = ++this.operation;
     const position = this.time(), resume = this.wantedPlay, request = ++this.intent;
     this.stopTimeline(); this.loop = loop ? { ...loop } : null;
     this.position = loop && (position < loop.start || position >= loop.end) ? loop.start : position;
-    const preparing = this.prepare(this.position, request); this.preparation = preparing;
-    void preparing.then(() => { if (!this.destroyed && request === this.intent && resume && this.wantedPlay) this.startTimeline(); }).catch(error => {
+    const preparing = this.guardOperation(this.prepare(this.position, request), operation); this.preparation = preparing;
+    void preparing.then(async () => { if (!this.destroyed && request === this.intent && resume && this.wantedPlay) await this.restart(request); }).catch(error => {
       if (!this.destroyed && request === this.intent) this.fail(error);
     });
   }
@@ -167,16 +210,20 @@ export class ChunkedStemPlaybackEngine {
   destroy(): Promise<void> {
     if (this.closing) return this.closing;
     this.pause(); this.destroyed = true; ++this.loadGeneration; this.controller.abort(); this.detachAbort(); this.cancelTimer();
+    this.detachOutputError();
     this.cache.clear(); this.gains.forEach(gain => gain.disconnect()); this.master.disconnect(); this.listeners.clear();
     const pending = [...this.pending.values()].map(entry => entry.promise);
     const close = this.context.state === 'closed' ? Promise.resolve() : this.context.close();
-    this.closing = Promise.all([close, Promise.allSettled(pending)]).then(() => {}); return this.closing;
+    this.closing = Promise.all([close, this.output?.destroy(), Promise.allSettled(pending)]).then(() => {}); return this.closing;
   }
   private notify(state = this.state): void {
     if (this.destroyed) return;
     this.state = state; const snapshot = this.getStatus(); for (const listener of this.listeners) listener(snapshot);
   }
   private assertAlive(): void { if (this.destroyed) throw cancelled(); }
+  private guardOperation(promise: Promise<void>, operation: number): Promise<void> {
+    return promise.catch(error => { if (!this.destroyed && operation === this.operation) throw error; });
+  }
   private validatePosition(value: number): void {
     if (!Number.isFinite(value) || value < this.set.start || value > this.set.end) throw new Error('The requested time is outside this stem source.');
   }
@@ -249,6 +296,7 @@ export class ChunkedStemPlaybackEngine {
     this.pending.set(index, { promise, bytes }); this.notify(); return promise;
   }
   private stopTimeline(): void {
+    this.output?.pause();
     ++this.timelineGeneration; this.playing = false; this.nativeLoop = false;
     for (const entry of this.nodes) {
       entry.node.onended = null; try { entry.node.stop(); } catch { /* Single-use nodes may already have ended. */ }
@@ -260,6 +308,8 @@ export class ChunkedStemPlaybackEngine {
     if (this.destroyed || !this.wantedPlay) return;
     this.anchorTime = this.context.currentTime + LEAD; this.anchorPosition = this.position;
     this.cursorTime = this.anchorTime; this.cursorPosition = this.position; this.playing = true;
+    this.drainingGeneration = -1;
+    this.output?.start(this.anchorTime);
     const index = this.indexAt(this.position);
     if (this.loop && this.indexAt(this.loop.start) === index && this.loop.end <= this.chunkEnd(index)) {
       this.nativeLoop = true; this.scheduleGroup(index, this.position, this.loop.end, this.anchorTime, true); this.cursorTime = Infinity;
@@ -271,8 +321,9 @@ export class ChunkedStemPlaybackEngine {
     const generation = this.timelineGeneration;
     for (let i = 0; i < group.buffers.length; ++i) {
       const node = this.context.createBufferSource(); node.buffer = group.buffers[i]; node.connect(this.gains[i]);
+      node.playbackRate.value = this.rate;
       if (native) { node.loop = true; node.loopStart = this.loop!.start - this.chunkStart(index); node.loopEnd = this.loop!.end - this.chunkStart(index); }
-      const entry = { node, group: index, end: native ? Infinity : when + end - start }; this.nodes.add(entry);
+      const entry = { node, group: index, end: native ? Infinity : when + (end - start) / this.rate }; this.nodes.add(entry);
       node.onended = () => {
         node.disconnect(); node.buffer = null; this.nodes.delete(entry);
         if (generation === this.timelineGeneration && !this.destroyed) this.tick();
@@ -286,7 +337,7 @@ export class ChunkedStemPlaybackEngine {
       const index = this.indexAt(this.cursorPosition); if (!this.cache.has(index)) break;
       const end = Math.min(this.chunkEnd(index), this.loop?.end ?? this.set.end), length = end - this.cursorPosition;
       if (length <= 0) throw new Error('The stem scheduling boundary is invalid.');
-      this.scheduleGroup(index, this.cursorPosition, end, this.cursorTime); this.cursorTime += length;
+      this.scheduleGroup(index, this.cursorPosition, end, this.cursorTime); this.cursorTime += length / this.rate;
       this.cursorPosition = this.loop && end >= this.loop.end ? this.loop.start : end;
     }
   }
@@ -298,9 +349,19 @@ export class ChunkedStemPlaybackEngine {
       }
       // Never schedule a late successor in the past and let the clock drift through silence.
       if (!this.nativeLoop && this.context.currentTime >= this.cursorTime) {
-        this.reachedHorizon(); return;
+        // Pending pitch-compensation output is still audible after input stops.
+        if (this.output && this.drainingGeneration !== this.timelineGeneration) {
+          const generation = this.timelineGeneration; this.drainingGeneration = generation;
+          void this.output.drain(this.cursorTime).catch(error => {
+            if (!this.destroyed && generation === this.timelineGeneration) this.fail(error);
+          });
+        }
+        if (this.context.currentTime >= this.cursorTime + (this.output?.latencySeconds ?? 0)) this.reachedHorizon();
+        return;
       }
-      const needed = this.needed(this.time()); this.trim(needed);
+      const inputElapsed = Math.max(0, this.context.currentTime - this.anchorTime) * this.rate;
+      const inputPosition = this.loop ? this.loop.start + ((this.anchorPosition - this.loop.start + inputElapsed) % (this.loop.end - this.loop.start)) : Math.min(this.set.end, this.anchorPosition + inputElapsed);
+      const needed = this.needed(inputPosition); this.trim(needed);
       for (const index of needed) if (!this.cache.has(index) && !this.pending.has(index)) {
         const generation = this.loadGeneration;
         void this.group(index).then(() => { if (generation === this.loadGeneration) this.tick(); }).catch(error => {
@@ -317,10 +378,14 @@ export class ChunkedStemPlaybackEngine {
     } else {
       const request = ++this.intent; this.stopTimeline(); this.position = position;
       const preparing = this.prepare(position, request); this.preparation = preparing;
-      void preparing.then(() => { if (!this.destroyed && request === this.intent && this.wantedPlay) this.startTimeline(); }).catch(error => {
+      void preparing.then(async () => { if (!this.destroyed && request === this.intent && this.wantedPlay) await this.restart(request); }).catch(error => {
         if (!this.destroyed && request === this.intent) this.fail(error);
       });
     }
+  }
+  private async restart(request: number): Promise<void> {
+    await this.output?.reset(this.rate);
+    if (!this.destroyed && request === this.intent && this.wantedPlay) this.startTimeline();
   }
   private fail(error: unknown): void {
     if (this.destroyed || this.state === 'error') return;

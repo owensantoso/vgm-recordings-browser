@@ -64,7 +64,8 @@ zero-take songs. References are sourced; uploader is not automatically artist.
 
 Fixed shell tokens define navigation, search and playing regions independently
 of headings/filter rows. The media element is never reparented across routes or
-breakpoints. All sources with private/local audio default to Audio. Showing video
+breakpoints. Originals with private/local audio default to Audio; manual take
+Play opens Video when present, while paused links retain the Audio default. Showing video
 opens a stable visible player region; collapsing switches a take to audio or
 pauses a YouTube-only reference. This preserves the provider's visible-player
 requirement without pretending a collapsed YouTube frame is audio playback.
@@ -174,6 +175,33 @@ protecting text entry and native video keys. Exercise
 375/768/1440 widths, late decode, failed metadata, changed source and empty score.
 Rendered design and full-song sound need Owen's judgment; no old acceptance is
 carried onto this new composition.
+
+## Speed and library context increment — October 7
+
+Confirmed: default speed is 1×, wheel steps are 0.1× for audio, and clicking the
+speed control toggles 1× with the last chosen non-default rate. Original pitch
+must remain unchanged. The control belongs beside the persistent transport and
+survives browsing/source changes; editable text/native video keys remain owned
+by those controls. Brackets adjust speed and backslash toggles normal/last rate.
+YouTube supports provider-defined rates; its control displays confirmed speed
+and wheels through actual supported values. Speed never changes source-time
+section/loop identity. A later independent semitone transposition idea, excluding
+percussion, is recorded in PRACTICE.md and remains deferred.
+
+Adopt native media playbackRate/preservesPitch for original audio, and one small
+SoundTouch processor after the synchronized stem mix. Its transport adapter owns
+reset/stop/drain and bounded processing buffers; source schedulers account for
+rate and audible latency. No new model or re-encoded speed variants are needed.
+
+The supplied wide song-list screenshot demonstrates distant row actions rather
+than missing content. Constrain Songs/Repertoire/search song lists to a readable
+width, retaining the full Practice workspace for timelines. Our-take footage
+thumbnails become Play controls; takes with video open Video on a manual Play,
+while reference originals retain the Audio practice default. Deep links prepare
+paused and retain existing audio/loop targets. Show distinct small original-song
+art beside take identity, linked to the song page. Sticky session bands include
+source-backed name/location as well as date/count. Do not invent context or add
+filler panels to consume width.
 
 ## Review scenarios and acceptance
 

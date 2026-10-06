@@ -1,5 +1,14 @@
 # Third-party notices
 
+SoundTouchJS core 2.1.1 and interpolation-strategy-lanczos 2.1.1 are bundled
+unmodified for pitch-preserving practice playback, under the Mozilla Public
+License 2.0. Builds include the license in `assets/SOUNDTOUCH-LICENSE.txt` and
+source package links in `assets/SOUNDTOUCH-SOURCE.txt`.
+
+Source: https://github.com/cutterbl/SoundTouchJS
+
+---
+
 Lucide React 1.52.0, bundled from the npm package.
 
 ISC License
