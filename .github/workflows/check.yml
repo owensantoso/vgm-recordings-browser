@@ -17,6 +17,6 @@ jobs:
       - run: npm ci
       - run: npm run check
       - name: Verify branch-served bundles are current
-        run: git diff --exit-code -- assets/
+        run: git diff --exit-code -- assets/ data/catalog.json
       - name: Verify archive media paths
         run: node scripts/check-assets.mjs

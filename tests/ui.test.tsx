@@ -30,12 +30,15 @@ test("React preserves playback through filters and mode switches, and tears down
     });
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
   const csv = readFileSync("data/recordings.csv", "utf8");
-  globalThis.fetch = async () => new Response(csv);
+  const catalog = readFileSync('data/catalog.json', 'utf8');
+  globalThis.fetch = async (url) => new Response(String(url).includes('catalog.json') ? catalog : csv);
+  dom.window.scrollTo = () => {};
   const players: FakeVideo[] = [];
   class FakeVideo {
     time = 0;
     destroyed = false;
     playing = false;
+    state = 5;
     constructor(
       _host,
       public options,
@@ -44,16 +47,21 @@ test("React preserves playback through filters and mode switches, and tears down
       queueMicrotask(() => options.events.onReady());
     }
     playVideo() {
+      this.state = 1;
       this.playing = true;
       this.options.events.onStateChange({ data: 1 });
     }
     pauseVideo() {
+      this.state = 2;
       this.playing = false;
       this.options.events.onStateChange({ data: 2 });
     }
     seekTo(time) {
       this.time = time;
+      if (this.state !== 2) this.playVideo();
     }
+    cueVideoById({ startSeconds }) { this.time = startSeconds; this.state = 5; this.playing = false; }
+    getPlayerState() { return this.state; }
     getCurrentTime() {
       return this.time;
     }
@@ -129,6 +137,18 @@ test("React preserves playback through filters and mode switches, and tears down
     assert.equal(players[1].time, 200);
     assert.equal(players[1].playing, true);
     await click("Pause");
+    const navigate = async (selector: string) => act(async () => {
+      (document.querySelector(selector) as HTMLAnchorElement).click();
+      await settle();
+    });
+    await navigate('.workspace-nav a[href*="view=songs"]');
+    await navigate('.song-list a[href*="song=vgm-yoshi-circuit-double-dash"]');
+    assert.equal(document.querySelectorAll('.song-take').length, 2, 'song IDs join takes across sessions');
+    assert.equal(players[1].destroyed, false, 'song navigation preserves the current player');
+    await navigate('.workspace-nav a[href*="view=repertoire"]');
+    assert.match(document.querySelector('.catalog-empty')!.textContent!, /No repertoire selected/);
+    assert.equal(players[1].destroyed, false, 'empty repertoire does not dispose the selected player');
+    await navigate('.workspace-nav a:not([href*="view="])');
     await click("Beneath the mask");
     assert.equal(
       players[1].playing,

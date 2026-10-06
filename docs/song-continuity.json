@@ -1,0 +1,234 @@
+{
+  "schemaVersion": 1,
+  "id": "vgm.song-list-to-detail",
+  "product": "VGM Music Workspace",
+  "interaction": {
+    "kind": "drill_down",
+    "trigger": "Open a song from Songs or Repertoire"
+  },
+  "states": {
+    "source": {
+      "id": "songs",
+      "representation": "Ruled song list with game and take count"
+    },
+    "target": {
+      "id": "song",
+      "representation": "Song identity, references and joined recordings"
+    }
+  },
+  "semanticFamily": {
+    "entity": {
+      "key": "song:yoshi",
+      "label": "Yoshi Circuit",
+      "identity": {
+        "namespace": "vgm-catalog",
+        "kind": "song",
+        "id": "vgm-yoshi-circuit-double-dash"
+      }
+    },
+    "facets": [
+      {
+        "key": "song:title",
+        "label": "Song title"
+      },
+      {
+        "key": "song:game",
+        "label": "Game identity"
+      }
+    ],
+    "relationships": [
+      {
+        "key": "song:takes",
+        "label": "Recording IDs from both sessions"
+      }
+    ]
+  },
+  "workingState": [
+    {
+      "key": "catalog:search",
+      "label": "Song search"
+    },
+    {
+      "key": "catalog:scroll",
+      "label": "List return scroll"
+    },
+    {
+      "key": "player:take",
+      "label": "Selected take, mode and playback position"
+    }
+  ],
+  "controls": [
+    {
+      "key": "song:open",
+      "label": "Song detail link"
+    },
+    {
+      "key": "song:back",
+      "label": "Return to song list"
+    },
+    {
+      "key": "player:controls",
+      "label": "Take transport"
+    }
+  ],
+  "mappings": [
+    {
+      "key": "song:yoshi",
+      "kind": "entity",
+      "role": "recomposed",
+      "owner": "SongCatalog",
+      "source": [
+        "list:song"
+      ],
+      "target": [
+        "detail:song"
+      ]
+    },
+    {
+      "key": "song:title",
+      "kind": "facet",
+      "role": "persistent",
+      "owner": "SongCatalog",
+      "source": [
+        "list:title"
+      ],
+      "target": [
+        "detail:title"
+      ]
+    },
+    {
+      "key": "song:game",
+      "kind": "facet",
+      "role": "persistent",
+      "owner": "SongCatalog",
+      "source": [
+        "list:game"
+      ],
+      "target": [
+        "detail:game"
+      ]
+    },
+    {
+      "key": "song:takes",
+      "kind": "relationship",
+      "role": "recomposed",
+      "owner": "CatalogData",
+      "source": [
+        "list:take-count"
+      ],
+      "target": [
+        "detail:take-list"
+      ]
+    },
+    {
+      "key": "catalog:search",
+      "kind": "state",
+      "role": "persistent",
+      "owner": "SongCatalog",
+      "source": [
+        "state:query"
+      ],
+      "target": [
+        "state:query"
+      ]
+    },
+    {
+      "key": "catalog:scroll",
+      "kind": "state",
+      "role": "persistent",
+      "owner": "App",
+      "source": [
+        "list:scroll"
+      ],
+      "target": [
+        "return:scroll"
+      ]
+    },
+    {
+      "key": "player:take",
+      "kind": "state",
+      "role": "persistent",
+      "owner": "App/Player",
+      "source": [
+        "player:take"
+      ],
+      "target": [
+        "player:take"
+      ]
+    },
+    {
+      "key": "song:open",
+      "kind": "control",
+      "role": "exit",
+      "owner": "SongCatalog",
+      "source": [
+        "list:link"
+      ],
+      "target": []
+    },
+    {
+      "key": "song:back",
+      "kind": "control",
+      "role": "enter",
+      "owner": "SongCatalog",
+      "source": [],
+      "target": [
+        "detail:back"
+      ]
+    },
+    {
+      "key": "player:controls",
+      "kind": "control",
+      "role": "persistent",
+      "owner": "Player",
+      "source": [
+        "player:controls"
+      ],
+      "target": [
+        "player:controls"
+      ]
+    }
+  ],
+  "paths": {
+    "forward": "Push a song-ID URL; title/game map to detail and counts disclose their exact recording links. Player remains mounted.",
+    "reverse": "Return to the same Songs/Repertoire view with search and saved scroll.",
+    "interruption": "Latest navigation wins; new take selection alone replaces the player.",
+    "fallback": "Unknown ID shows Song not found and a list return. Missing data shows an error without changing archive playback.",
+    "reducedMotion": "Navigation is atomic; existing reduced-motion transport rules remain."
+  },
+  "context": {
+    "identity": {
+      "mode": "preserve",
+      "commitment": "Stable song IDs name list and detail."
+    },
+    "spatial": {
+      "mode": "change",
+      "commitment": "Detail replaces list in the same main content region."
+    },
+    "context": {
+      "mode": "preserve",
+      "commitment": "Left navigation, game identity and exact take relationships remain visible."
+    },
+    "state": {
+      "mode": "preserve",
+      "commitment": "Song query and scroll have the same owner; playback stays filename-keyed."
+    },
+    "control": {
+      "mode": "change",
+      "commitment": "List activation becomes a Back link; transport stays put."
+    },
+    "task": {
+      "mode": "preserve",
+      "commitment": "Find the song then inspect its references and recordings."
+    }
+  },
+  "checkpoints": {
+    "start": "Song row names the title/game and take count.",
+    "midpoint": "Atomic commit: no interpolated transient layout.",
+    "settled": "Detail title/game and take IDs agree with the source row.",
+    "reverse": "Same list query and saved scroll restored.",
+    "interrupted": "Latest route owns the main pane; only explicit take activation replaces media.",
+    "fallback": "Unknown/missing data has an honest recoverable state.",
+    "reducedMotion": "Same IDs, route and playback ownership without animation."
+  }
+}

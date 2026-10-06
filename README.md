@@ -19,15 +19,19 @@ skips; check the test totals before treating a run as browser validation.
 - `src/Player.tsx`: selected-take controls and disposable YouTube/audio backends.
 - `src/recordings.ts`: typed CSV boundary, search/sort, section bounds, and URLs.
 - `src/styles.css`: ledger styling and separate desktop/mobile composition.
+- `src/Catalog.tsx`: song/repertoire views and permanent song-ID URLs.
+- `data/catalog.sql`: reviewed identity, reference and repertoire source.
+- `scripts/catalog.mjs`: SQLite materialization, foreign-key/archive checks and
+  public JSON projection; see [catalog ownership](docs/SONG_CATALOG.md).
 - `docs/DESIGN.md`: design review, intent, decisions, and outstanding acceptance.
 - `interface-foundations.json`: scoped Interface Toolbox adoption decisions.
 
 ## Static hosting
 
-`npm run build` writes `dist/` and refreshes the checked-in `assets/app.js` and
+`npm run build` validates/materializes the song catalog, writes `dist/` and refreshes the checked-in `assets/app.js` and
 `assets/app.css`. Commit those generated files with source changes. This keeps
 existing root/branch-based GitHub Pages serving working without changing its
-settings. CI rebuilds and rejects stale bundles. A host with a build step may
+settings. CI rebuilds and rejects stale bundles and catalog JSON. A host with a build step may
 instead serve `dist/`.
 
 All asset URLs are relative, so repository subpaths continue to work. The

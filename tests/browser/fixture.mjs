@@ -244,23 +244,27 @@ function youtubeApi(videoSource) {
       this.video = video;
       this.options = options;
       this.destroyed = false;
+      this.state = 5;
       media.push(video);
       players.push(this);
       video.addEventListener("loadedmetadata", () => {
         video.currentTime = Number(options.playerVars.start) || 0;
         options.events.onReady();
       });
-      video.addEventListener("play", () => options.events.onStateChange({ data: 1 }));
+      video.addEventListener("play", () => { this.state = 1; options.events.onStateChange({ data: 1 }); });
       video.addEventListener("pause", () => {
+        this.state = 2;
         if (!video.ended) options.events.onStateChange({ data: 2 });
       });
-      video.addEventListener("ended", () => options.events.onStateChange({ data: 0 }));
+      video.addEventListener("ended", () => { this.state = 0; options.events.onStateChange({ data: 0 }); });
       video.addEventListener("error", () => options.events.onError());
     }
-    playVideo() { this.video.play().catch(() => {}); }
+    playVideo() { this.cuedPosition = undefined; this.video.play().catch(() => {}); }
     pauseVideo() { this.video.pause(); }
-    seekTo(time) { this.video.currentTime = time; }
-    getCurrentTime() { return this.video.currentTime; }
+    seekTo(time) { this.video.currentTime = time; if (this.state !== 2) this.playVideo(); }
+    cueVideoById({startSeconds}) { this.video.pause(); this.video.currentTime = startSeconds; this.cuedPosition = startSeconds; this.state = 2; }
+    getPlayerState() { return this.state; }
+    getCurrentTime() { return this.cuedPosition === undefined ? this.video.currentTime : 0; }
     destroy() {
       this.destroyed = true;
       this.video.pause();
@@ -325,6 +329,13 @@ export async function createFixture(directory) {
   await mkdir(join(directory, "audio"), { recursive: true });
   await mkdir(join(directory, "thumbs"), { recursive: true });
   await writeFile(join(directory, "data", "recordings.csv"), csv());
+  await writeFile(join(directory, 'data', 'catalog.json'), JSON.stringify({
+    version: 1,
+    songs: [{id: 'synthetic-alpha', title: 'Alpha Song', game: 'Alpha Quest II', franchise: 'Alpha Quest', composer: null}, {id: 'unrecorded', title: 'Unrecorded Song', game: null, franchise: null, composer: null}],
+    sessions: [],
+    recordings: rows.map(row => ({file: row.file, session_id: row.session_id, song_id: ['SYN_0001.MOV', 'SYN_0004.m4a'].includes(row.file) ? 'synthetic-alpha' : null})),
+    references: [], repertoire: [],
+  }));
   await writeFile(join(directory, "thumbs", "synthetic.png"), png);
   await writeFile(join(directory, "audio", "SYN_0001.wav"), wav(6, 440));
   await writeFile(join(directory, "audio", "SYN_0002.wav"), wav(6, 550));

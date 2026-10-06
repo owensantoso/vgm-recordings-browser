@@ -104,3 +104,54 @@ human visual acceptance. Before merge, exercise the real app at 375, 768,
    history, and shared recording links on the actual GitHub Pages subpath.
 
 These are review gates for this migration, not claims of human acceptance.
+
+## October 6 songbook extension (private candidate, not accepted)
+
+Purpose: move between a song, the band's chosen repertoire and its rehearsal
+history without losing the current take. Confirmed: left navigation, at least a
+song/repertoire list, linked IDs/database, current visual character acceptable.
+Scope of personal versus shared repertoire is still awaiting clarification; no
+membership is invented and this candidate is privately previewed only.
+
+The relational model and source ownership live in [SONG_CATALOG.md](SONG_CATALOG.md).
+`App` owns view/song URLs, archive controls, selected recording and return scroll.
+`SongCatalog` owns its separate query and presents song-specific detail. `Player`
+keeps its filename key and backend across navigation; a navigation key collapses
+only expanded presentation so requested content remains visible. Song browsing
+never selects or autoplays a take. Taking a recording action explicitly does.
+
+Actual Claude Opus 5.5 (`claude-opus-5-5`, response metadata verified) independently
+challenged the draft brief. Three alternatives were considered:
+
+1. **Ledger + rail:** existing visual system; songs get a full main-area detail
+   and recordings retain their ledger/player. Selected for the first candidate.
+2. **Master/detail + bottom player:** keeps a song index beside detail, but changes
+   the accepted desktop player position and needs stronger tablet composition.
+3. **Song index in the rail:** directly jumps among song takes, but gives songs
+   with no recordings a weak home and competes with session navigation.
+
+The selected candidate adapts the existing tokens, Highlight concept, Player and
+native links/inputs; no dialog/menu library or new icon pack is needed. A real
+app preview is more faithful than a disconnected mockup for media continuity.
+Desktop rail remains global, the main pane owns song title/game/credits/references
+and joined takes, the player owns selected-take information. Phones have top
+navigation above the archive controls and retain the bottom player. The original
+migration is preserved as a separate baseline for review.
+
+The Interface Toolbox adoption record validates. The range-consideration scanner
+supports HTML/Swift only: index.html has zero lexical range matches; React's
+existing range controls are outside its detection coverage. No consideration
+completeness is claimed. The [continuity map](song-continuity.json) validates ten
+mappings; this is declared coverage, not human acceptance.
+
+Independent source review found two defects, corrected with tests/checks: an
+expanded player could obscure Songs navigation; and CI did not reject a stale
+committed catalog projection. Repertoire is an explicit SQL-backed selection;
+no button pretends to edit shared data in a static browser. Original soundtrack
+references, artist/composer credits and membership stay empty until evidenced.
+Human design and iPhone acceptance are still pending.
+
+Current agent evidence is recorded in [October 6 validation](VALIDATION-2026-10-06.md).
+Real YouTube testing also found cued-seek autoplay; the combined candidate fixes
+it. The unmodified migration baseline must not be merged alone on the strength
+of its synthetic provider checks.

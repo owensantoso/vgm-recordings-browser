@@ -1,5 +1,7 @@
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Player } from "./Player";
+import { SongCatalog, catalogHref, route } from './Catalog';
+import type { CatalogData, View } from './Catalog';
 import {
   driveDownload,
   fileFromHash,
@@ -52,6 +54,10 @@ function sessionDate(row: Recording) {
   }).format(new Date(`${row.recorded_create_date.slice(0, 10)}T00:00:00Z`));
 }
 export function App() {
+  const [catalog, setCatalog] = useState<CatalogData | null>(null);
+  const [catalogError, setCatalogError] = useState('');
+  const [view, setView] = useState<View>(route(location.href).view);
+  const [songId, setSongId] = useState(route(location.href).song);
   const [rows, setRows] = useState<Recording[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -69,6 +75,29 @@ export function App() {
   const [downloadMessage, setDownloadMessage] = useState("");
   const search = useRef<HTMLInputElement>(null);
   const toolbar = useRef<HTMLElement>(null);
+  const scrollPositions = useRef(new Map<string, number>());
+  useLayoutEffect(() => {
+    window.scrollTo({top: scrollPositions.current.get(`${view}:${songId}`) || 0});
+    if (view !== 'recordings') document.getElementById(songId ? 'song-title' : 'catalog-title')?.focus({preventScroll: true});
+  }, [view, songId]);
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch('data/catalog.json', { signal: controller.signal }).then(response => {
+      if (!response.ok) throw new Error('Could not load the song catalog.');
+      return response.json();
+    }).then(setCatalog).catch(error => { if (!controller.signal.aborted) setCatalogError(error.message); });
+    return () => controller.abort();
+  }, []);
+  function navigate(nextView: View, song = '') {
+    scrollPositions.current.set(`${view}:${songId}`, window.scrollY);
+    setView(nextView); setSongId(song);
+    history.pushState(null, '', catalogHref(location.href, nextView, song));
+  }
+  function playSongTake(row: Recording) {
+    setQuery(''); setMedia('all'); setSession('all');
+    history.replaceState(null, '', pathForSession(location.href, 'all'));
+    choose(row);
+  }
   useEffect(() => {
     const element = toolbar.current;
     if (!element) return;
@@ -118,7 +147,7 @@ export function App() {
     () => filterRows(rows, query, media, session, sort, ascending),
     [rows, query, media, session, sort, ascending],
   );
-  const active = visible.find((row) => row.file === selected) || visible[0];
+  const active = visible.find((row) => row.file === selected) || (view === 'recordings' ? visible[0] : undefined);
   const sessions = useMemo(() => groups(rows), [rows]);
   const takeNumbers = useMemo(
     () =>
@@ -154,6 +183,9 @@ export function App() {
   }, [visible, active?.file, rows]);
   useEffect(() => {
     function restore() {
+      scrollPositions.current.set(`${view}:${songId}`, window.scrollY);
+      const nextRoute = route(location.href);
+      setView(nextRoute.view); setSongId(nextRoute.song);
       const file = fileFromHash(location.hash, rows);
       // In-page anchors such as the skip link are not recording links.
       if (!file && document.getElementById(location.hash.slice(1))) return;
@@ -174,9 +206,10 @@ export function App() {
       window.removeEventListener("hashchange", restore);
       window.removeEventListener("popstate", restore);
     };
-  }, [rows]);
+  }, [rows, view, songId]);
   useEffect(() => {
     function typeToSearch(e: KeyboardEvent) {
+      if (view !== 'recordings') return;
       if (
         e.defaultPrevented ||
         e.isComposing ||
@@ -197,7 +230,7 @@ export function App() {
     }
     document.addEventListener("keydown", typeToSearch);
     return () => document.removeEventListener("keydown", typeToSearch);
-  }, []);
+  }, [view]);
   function changeSession(value: string) {
     setSession(value);
     setAutoPlay(false);
@@ -253,18 +286,27 @@ export function App() {
   const pageLink = new URL(location.href);
   if (active) pageLink.hash = hashForFile(active.file);
   return (
-    <>
-      <a className="skip-link" href="#recordings">
-        Skip to recordings
+    <div className={`music-shell view-${view}`}>
+      <a className="skip-link" href={view === 'recordings' ? '#recordings' : '#songbook'}>
+        {view === 'recordings' ? 'Skip to recordings' : 'Skip to songs'}
       </a>
+      <aside className="music-sidebar">
+        <a className="sidebar-brand" href={catalogHref(location.href, 'recordings')} onClick={e => { e.preventDefault(); navigate('recordings'); }}><span className="archive-mark" aria-hidden="true">VGM</span><span>Music Jam<br />Sessions</span></a>
+        <nav className="workspace-nav" aria-label="Music workspace">
+          {([['repertoire', 'Repertoire'], ['songs', 'Songs'], ['recordings', 'Recordings']] as const).map(([value, label]) => <a key={value} href={catalogHref(location.href, value)} aria-current={view === value ? 'page' : undefined} onClick={e => {e.preventDefault();navigate(value);}}><span>{label}</span><small>{value === 'songs' ? catalog?.songs.length ?? '—' : value === 'repertoire' ? catalog?.repertoire.length ?? '—' : rows.length}</small></a>)}
+        </nav>
+        <div className="sidebar-sessions"><p>Sessions</p>{sessions.map(([id, records]) => <a key={id} href={pathForSession(catalogHref(location.href, 'recordings'), id)} onClick={e => {e.preventDefault();navigate('recordings');changeSession(id);}} aria-current={view === 'recordings' && session === id ? 'true' : undefined}>{sessionDate(records[0])}<small>{records.length} takes</small></a>)}</div>
+        <p className="sidebar-footnote">Our songs.<br />Our takes.</p>
+      </aside>
+      <div className="music-main">
       <header className="masthead">
         <div className="identity">
           <span className="archive-mark" aria-hidden="true">
             VGM
           </span>
           <div>
-            <h1>Music Jam Sessions</h1>
-            <p>Recording archive · 2026</p>
+            <h1>{view === 'recordings' ? 'Recordings' : 'Music Jam Sessions'}</h1>
+            <p>{view === 'recordings' ? 'Recording archive · 2026' : 'Songbook · 2026'}</p>
           </div>
         </div>
         <div className="archive-utility">
@@ -277,7 +319,7 @@ export function App() {
         </div>
       </header>
       <main className={active ? "has-player" : ""}>
-        <section ref={toolbar} className="toolbar" aria-label="Search and filter recordings">
+        <section ref={toolbar} className="toolbar" aria-label="Search and filter recordings" hidden={view !== 'recordings'}>
           <label className="search-field">
             Search
             <input
@@ -330,11 +372,13 @@ export function App() {
           </div>
         ) : (
           <div className="workspace">
+            {view !== 'recordings' && <>{catalog ? <SongCatalog catalog={catalog} rows={rows} view={view} songId={songId} navigate={navigate} play={playSongTake} selected={active?.file} /> : <div className="empty-state" role={catalogError ? 'alert' : 'status'}>{catalogError || 'Loading songs…'}</div>}</>}
             <section
               id="recordings"
               className="ledger"
               aria-label="Recordings"
               tabIndex={-1}
+              hidden={view !== 'recordings'}
             >
               <div className="ledger-toolbar">
                 <p aria-live="polite">
@@ -606,11 +650,13 @@ export function App() {
                 playRequest={playRequest}
                 pageLink={pageLink.toString()}
                 onFilter={filter}
+                navigationKey={`${view}:${songId}:${session}`}
               />
             )}
           </div>
         )}
       </main>
-    </>
+      </div>
+    </div>
   );
 }

@@ -4,15 +4,16 @@
   "version": "1.0.0",
   "type": "module",
   "engines": {
-    "node": ">=22.6"
+    "node": ">=24"
   },
   "scripts": {
-    "dev": "node scripts/build.mjs --serve",
-    "build": "node scripts/build.mjs",
+    "dev": "npm run catalog && node scripts/build.mjs --serve",
+    "build": "npm run catalog && node scripts/build.mjs",
     "typecheck": "tsc --noEmit",
-    "test": "node --experimental-strip-types --test tests/*.test.ts && node scripts/test-ui.mjs && npm run test:browser",
+    "test": "node --experimental-strip-types --test tests/*.test.ts tests/catalog.test.mjs && node scripts/test-ui.mjs && npm run test:browser",
     "test:browser": "node --test tests/browser.test.mjs",
-    "check": "npm run typecheck && npm test && npm run build"
+    "check": "npm run typecheck && npm test && npm run build",
+    "catalog": "node --experimental-strip-types scripts/catalog.mjs"
   },
   "dependencies": {
     "react": "19.2.8",

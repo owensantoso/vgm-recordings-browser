@@ -12,6 +12,8 @@ type YoutubePlayer = {
   playVideo(): void;
   pauseVideo(): void;
   seekTo(time: number, allow: boolean): void;
+  cueVideoById(options: { videoId: string; startSeconds: number }): void;
+  getPlayerState(): number;
   getCurrentTime(): number;
   destroy(): void;
 };
@@ -72,18 +74,21 @@ export function Player({
   playRequest,
   pageLink,
   onFilter,
+  navigationKey = '',
 }: {
   row: Recording;
   autoPlay: boolean;
   playRequest: number;
   pageLink: string;
   onFilter(value: string): void;
+  navigationKey?: string;
 }) {
   const range = bounds(row);
   const [mode, setMode] = useState<"video" | "audio">(
     row.has_video === "yes" ? "video" : "audio",
   );
   const [expanded, setExpanded] = useState(false);
+  useEffect(() => { setExpanded(false); }, [navigationKey]);
   const [ready, setReady] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [time, setTime] = useState(range.start);
@@ -187,6 +192,7 @@ export function Player({
       };
     } else if (mode === "video" && row.youtube_video_id) {
       let player: YoutubePlayer | undefined;
+      let cuedPosition: number | undefined;
       void youtubeApi()
         .then((api) => {
           if (disposed || !container.current) return;
@@ -205,14 +211,25 @@ export function Player({
                 backend.current = {
                   play: () => player?.playVideo(),
                   pause: () => player?.pauseVideo(),
-                  seek: (t) => player?.seekTo(t, true),
-                  time: () => player?.getCurrentTime() || 0,
+                  seek: (t) => {
+                    if (!player) return;
+                    // YouTube seekTo starts playback from a cued/ended state.
+                    // Cue the requested position when our transport is paused.
+                    if (!wantsPlay.current && (cuedPosition !== undefined || player.getPlayerState() !== 2)) {
+                      cuedPosition = t;
+                      player.cueVideoById({ videoId: row.youtube_video_id, startSeconds: t });
+                    } else player.seekTo(t, true);
+                  },
+                  // Cue commands settle asynchronously; the provider can report
+                  // zero before Play even while its previous paused state remains.
+                  time: () => cuedPosition ?? (player?.getCurrentTime() || 0),
                 };
                 const iframe = container.current?.querySelector("iframe");
                 if (iframe) iframe.title = `${title(row)} — YouTube video`;
                 loaded();
               },
               onStateChange: (event) => {
+                if (event.data === 1) cuedPosition = undefined;
                 if (!disposed && [0, 1, 2].includes(event.data))
                   updatePlaying(event.data === 1);
               },
@@ -241,9 +258,9 @@ export function Player({
       const stop = fullMode.current ? range.full : range.end;
       if (playingRef.current && next >= stop - 0.1) {
         next = stop;
+        updatePlaying(false);
         backend.current.pause();
         backend.current.seek(stop);
-        updatePlaying(false);
       }
       position.current = next;
       setTime(next);

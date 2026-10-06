@@ -129,6 +129,36 @@ const filterBySong = async (page, value) => {
 };
 
 for (const name of Object.keys(viewports)) {
+  test(`${name}: song identity joins takes, empty repertoire and zero-take songs preserve playback`, {skip: !executablePath}, async () => {
+    const page = await open(name, `/?session=${SESSION_A}#SYN_0001`);
+    try {
+      await page.getByRole('button', {name: 'Play selected recording', exact: true}).click();
+      await page.waitForFunction(() => document.querySelector('.play-button')?.textContent === 'Pause');
+      await page.click('.expand-control');
+      assert.equal(await page.getAttribute('.expand-control', 'aria-expanded'), 'true');
+      await page.getByRole('link', {name: 'Songs 2', exact: true}).click();
+      assert.equal(await page.getAttribute('.expand-control', 'aria-expanded'), 'false', 'navigation collapses only the player presentation');
+      await page.getByRole('link', {name: /Alpha Song Alpha Quest II 2/}).click();
+      assert.equal(await page.locator('.song-take').count(), 2);
+      assert.match(await page.locator('.song-summary').innerText(), /2.*sessions/);
+      assert.equal(await page.locator('.play-button').innerText(), 'Pause');
+      assert.match(await page.locator('.song-credits').innerText(), /Not recorded/);
+      await page.getByRole('link', {name: 'Repertoire 0', exact: true}).click();
+      assert.match(await page.locator('.catalog-empty').innerText(), /No repertoire selected/);
+      assert.equal(await page.locator('.play-button').innerText(), 'Pause');
+      await page.getByRole('link', {name: 'Browse the songbook →', exact: true}).click();
+      await page.getByRole('link', {name: /Unrecorded Song/}).click();
+      assert.equal(await page.locator('.song-take').count(), 0);
+      assert.match(await page.locator('.song-content').innerText(), /No recordings yet/);
+      await page.reload();
+      await page.waitForSelector('#song-title');
+      assert.equal(await page.locator('#song-title').innerText(), 'Unrecorded Song');
+      assert.equal(await page.locator('.play-button').innerText(), 'Play', 'reload restores selection without autoplay');
+      assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+      await page.shot('songbook');
+      assert.equal(page.errors.length, 0, page.errors.join('\n'));
+    } finally { await page.context().close(); }
+  });
   test(`${name}: expanding after scrolling keeps the player heading and controls visible`, { skip: !executablePath }, async () => {
     const page = await open(name, '/');
     try {
@@ -257,7 +287,9 @@ for (const name of Object.keys(viewports)) {
       const pinned = () => page.waitForFunction(() => {
         const toolbar = document.querySelector('.toolbar').getBoundingClientRect();
         const band = document.querySelector('.session-band').getBoundingClientRect();
-        return Math.abs(toolbar.top) < 1 && Math.abs(band.top - toolbar.bottom) < 1;
+        const nav = document.querySelector('.workspace-nav').getBoundingClientRect();
+        const navOffset = innerWidth <= 860 ? nav.bottom : 0;
+        return Math.abs(toolbar.top - navOffset) < 1 && Math.abs(band.top - toolbar.bottom) < 1;
       }, null, { timeout: 1500 });
       await pinned();
       await page.setViewportSize(name === 'desktop' ? viewports.mobile : viewports.desktop);

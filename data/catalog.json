@@ -1,0 +1,222 @@
+{
+  "version": 1,
+  "songs": [
+    {
+      "id": "vgm-beneath-the-mask",
+      "title": "Beneath the Mask",
+      "game": "Persona 5",
+      "franchise": "Persona",
+      "composer": null
+    },
+    {
+      "id": "vgm-bob-omb-battlefield",
+      "title": "Bob-omb Battlefield",
+      "game": "Super Mario 64",
+      "franchise": "Super Mario",
+      "composer": null
+    },
+    {
+      "id": "vgm-coconut-mall",
+      "title": "Coconut Mall",
+      "game": "Mario Kart Wii",
+      "franchise": "Mario Kart",
+      "composer": null
+    },
+    {
+      "id": "vgm-dire-dire-docks",
+      "title": "Dire, Dire Docks",
+      "game": "Super Mario 64",
+      "franchise": "Super Mario",
+      "composer": null
+    },
+    {
+      "id": "vgm-dragon-roost-island",
+      "title": "Dragon Roost Island",
+      "game": "The Legend of Zelda: The Wind Waker",
+      "franchise": "The Legend of Zelda",
+      "composer": null
+    },
+    {
+      "id": "vgm-gourmet-race",
+      "title": "Gourmet Race",
+      "game": "Kirby Super Star",
+      "franchise": "Kirby",
+      "composer": null
+    },
+    {
+      "id": "vgm-life-will-change",
+      "title": "Life Will Change",
+      "game": "Persona 5",
+      "franchise": "Persona",
+      "composer": null
+    },
+    {
+      "id": "vgm-megalovania",
+      "title": "Megalovania",
+      "game": "Undertale",
+      "franchise": "Undertale",
+      "composer": null
+    },
+    {
+      "id": "vgm-meta-knights-revenge",
+      "title": "Meta Knight's Revenge",
+      "game": "Kirby Super Star",
+      "franchise": "Kirby",
+      "composer": null
+    },
+    {
+      "id": "vgm-underground-theme-mario-kart-world",
+      "title": "Underground Theme",
+      "game": "Mario Kart World",
+      "franchise": "Super Mario",
+      "composer": null
+    },
+    {
+      "id": "vgm-when-mother-was-there",
+      "title": "When Mother Was There",
+      "game": "Persona 5",
+      "franchise": "Persona",
+      "composer": null
+    },
+    {
+      "id": "vgm-yoshi-circuit-double-dash",
+      "title": "Yoshi Circuit",
+      "game": "Mario Kart: Double Dash!!",
+      "franchise": "Mario Kart",
+      "composer": null
+    },
+    {
+      "id": "vgm-you-will-know-our-names",
+      "title": "You Will Know Our Names",
+      "game": "Xenoblade Chronicles",
+      "franchise": "Xenoblade Chronicles",
+      "composer": null
+    }
+  ],
+  "sessions": [
+    {
+      "id": "2026-07-26-shimokitazawa-vgm-session",
+      "label": "2026-07-26 Shimokitazawa VGM Session",
+      "date": "2026-07-26"
+    },
+    {
+      "id": "2026-05-31-shimokitazawa-first-vgm-session",
+      "label": "2026-05-31 Shimokitazawa First VGM Session",
+      "date": "2026-05-31"
+    }
+  ],
+  "recordings": [
+    {
+      "file": "IMG_5934 Persona The Dya when my mother was there.MOV",
+      "session_id": "2026-07-26-shimokitazawa-vgm-session",
+      "song_id": "vgm-when-mother-was-there"
+    },
+    {
+      "file": "IMG_5936 xenoblade You will know our names_1.MOV",
+      "session_id": "2026-07-26-shimokitazawa-vgm-session",
+      "song_id": "vgm-you-will-know-our-names"
+    },
+    {
+      "file": "IMG_5937 xenoblade You will know our names_2.MOV",
+      "session_id": "2026-07-26-shimokitazawa-vgm-session",
+      "song_id": "vgm-you-will-know-our-names"
+    },
+    {
+      "file": "IMG_5939 kirby metaknight.MOV",
+      "session_id": "2026-07-26-shimokitazawa-vgm-session",
+      "song_id": "vgm-meta-knights-revenge"
+    },
+    {
+      "file": "IMG_5940 SM64 dire dire docks.MOV",
+      "session_id": "2026-07-26-shimokitazawa-vgm-session",
+      "song_id": "vgm-dire-dire-docks"
+    },
+    {
+      "file": "IMG_5941 Persona 5 Life Will Change.MOV",
+      "session_id": "2026-07-26-shimokitazawa-vgm-session",
+      "song_id": "vgm-life-will-change"
+    },
+    {
+      "file": "IMG_5942 MKWorld Underground Theme.MOV",
+      "session_id": "2026-07-26-shimokitazawa-vgm-session",
+      "song_id": "vgm-underground-theme-mario-kart-world"
+    },
+    {
+      "file": "IMG_5943 Coconut Mall.MOV",
+      "session_id": "2026-07-26-shimokitazawa-vgm-session",
+      "song_id": "vgm-coconut-mall"
+    },
+    {
+      "file": "IMG_5944 MKart Yoshi Circuit.MOV",
+      "session_id": "2026-07-26-shimokitazawa-vgm-session",
+      "song_id": "vgm-yoshi-circuit-double-dash"
+    },
+    {
+      "file": "IMG_7787.MOV",
+      "session_id": "2026-05-31-shimokitazawa-first-vgm-session",
+      "song_id": null
+    },
+    {
+      "file": "IMG_7788.MOV",
+      "session_id": "2026-05-31-shimokitazawa-first-vgm-session",
+      "song_id": "vgm-yoshi-circuit-double-dash"
+    },
+    {
+      "file": "IMG_7789.MOV",
+      "session_id": "2026-05-31-shimokitazawa-first-vgm-session",
+      "song_id": null
+    },
+    {
+      "file": "IMG_7790.MOV",
+      "session_id": "2026-05-31-shimokitazawa-first-vgm-session",
+      "song_id": null
+    },
+    {
+      "file": "IMG_7791.MOV",
+      "session_id": "2026-05-31-shimokitazawa-first-vgm-session",
+      "song_id": null
+    },
+    {
+      "file": "IMG_7792.MOV",
+      "session_id": "2026-05-31-shimokitazawa-first-vgm-session",
+      "song_id": null
+    },
+    {
+      "file": "IMG_7793.MOV",
+      "session_id": "2026-05-31-shimokitazawa-first-vgm-session",
+      "song_id": "vgm-dragon-roost-island"
+    },
+    {
+      "file": "IMG_7794.MOV",
+      "session_id": "2026-05-31-shimokitazawa-first-vgm-session",
+      "song_id": "vgm-megalovania"
+    },
+    {
+      "file": "IMG_7795.MOV",
+      "session_id": "2026-05-31-shimokitazawa-first-vgm-session",
+      "song_id": null
+    },
+    {
+      "file": "IMG_7796.MOV",
+      "session_id": "2026-05-31-shimokitazawa-first-vgm-session",
+      "song_id": "vgm-beneath-the-mask"
+    },
+    {
+      "file": "IMG_7797.MOV",
+      "session_id": "2026-05-31-shimokitazawa-first-vgm-session",
+      "song_id": null
+    },
+    {
+      "file": "IMG_7798.MOV",
+      "session_id": "2026-05-31-shimokitazawa-first-vgm-session",
+      "song_id": "vgm-bob-omb-battlefield"
+    },
+    {
+      "file": "IMG_7799.MOV",
+      "session_id": "2026-05-31-shimokitazawa-first-vgm-session",
+      "song_id": "vgm-gourmet-race"
+    }
+  ],
+  "references": [],
+  "repertoire": []
+}

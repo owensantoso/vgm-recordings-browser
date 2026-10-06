@@ -990,3 +990,98 @@ mark {
     font-size: 32px;
   }
 }
+
+/* The songbook extends the ruled archive; media lifetime stays in App. */
+[hidden] { display: none !important; }
+.music-shell { display: grid; grid-template-columns: 180px minmax(0, 1fr); min-height: 100vh; }
+.music-main { min-width: 0; }
+.music-sidebar { background: #e9ede7; border-right: 1px solid var(--rule); padding: 30px 18px; position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; gap: 32px; }
+.sidebar-brand { display: flex; flex-direction: column; gap: 16px; text-decoration: none; font: 22px/1.1 Georgia, serif; }
+.sidebar-brand .archive-mark { align-self: flex-start; }
+.workspace-nav { display: grid; gap: 5px; }
+.workspace-nav a { display: flex; justify-content: space-between; align-items: center; min-height: 44px; padding: 10px 12px; text-decoration: none; font-size: 15px; border-left: 3px solid transparent; }
+.workspace-nav a[aria-current] { background: var(--paper); border-left-color: var(--accent); color: var(--accent); }
+.workspace-nav small, .sidebar-sessions small { font: 12px monospace; color: var(--muted); }
+.sidebar-sessions { display: grid; gap: 3px; }
+.sidebar-sessions p, .eyebrow { font: 11px/1.5 monospace; text-transform: uppercase; letter-spacing: 1.4px; color: var(--muted); }
+.sidebar-sessions p { padding: 0 12px 8px; }
+.sidebar-sessions a { display: flex; flex-direction: column; gap: 6px; padding: 12px; text-decoration: none; font-size: 13px; }
+.sidebar-sessions a[aria-current] { color: var(--accent); background: var(--selected); }
+.sidebar-footnote { margin-top: auto; padding: 12px; font: italic 18px/1.4 Georgia, serif; color: var(--muted); }
+.music-shell .masthead { padding: 24px; }
+.music-shell main { padding-left: 24px; padding-right: 24px; }
+.view-songs .masthead .identity, .view-repertoire .masthead .identity { display: none; }
+.view-songs .masthead, .view-repertoire .masthead { justify-content: flex-end; padding-top: 18px; padding-bottom: 18px; }
+.song-content { min-width: 0; padding: 28px 26px 40px 0; border-right: 1px solid var(--rule); }
+.catalog-heading { display: flex; justify-content: space-between; align-items: flex-end; gap: 20px; margin-bottom: 28px; }
+.catalog-heading h1, .song-heading h1 { font: 36px/1.15 Georgia, serif; margin: 7px 0; letter-spacing: -0.8px; }
+.catalog-heading > span, .song-summary, .take-count { color: var(--muted); font: 13px/1.6 monospace; }
+.catalog-search { margin-bottom: 24px; }
+.song-list, .song-takes, .reference-list { list-style: none; padding: 0; margin: 0; }
+.song-list-heading { display: flex; justify-content: space-between; font: 11px monospace; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); padding: 12px 10px; border-bottom: 1px solid var(--ink); }
+.song-list li { border-bottom: 1px solid var(--rule); }
+.song-list a { display: flex; justify-content: space-between; align-items: center; padding: 17px 10px; gap: 16px; text-decoration: none; min-height: 74px; }
+.song-list strong { font-size: 17px; font-weight: 500; }
+.song-list small, .song-take small, .reference-list small { display: block; color: var(--muted); font-size: 13px; line-height: 1.5; margin-top: 5px; }
+.take-count { white-space: nowrap; }
+.take-count > span { margin-left: 18px; color: var(--accent); }
+.back-link { display: inline-flex; align-items: center; min-height: 44px; color: var(--accent); text-decoration: none; font-size: 14px; margin-bottom: 20px; }
+.song-heading > p:last-child { color: var(--muted); font-size: 15px; line-height: 1.5; }
+.song-summary { display: flex; gap: 24px; padding: 18px 0; border-bottom: 1px solid var(--rule); }
+.song-credits { display: grid; grid-template-columns: 90px 1fr; font-size: 14px; gap: 16px; padding: 20px 0; margin: 0; }
+.song-credits dt { color: var(--muted); }
+.song-credits dd { margin: 0; }
+.song-section { margin: 20px 0 30px; }
+.song-section h3 { font-size: 16px; font-weight: 500; padding-bottom: 12px; border-bottom: 1px solid var(--ink); margin: 0; display: flex; justify-content: space-between; }
+.song-section h3 span { color: var(--muted); font: 13px monospace; }
+.quiet-note { padding: 15px 0; font-size: 14px; color: var(--muted); line-height: 1.6; }
+.song-takes li { border-bottom: 1px solid var(--rule); }
+.song-take { display: flex; width: 100%; align-items: center; gap: 12px; border: 0; border-radius: 0; padding: 16px 0; text-align: left; }
+.song-take > span:nth-child(2) { min-width: 0; flex: 1; }
+.song-take strong { font-size: 15px; font-weight: 500; }
+.song-take small { overflow-wrap: anywhere; }
+.song-take img { object-fit: cover; flex-shrink: 0; border-radius: 2px; }
+.song-take .duration { flex-shrink: 0; }
+.song-take[aria-current] { background: var(--selected); }
+.reference-list li { padding: 14px 0; border-bottom: 1px solid var(--rule); }
+.song-identity { color: var(--muted); font-size: 12px; padding-top: 20px; }
+.song-identity summary { cursor: pointer; min-height: 44px; }
+.song-identity code { overflow-wrap: anywhere; }
+.catalog-empty { padding: 34px 0; max-width: 500px; }
+.catalog-empty h3 { font: 25px/1.3 Georgia, serif; margin: 0 0 14px; }
+.catalog-empty p { font-size: 15px; color: var(--muted); line-height: 1.6; margin-bottom: 22px; }
+.catalog-empty a { color: var(--accent); display: inline-block; padding: 12px 0; }
+.workspace:not(:has(.player)) { grid-template-columns: minmax(0, 1fr); }
+.workspace:not(:has(.player)) .song-content { border-right: 0; max-width: 880px; }
+.workspace:has(.player.expanded) .song-content { display: none; }
+@media (min-width: 1101px) and (max-width: 1399px) {
+  .music-shell .workspace { grid-template-columns: minmax(0, 1fr) 310px; }
+  .music-shell .recording-row { gap: 10px; }
+  .music-shell .ledger { padding-right: 18px; }
+  .music-shell .player { padding-left: 18px; }
+  .music-shell .session-band { flex-wrap: wrap; }
+}
+@media (max-width: 1100px) and (min-width: 861px) {
+  .music-shell { grid-template-columns: 155px minmax(0, 1fr); }
+  .song-content { border-right: 0; padding-right: 0; }
+}
+@media (max-width: 860px) {
+  .music-shell { display: block; }
+  .music-sidebar { position: sticky; top: 0; height: auto; z-index: 5; padding: 0 16px; display: block; border-right: 0; border-bottom: 1px solid var(--rule); }
+  .sidebar-brand, .sidebar-sessions, .sidebar-footnote { display: none; }
+  .workspace-nav { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; }
+  .workspace-nav a { justify-content: center; gap: 8px; padding: 14px 5px; border-left: 0; border-bottom: 3px solid transparent; font-size: 14px; min-height: 52px; }
+  .workspace-nav a[aria-current] { border-bottom-color: var(--accent); border-left: 0; }
+  .music-shell .toolbar { top: 52px; }
+  .music-shell .session-band { top: calc(52px + var(--toolbar-height, 0px)); }
+  .music-shell .player { z-index: 6; }
+  .music-shell .masthead { padding: 20px 16px; }
+  .music-shell main { padding-left: 16px; padding-right: 16px; }
+  .music-shell h1 { font-size: 28px; }
+  .song-content { padding: 26px 0 40px; border: 0; }
+  .catalog-heading h1, .song-heading h1 { font-size: 31px; }
+  .song-list a { padding-left: 0; padding-right: 0; }
+  .song-take img { width: 54px; height: 38px; }
+  .song-take { gap: 10px; }
+  .song-take .duration { font-size: 12px; }
+}
