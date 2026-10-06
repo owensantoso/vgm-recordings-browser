@@ -16,6 +16,7 @@
     "catalog": "node --experimental-strip-types scripts/catalog.mjs"
   },
   "dependencies": {
+    "lucide-react": "1.52.0",
     "react": "19.2.8",
     "react-dom": "19.2.8"
   },

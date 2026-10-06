@@ -3,7 +3,7 @@ import { cp, mkdir, rm } from "node:fs/promises";
 
 await rm("dist", { recursive: true, force: true });
 await mkdir("dist", { recursive: true });
-for (const path of ["index.html", "data", "audio", "thumbs", "icons"]) {
+for (const path of ["index.html", "THIRD_PARTY_NOTICES.md", "data", "audio", "thumbs", "icons"]) {
   try {
     await cp(path, `dist/${path}`, { recursive: true });
   } catch (error) {

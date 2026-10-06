@@ -1,662 +1,410 @@
-import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Player } from "./Player";
-import { SongCatalog, catalogHref, route } from './Catalog';
-import type { CatalogData, View } from './Catalog';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
-  driveDownload,
-  fileFromHash,
-  filterRows,
-  formatTime,
-  groups,
-  hashForFile,
-  parseCsv,
-  pathForSession,
-  searchFields,
-  sessionDriveUrls,
-  sessionFromHref,
-  title,
-  validSession,
-} from "./recordings";
-import type { MediaFilter, Recording, SortKey } from "./recordings";
+  AudioLines,
+  CalendarDays,
+  Disc3,
+  FileMusic,
+  ListMusic,
+  Search,
+  X,
+} from "lucide-react";
+import { Player } from "./Player";
+import { catalogHref, route } from "./Catalog";
+import type { CatalogData, SongReference, View } from "./Catalog";
+import {
+  PageHeader,
+  SearchPage,
+  SessionsPage,
+  SongPage,
+  SongsPage,
+  TakesPage,
+} from "./Library";
+import { referenceRow } from "./musicLibrary";
+import { fileFromHash, parseCsv } from "./recordings";
+import type { Recording } from "./recordings";
 
-function Highlight({ value, query }: { value: string; query: string }) {
-  const needle = query.trim().toLocaleLowerCase();
-  if (!needle) return <>{value}</>;
-  const parts = [];
-  let cursor = 0;
-  let index = value.toLocaleLowerCase().indexOf(needle);
-  while (index >= 0) {
-    parts.push(
-      <Fragment key={cursor}>
-        {value.slice(cursor, index)}
-        <mark>{value.slice(index, index + needle.length)}</mark>
-      </Fragment>,
-    );
-    cursor = index + needle.length;
-    index = value.toLocaleLowerCase().indexOf(needle, cursor);
-  }
-  return (
-    <>
-      {parts}
-      {value.slice(cursor)}
-    </>
-  );
-}
-function sessionName(row: Recording) {
-  return row.session_label.replace(/^\d{4}-\d{2}-\d{2}\s*/, "");
-}
-function sessionDate(row: Recording) {
-  return new Intl.DateTimeFormat("en-GB", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    timeZone: "UTC",
-  }).format(new Date(`${row.recorded_create_date.slice(0, 10)}T00:00:00Z`));
-}
 export function App() {
   const [catalog, setCatalog] = useState<CatalogData | null>(null);
-  const [catalogError, setCatalogError] = useState('');
-  const [view, setView] = useState<View>(route(location.href).view);
-  const [songId, setSongId] = useState(route(location.href).song);
+  const [catalogError, setCatalogError] = useState("");
   const [rows, setRows] = useState<Recording[]>([]);
+  const [archiveError, setArchiveError] = useState("");
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
   const [reload, setReload] = useState(0);
-  const [query, setQuery] = useState("");
-  const [media, setMedia] = useState<MediaFilter>("all");
-  const [session, setSession] = useState(sessionFromHref(location.href));
-  const [sort, setSort] = useState<SortKey>("take");
-  const [ascending, setAscending] = useState(false);
-  const [selected, setSelected] = useState("");
+  const [browse, setBrowse] = useState(() => route(location.href));
+  const [selected, setSelected] = useState(
+    () => new URL(location.href).searchParams.get("play") || "",
+  );
+  const selectedRef = useRef(selected);
   const [autoPlay, setAutoPlay] = useState(false);
   const [playRequest, setPlayRequest] = useState(0);
-  const [selecting, setSelecting] = useState(false);
-  const [downloads, setDownloads] = useState<Set<string>>(new Set());
-  const [downloadMessage, setDownloadMessage] = useState("");
   const search = useRef<HTMLInputElement>(null);
-  const toolbar = useRef<HTMLElement>(null);
-  const scrollPositions = useRef(new Map<string, number>());
-  useLayoutEffect(() => {
-    window.scrollTo({top: scrollPositions.current.get(`${view}:${songId}`) || 0});
-    if (view !== 'recordings') document.getElementById(songId ? 'song-title' : 'catalog-title')?.focus({preventScroll: true});
-  }, [view, songId]);
+  const main = useRef<HTMLElement>(null);
+  const [videoOpen, setVideoOpen] = useState(false);
+  const origin = useRef(
+    history.state?.searchOrigin &&
+      route(history.state.searchOrigin).view !== "search"
+      ? history.state.searchOrigin
+      : route(location.href).view === "search"
+        ? catalogHref(location.href, "songs")
+        : location.href,
+  );
+  const scrolls = useRef(new Map<string, number>());
+  const hydrated = useRef(false);
+  const routeKey = `${browse.view}:${browse.song}:${browse.session}`;
+  const dock = new URL(location.href).searchParams.get("layout") === "dock";
+
   useEffect(() => {
     const controller = new AbortController();
-    fetch('data/catalog.json', { signal: controller.signal }).then(response => {
-      if (!response.ok) throw new Error('Could not load the song catalog.');
-      return response.json();
-    }).then(setCatalog).catch(error => { if (!controller.signal.aborted) setCatalogError(error.message); });
+    fetch("data/catalog.json", { signal: controller.signal })
+      .then((response) => {
+        if (!response.ok) throw new Error("Could not load the songbook.");
+        return response.json();
+      })
+      .then(setCatalog)
+      .catch((e: Error) => {
+        if (!controller.signal.aborted) setCatalogError(e.message);
+      });
     return () => controller.abort();
-  }, []);
-  function navigate(nextView: View, song = '') {
-    scrollPositions.current.set(`${view}:${songId}`, window.scrollY);
-    setView(nextView); setSongId(song);
-    history.pushState(null, '', catalogHref(location.href, nextView, song));
-  }
-  function playSongTake(row: Recording) {
-    setQuery(''); setMedia('all'); setSession('all');
-    history.replaceState(null, '', pathForSession(location.href, 'all'));
-    choose(row);
-  }
-  useEffect(() => {
-    const element = toolbar.current;
-    if (!element) return;
-    const measure = () => element.parentElement?.style.setProperty(
-      "--toolbar-height", `${element.getBoundingClientRect().height}px`,
-    );
-    measure();
-    const observer = typeof ResizeObserver === "undefined" ? undefined : new ResizeObserver(measure);
-    observer?.observe(element);
-    window.addEventListener("resize", measure);
-    return () => {
-      observer?.disconnect();
-      window.removeEventListener("resize", measure);
-    };
   }, []);
   useEffect(() => {
     const controller = new AbortController();
     setLoading(true);
-    setError("");
+    setArchiveError("");
     fetch("data/recordings.csv", { signal: controller.signal })
       .then((response) => {
-        if (!response.ok)
-          throw new Error("Could not load the recording archive.");
+        if (!response.ok) throw new Error("Could not load the take archive.");
         return response.text();
       })
       .then((text) => {
         const records = parseCsv(text);
-        const restored = validSession(sessionFromHref(location.href), [
-          "all",
-          ...records.map((row) => row.session_id),
-        ]);
-        history.replaceState(null, "", pathForSession(location.href, restored));
         setRows(records);
-        setSession(restored);
-        setSelected(fileFromHash(location.hash, records));
         setLoading(false);
+        if (!hydrated.current) {
+          hydrated.current = true;
+          const legacy = fileFromHash(location.hash, records);
+          if (!selectedRef.current && legacy) {
+            selectedRef.current = legacy;
+            setSelected(legacy);
+            const url = new URL(location.href);
+            url.searchParams.set("play", legacy);
+            url.searchParams.set("view", route(location.href).view);
+            url.hash = "";
+            history.replaceState(history.state, "", url);
+          }
+        }
       })
       .catch((e: Error) => {
         if (!controller.signal.aborted) {
-          setError(e.message);
+          setArchiveError(e.message);
           setLoading(false);
         }
       });
     return () => controller.abort();
   }, [reload]);
-  const visible = useMemo(
-    () => filterRows(rows, query, media, session, sort, ascending),
-    [rows, query, media, session, sort, ascending],
-  );
-  const active = visible.find((row) => row.file === selected) || (view === 'recordings' ? visible[0] : undefined);
-  const sessions = useMemo(() => groups(rows), [rows]);
-  const takeNumbers = useMemo(
-    () =>
-      new Map(
-        groups(rows).flatMap(([, records]) =>
-          [...records]
-            .sort(
-              (a, b) =>
-                a.recorded_create_date.localeCompare(b.recorded_create_date) ||
-                a.file.localeCompare(b.file),
-            )
-            .map(
-              (row, i) => [row.file, String(i + 1).padStart(2, "0")] as const,
-            ),
-        ),
-      ),
-    [rows],
-  );
-  const chosen = visible.filter((row) => downloads.has(row.file));
-  useEffect(() => {
-    const files = new Set(visible.map((row) => row.file));
-    setDownloads(
-      (previous) => new Set([...previous].filter((file) => files.has(file))),
-    );
-    if (active) {
-      setSelected(active.file);
-      if (location.hash && fileFromHash(location.hash, rows) !== active.file) {
-        const url = new URL(location.href);
-        url.hash = hashForFile(active.file);
-        history.replaceState(null, "", url);
-      }
-    }
-  }, [visible, active?.file, rows]);
+  useLayoutEffect(() => {
+    main.current?.scrollTo({ top: scrolls.current.get(routeKey) || 0 });
+  }, [routeKey]);
   useEffect(() => {
     function restore() {
-      scrollPositions.current.set(`${view}:${songId}`, window.scrollY);
-      const nextRoute = route(location.href);
-      setView(nextRoute.view); setSongId(nextRoute.song);
-      const file = fileFromHash(location.hash, rows);
-      // In-page anchors such as the skip link are not recording links.
-      if (!file && document.getElementById(location.hash.slice(1))) return;
-      const value = validSession(sessionFromHref(location.href), [
-        "all",
-        ...rows.map((row) => row.session_id),
-      ]);
-      history.replaceState(null, "", pathForSession(location.href, value));
-      setSession(value);
-      setQuery("");
-      setMedia("all");
-      setSelected(file);
-      setAutoPlay(false);
+      // History owns browsing; a previous route must never replace live playback.
+      const url = new URL(location.href);
+      selectedRef.current
+        ? url.searchParams.set("play", selectedRef.current)
+        : url.searchParams.delete("play");
+      if (fileFromHash(url.hash, rows)) {
+        url.searchParams.set("view", route(url.toString()).view);
+        url.hash = "";
+      }
+      history.replaceState(history.state, "", url);
+      setBrowse(route(url.toString()));
+      if (history.state?.searchOrigin)
+        origin.current = history.state.searchOrigin;
     }
-    window.addEventListener("hashchange", restore);
+    function hash() {
+      const file = fileFromHash(location.hash, rows);
+      if (file) {
+        select(file, false);
+      }
+    }
     window.addEventListener("popstate", restore);
+    window.addEventListener("hashchange", hash);
     return () => {
-      window.removeEventListener("hashchange", restore);
       window.removeEventListener("popstate", restore);
+      window.removeEventListener("hashchange", hash);
     };
-  }, [rows, view, songId]);
+  }, [rows]);
+  function navigate(view: View, song = "", session = "") {
+    scrolls.current.set(routeKey, main.current?.scrollTop || 0);
+    const href = catalogHref(location.href, view, song, session);
+    history.pushState(null, "", href);
+    setBrowse(route(href));
+  }
+  function searchFor(q: string) {
+    if (!q.trim()) {
+      if (browse.view === "search") clearSearch();
+      return;
+    }
+    const starting = browse.view !== "search";
+    if (starting) {
+      origin.current = location.href;
+      scrolls.current.set(routeKey, main.current?.scrollTop || 0);
+    }
+    const href = catalogHref(location.href, "search", "", "", q);
+    history[starting ? "pushState" : "replaceState"](
+      { searchOrigin: origin.current },
+      "",
+      href,
+    );
+    setBrowse(route(href));
+  }
+  function clearSearch() {
+    const url = new URL(origin.current);
+    selectedRef.current
+      ? url.searchParams.set("play", selectedRef.current)
+      : url.searchParams.delete("play");
+    history.replaceState(null, "", url);
+    setBrowse(route(url.toString()));
+    search.current?.focus();
+  }
+  function select(id: string, play = true) {
+    selectedRef.current = id;
+    setSelected(id);
+    setAutoPlay(play);
+    setPlayRequest((current) => current + 1);
+    const url = new URL(location.href);
+    url.searchParams.set("play", id);
+    url.hash = "";
+    history.replaceState(history.state, "", url);
+  }
   useEffect(() => {
-    function typeToSearch(e: KeyboardEvent) {
-      if (view !== 'recordings') return;
+    function key(event: KeyboardEvent) {
       if (
-        e.defaultPrevented ||
-        e.isComposing ||
-        e.keyCode === 229 ||
-        e.ctrlKey ||
-        e.metaKey ||
-        e.altKey ||
-        e.key.length !== 1 ||
-        e.key === " " ||
-        (e.target instanceof Element &&
-          e.target.closest("input,select,textarea,button,a,[contenteditable]"))
+        event.defaultPrevented ||
+        event.isComposing ||
+        event.keyCode === 229 ||
+        event.ctrlKey ||
+        event.metaKey ||
+        event.altKey
       )
         return;
-      e.preventDefault();
-      search.current?.focus();
-      setQuery((q) => q + e.key);
-      setAutoPlay(false);
+      const interactive =
+        event.target instanceof Element &&
+        event.target.closest(
+          "input,textarea,select,button,a,[contenteditable]",
+        );
+      if (event.key === "/" && !interactive) {
+        event.preventDefault();
+        search.current?.focus();
+      }
+      if (
+        event.key === "Escape" &&
+        event.target === search.current &&
+        browse.view === "search"
+      ) {
+        event.preventDefault();
+        clearSearch();
+      }
     }
-    document.addEventListener("keydown", typeToSearch);
-    return () => document.removeEventListener("keydown", typeToSearch);
-  }, [view]);
-  function changeSession(value: string) {
-    setSession(value);
-    setAutoPlay(false);
-    history.replaceState(null, "", pathForSession(location.href, value));
-  }
-  function filter(value: string) {
-    setQuery(value);
-    setAutoPlay(false);
-  }
-  function changeSort(value: SortKey) {
-    setAscending(sort === value ? !ascending : value === "recording");
-    setSort(value);
-  }
-  function choose(row: Recording) {
-    setSelected(row.file);
-    setAutoPlay(true);
-    setPlayRequest((n) => n + 1);
-    const url = new URL(location.href);
-    url.hash = hashForFile(row.file);
-    history.replaceState(null, "", url);
-  }
-  function toggleDownload(file: string) {
-    setDownloads((current) => {
-      const next = new Set(current);
-      if (next.has(file)) next.delete(file);
-      else next.add(file);
-      return next;
-    });
-  }
-  function download() {
-    chosen.forEach((row) => {
-      const link = document.createElement("a");
-      link.href = driveDownload(row.video_file_id || row.audio_file_id);
-      link.target = "_blank";
-      link.rel = "noopener noreferrer";
-      link.download = "";
-      document.body.append(link);
-      link.click();
-      link.remove();
-    });
-    setDownloadMessage(
-      "Downloads requested. If your browser blocks multiple downloads, use the individual links below.",
-    );
-  }
-  const total = rows.reduce(
-    (sum, row) => sum + Number(row.duration_seconds),
-    0,
+    document.addEventListener("keydown", key);
+    return () => document.removeEventListener("keydown", key);
+  });
+  const refItem = catalog?.references.find(
+    (ref) => `ref:${ref.id}` === selected,
   );
-  const currentTotal = visible.reduce(
-    (sum, row) => sum + Number(row.duration_seconds),
-    0,
+  const refSong = catalog?.songs.find((song) => song.id === refItem?.song_id);
+  const active = useMemo(
+    () =>
+      refItem && refSong
+        ? referenceRow(refItem, refSong)
+        : rows.find((row) => row.file === selected),
+    [rows, selected, refItem, refSong],
   );
-  const pageLink = new URL(location.href);
-  if (active) pageLink.hash = hashForFile(active.file);
+  const takeLink = catalog?.recordings.find((row) => row.file === selected);
+  const activeSong =
+    refSong || catalog?.songs.find((song) => song.id === takeLink?.song_id);
+  const props = {
+    catalog,
+    rows,
+    navigate,
+    play: (row: Recording) => select(row.file),
+    playReference: (reference: SongReference) => select(`ref:${reference.id}`),
+    active: selected,
+  };
+  const nav = [
+    ["songs", "Songs", FileMusic],
+    ["repertoire", "Repertoire", ListMusic],
+    ["recordings", "Our takes", AudioLines],
+    ["sessions", "Sessions", CalendarDays],
+  ] as const;
+  const currentNav = browse.view === "search" ? "" : browse.view;
   return (
-    <div className={`music-shell view-${view}`}>
-      <a className="skip-link" href={view === 'recordings' ? '#recordings' : '#songbook'}>
-        {view === 'recordings' ? 'Skip to recordings' : 'Skip to songs'}
+    <div
+      className={`app-shell ${dock ? "layout-dock" : "layout-rail"} ${videoOpen ? "media-open" : ""}`}
+    >
+      <a className="skip-link" href="#main-content">
+        Skip to library
       </a>
-      <aside className="music-sidebar">
-        <a className="sidebar-brand" href={catalogHref(location.href, 'recordings')} onClick={e => { e.preventDefault(); navigate('recordings'); }}><span className="archive-mark" aria-hidden="true">VGM</span><span>Music Jam<br />Sessions</span></a>
-        <nav className="workspace-nav" aria-label="Music workspace">
-          {([['repertoire', 'Repertoire'], ['songs', 'Songs'], ['recordings', 'Recordings']] as const).map(([value, label]) => <a key={value} href={catalogHref(location.href, value)} aria-current={view === value ? 'page' : undefined} onClick={e => {e.preventDefault();navigate(value);}}><span>{label}</span><small>{value === 'songs' ? catalog?.songs.length ?? '—' : value === 'repertoire' ? catalog?.repertoire.length ?? '—' : rows.length}</small></a>)}
-        </nav>
-        <div className="sidebar-sessions"><p>Sessions</p>{sessions.map(([id, records]) => <a key={id} href={pathForSession(catalogHref(location.href, 'recordings'), id)} onClick={e => {e.preventDefault();navigate('recordings');changeSession(id);}} aria-current={view === 'recordings' && session === id ? 'true' : undefined}>{sessionDate(records[0])}<small>{records.length} takes</small></a>)}</div>
-        <p className="sidebar-footnote">Our songs.<br />Our takes.</p>
-      </aside>
-      <div className="music-main">
-      <header className="masthead">
-        <div className="identity">
-          <span className="archive-mark" aria-hidden="true">
-            VGM
+      <nav className="workspace-nav" aria-label="Music workspace">
+        <a
+          className="brand"
+          aria-label="VGM music workspace"
+          href={catalogHref(location.href, "songs")}
+          onClick={(e) => {
+            e.preventDefault();
+            navigate("songs");
+          }}
+        >
+          <span className="brand-symbol">
+            <Disc3 size={25} />
           </span>
-          <div>
-            <h1>{view === 'recordings' ? 'Recordings' : 'Music Jam Sessions'}</h1>
-            <p>{view === 'recordings' ? 'Recording archive · 2026' : 'Songbook · 2026'}</p>
-          </div>
-        </div>
-        <div className="archive-utility">
           <span>
-            {rows.length} takes / {formatTime(total)}
+            VGM<span className="brand-subtitle">Music workspace</span>
           </span>
-          <a href="data/recordings.csv" download>
-            Export CSV
-          </a>
-        </div>
-      </header>
-      <main className={active ? "has-player" : ""}>
-        <section ref={toolbar} className="toolbar" aria-label="Search and filter recordings" hidden={view !== 'recordings'}>
-          <label className="search-field">
-            Search
-            <input
-              ref={search}
-              type="search"
-              placeholder="Song, game, filename, or player"
-              value={query}
-              onChange={(e) => filter(e.target.value)}
-            />
-          </label>
-          <label>
-            Session
-            <select
-              value={session}
-              onChange={(e) => changeSession(e.target.value)}
-            >
-              <option value="all">All sessions</option>
-              {sessions.map(([id, records]) => (
-                <option key={id} value={id}>
-                  {sessionDate(records[0])} · {sessionName(records[0])}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Media
-            <select
-              value={media}
-              onChange={(e) => {
-                setMedia(e.target.value as MediaFilter);
-                setAutoPlay(false);
+        </a>
+        <span className="nav-caption">LIBRARY</span>
+        <div className="nav-items">
+          {nav.map(([view, label, Icon]) => (
+            <a
+              key={view}
+              aria-label={label}
+              title={label}
+              href={catalogHref(location.href, view)}
+              aria-current={currentNav === view ? "page" : undefined}
+              onClick={(e) => {
+                e.preventDefault();
+                navigate(view);
               }}
             >
-              <option value="all">All media</option>
-              <option value="video">Has video</option>
-              <option value="audio">Has audio</option>
-              <option value="audio-only">Audio only</option>
-            </select>
-          </label>
-        </section>
-        {loading ? (
-          <p className="empty-state" role="status">
-            Loading recordings…
-          </p>
-        ) : error ? (
-          <div className="empty-state" role="alert">
-            <h2>Archive unavailable</h2>
-            <p>{error}</p>
-            <button onClick={() => setReload(reload + 1)}>Try again</button>
-          </div>
-        ) : (
-          <div className="workspace">
-            {view !== 'recordings' && <>{catalog ? <SongCatalog catalog={catalog} rows={rows} view={view} songId={songId} navigate={navigate} play={playSongTake} selected={active?.file} /> : <div className="empty-state" role={catalogError ? 'alert' : 'status'}>{catalogError || 'Loading songs…'}</div>}</>}
-            <section
-              id="recordings"
-              className="ledger"
-              aria-label="Recordings"
-              tabIndex={-1}
-              hidden={view !== 'recordings'}
+              <Icon size={19} />
+              <span>{label}</span>
+              {view === "songs" && catalog && (
+                <small>{catalog.songs.length}</small>
+              )}
+            </a>
+          ))}
+        </div>
+        <div className="nav-foot">
+          <span className="live-dot" /> A place to listen & play
+        </div>
+      </nav>
+      <header className="workspace-topbar">
+        <div className="global-search">
+          <Search size={19} />
+          <input
+            ref={search}
+            type="search"
+            aria-label="Search music library"
+            placeholder="Search songs, games, takes, people…"
+            value={browse.q}
+            onChange={(e) => searchFor(e.target.value)}
+          />
+          {browse.q ? (
+            <button
+              className="icon-button"
+              onClick={clearSearch}
+              aria-label="Clear search"
             >
-              <div className="ledger-toolbar">
-                <p aria-live="polite">
-                  <strong>{visible.length}</strong> takes{" "}
-                  <span>· {formatTime(currentTotal)}</span>
-                </p>
-                <div className="list-tools">
-                  <button
-                    aria-pressed={selecting}
-                    onClick={() => {
-                      setSelecting(!selecting);
-                      setDownloads(new Set());
-                      setDownloadMessage("");
-                    }}
-                  >
-                    {selecting ? "Done" : "Select"}
-                  </button>
-                </div>
-              </div>
-              {selecting && (
-                <div className="selection-toolbar">
-                  <span>{chosen.length} selected</span>
-                  <button
-                    onClick={() =>
-                      setDownloads(
-                        chosen.length === visible.length
-                          ? new Set()
-                          : new Set(visible.map((row) => row.file)),
-                      )
-                    }
-                  >
-                    {chosen.length === visible.length && visible.length
-                      ? "Clear selection"
-                      : "Select all shown"}
-                  </button>
-                  <button disabled={!chosen.length} onClick={download}>
-                    Download selected
-                  </button>
-                  {downloadMessage && (
-                    <div role="status">
-                      <p>{downloadMessage}</p>
-                      {chosen.map((row) => (
-                        <a
-                          key={row.file}
-                          href={driveDownload(
-                            row.video_file_id || row.audio_file_id,
-                          )}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                        >
-                          {title(row)}
-                        </a>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-              {session === "all" && groups(visible).length > 1 && (
-                <nav className="session-jumps" aria-label="Jump to session">
-                  {groups(visible).map(([id, records]) => (
-                    <button
-                      key={id}
-                      onClick={() =>
-                        document
-                          .getElementById(`heading-${id}`)
-                          ?.scrollIntoView({ block: "start" })
-                      }
-                    >
-                      {sessionDate(records[0])}
-                    </button>
-                  ))}
-                </nav>
-              )}
-              {visible.length === 0 ? (
-                <div className="empty-state">
-                  <h2>No matching recordings</h2>
-                  <p>Try another song, game, or player.</p>
-                  <button
-                    onClick={() => {
-                      filter("");
-                      setMedia("all");
-                      changeSession("all");
-                    }}
-                  >
-                    Clear filters
-                  </button>
-                </div>
-              ) : (
-                groups(visible).map(([id, records]) => (
-                  <section
-                    key={id}
-                    className="session-group"
-                    aria-labelledby={`heading-${id}`}
-                  >
-                    <header className="session-band">
-                      <div>
-                        <span>{sessionDate(records[0])}</span>
-                        <h2 id={`heading-${id}`}>{sessionName(records[0])}</h2>
-                      </div>
-                      <span className="session-count">
-                        {records.length} takes
-                      </span>
-                      <nav aria-label={`${sessionDate(records[0])} resources`}>
-                        {sessionDriveUrls[id] && (
-                          <a
-                            href={sessionDriveUrls[id]}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                          >
-                            Drive folder
-                          </a>
-                        )}
-                        {(records[0].youtube_playlist_url ||
-                          records[0].youtube_playlist_id) && (
-                          <a
-                            href={
-                              records[0].youtube_playlist_url ||
-                              `https://www.youtube.com/playlist?list=${encodeURIComponent(records[0].youtube_playlist_id)}`
-                            }
-                            target="_blank"
-                            rel="noopener noreferrer"
-                          >
-                            Playlist
-                          </a>
-                        )}
-                      </nav>
-                    </header>
-                    <div className="ledger-headings" aria-label="Sort recordings">
-                      {([ ["take", "Take"], ["recording", "Recording"], ["time", "Time"] ] as const).map(([key, label]) => (
-                        <button
-                          key={key}
-                          aria-label={`Sort by ${label}${sort === key ? `, ${ascending ? "ascending" : "descending"}` : ""}`}
-                          aria-pressed={sort === key}
-                          onClick={() => changeSort(key)}
-                        >
-                          {label} <span aria-hidden="true">{sort === key ? ascending ? "↑" : "↓" : "↕"}</span>
-                        </button>
-                      ))}
-                    </div>
-                    <ol className="recording-list">
-                      {records.map((row) => {
-                        const hiddenMatch = query.trim()
-                          ? searchFields.find(
-                              (key) =>
-                                ![
-                                  "caption",
-                                  "song_name",
-                                  "game_title",
-                                  "franchise",
-                                ].includes(key) &&
-                                row[key]
-                                  .toLocaleLowerCase()
-                                  .includes(query.trim().toLocaleLowerCase()),
-                            )
-                          : undefined;
-                        const names = [
-                          ...new Set(
-                            [row.drums, row.piano, row.guitar, row.bass].filter(
-                              Boolean,
-                            ),
-                          ),
-                        ].join(" · ");
-                        return (
-                          <li
-                            key={row.file}
-                            className={`recording-row ${active?.file === row.file ? "selected" : ""}`}
-                          >
-                            {selecting && (
-                              <input
-                                className="download-check"
-                                type="checkbox"
-                                checked={downloads.has(row.file)}
-                                onChange={() => toggleDownload(row.file)}
-                                aria-label={`Select ${title(row)} for download`}
-                              />
-                            )}
-                            <button
-                              className="take-button"
-                              onClick={() => choose(row)}
-                              aria-label={`Play ${title(row)}, take ${takeNumbers.get(row.file)}`}
-                              aria-current={
-                                active?.file === row.file ? "true" : undefined
-                              }
-                            >
-                              <span className="take-number">
-                                {takeNumbers.get(row.file)}
-                              </span>
-                              <img
-                                src={row.thumbnail}
-                                alt=""
-                                loading="lazy"
-                                width="96"
-                                height="60"
-                              />
-                            </button>
-                            <div className="recording-copy">
-                              <button
-                                className="recording-title"
-                                onClick={() => choose(row)}
-                              >
-                                <Highlight value={title(row)} query={query} />
-                              </button>
-                              <div className="game-links">
-                                {[
-                                  ...new Set(
-                                    [row.franchise, row.game_title].filter(
-                                      Boolean,
-                                    ),
-                                  ),
-                                ].map((value) => (
-                                  <button
-                                    key={value}
-                                    className="text-link"
-                                    onClick={() => filter(value)}
-                                  >
-                                    <Highlight value={value} query={query} />
-                                  </button>
-                                ))}
-                                {row.song_name &&
-                                  row.song_name !== title(row) && (
-                                    <button
-                                      className="text-link"
-                                      onClick={() => filter(row.song_name)}
-                                    >
-                                      <Highlight
-                                        value={row.song_name}
-                                        query={query}
-                                      />
-                                    </button>
-                                  )}
-                              </div>
-                              <p className="row-players">
-                                <Highlight value={names} query={query} />
-                              </p>
-                              {hiddenMatch && (
-                                <p className="match-context">
-                                  {hiddenMatch.replaceAll("_", " ")}:{" "}
-                                  <Highlight
-                                    value={row[hiddenMatch]}
-                                    query={query}
-                                  />
-                                </p>
-                              )}
-                            </div>
-                            <div className="row-meta">
-                              <span className="duration">{row.length}</span>
-                              <span>
-                                {row.has_video === "yes"
-                                  ? "Video + audio"
-                                  : "Audio only"}
-                              </span>
-                              <span className="selection-label">
-                                {active?.file === row.file ? "Selected" : ""}
-                              </span>
-                            </div>
-                          </li>
-                        );
-                      })}
-                    </ol>
-                  </section>
-                ))
-              )}
-            </section>
-            {active && (
-              <Player
-                key={active.file}
-                row={active}
-                autoPlay={autoPlay}
-                playRequest={playRequest}
-                pageLink={pageLink.toString()}
-                onFilter={filter}
-                navigationKey={`${view}:${songId}:${session}`}
-              />
-            )}
+              <X size={17} />
+            </button>
+          ) : (
+            <kbd>/</kbd>
+          )}
+        </div>
+        <span className="workspace-label">THE MUSIC ROOM</span>
+      </header>
+      <main
+        ref={main}
+        id="main-content"
+        className="workspace-main"
+        tabIndex={-1}
+      >
+        {catalogError && <p role="alert">{catalogError}</p>}
+        {archiveError && (
+          <div className="load-error" role="alert">
+            {archiveError}{" "}
+            <button onClick={() => setReload((current) => current + 1)}>
+              Retry takes
+            </button>
           </div>
         )}
+        {!catalog && !catalogError && <p role="status">Loading songbook…</p>}
+        {browse.view === "songs" &&
+          catalog &&
+          (browse.song ? (
+            <SongPage {...props} songId={browse.song} />
+          ) : (
+            <SongsPage {...props} />
+          ))}
+        {browse.view === "repertoire" && catalog && (
+          <SongsPage {...props} repertoire />
+        )}
+        {browse.view === "recordings" &&
+          (loading && !rows.length ? (
+            <>
+              <PageHeader title="Takes" />
+              <p role="status">Loading takes…</p>
+            </>
+          ) : (
+            <TakesPage {...props} />
+          ))}
+        {browse.view === "sessions" && catalog && (
+          <SessionsPage {...props} sessionId={browse.session} />
+        )}
+        {browse.view === "search" && <SearchPage {...props} query={browse.q} />}
       </main>
+      <div className="persistent-player">
+        {active ? (
+          <Player
+            key={selected}
+            row={active}
+            autoPlay={autoPlay}
+            playRequest={playRequest}
+            pageLink={location.href}
+            onFilter={searchFor}
+            identity={{
+              title: activeSong?.title,
+              kind: refItem ? refItem.kind : "our take",
+              artist: refItem?.artist || "",
+              songId: activeSong?.id || "",
+              musicalKey: refItem
+                ? refItem.kind === "original"
+                  ? activeSong?.reference_key
+                  : null
+                : takeLink?.played_key,
+              bpm: refItem
+                ? refItem.kind === "original"
+                  ? activeSong?.reference_bpm
+                  : null
+                : takeLink?.played_bpm,
+            }}
+            onVideoVisibility={setVideoOpen}
+            onSong={() => activeSong && navigate("songs", activeSong.id)}
+          />
+        ) : (
+          <aside className="player player-idle" aria-label="Music player">
+            <div className="player-heading">
+              <span className="player-status">NOW PLAYING</span>
+              <h2>A little room to listen</h2>
+            </div>
+            <div className="idle-art">
+              <HeadphoneArt />
+            </div>
+            <p>
+              Choose an original or one of our takes.
+              <br />
+              Keep listening as you explore.
+            </p>
+            <div className="idle-transport">
+              <span />
+              <span />
+              <span />
+            </div>
+          </aside>
+        )}
       </div>
     </div>
   );
+}
+function HeadphoneArt() {
+  return <AudioLines size={55} strokeWidth={1} />;
 }

@@ -155,7 +155,9 @@ function csv() {
     /[",\n]/.test(value) ? `"${value.replaceAll('"', '""')}"` : value;
   return [
     columns.join(","),
-    ...rows.map((record) => columns.map((key) => escape(record[key])).join(",")),
+    ...rows.map((record) =>
+      columns.map((key) => escape(record[key])).join(","),
+    ),
   ].join("\n");
 }
 
@@ -265,6 +267,7 @@ function youtubeApi(videoSource) {
     cueVideoById({startSeconds}) { this.video.pause(); this.video.currentTime = startSeconds; this.cuedPosition = startSeconds; this.state = 2; }
     getPlayerState() { return this.state; }
     getCurrentTime() { return this.cuedPosition === undefined ? this.video.currentTime : 0; }
+    getDuration() { return this.video.duration; }
     destroy() {
       this.destroyed = true;
       this.video.pause();
@@ -329,13 +332,88 @@ export async function createFixture(directory) {
   await mkdir(join(directory, "audio"), { recursive: true });
   await mkdir(join(directory, "thumbs"), { recursive: true });
   await writeFile(join(directory, "data", "recordings.csv"), csv());
-  await writeFile(join(directory, 'data', 'catalog.json'), JSON.stringify({
-    version: 1,
-    songs: [{id: 'synthetic-alpha', title: 'Alpha Song', game: 'Alpha Quest II', franchise: 'Alpha Quest', composer: null}, {id: 'unrecorded', title: 'Unrecorded Song', game: null, franchise: null, composer: null}],
-    sessions: [],
-    recordings: rows.map(row => ({file: row.file, session_id: row.session_id, song_id: ['SYN_0001.MOV', 'SYN_0004.m4a'].includes(row.file) ? 'synthetic-alpha' : null})),
-    references: [], repertoire: [],
-  }));
+  await writeFile(
+    join(directory, "data", "catalog.json"),
+    JSON.stringify({
+      version: 2,
+      songs: [
+        {
+          id: "synthetic-alpha",
+          title: "Alpha Song",
+          game: "Alpha Quest II",
+          franchise: "Alpha Quest",
+          composer: "Hidden Composer",
+          reference_key: "C minor",
+          reference_bpm: 120,
+        },
+        {
+          id: "unrecorded",
+          title: "Unrecorded Song",
+          game: null,
+          franchise: null,
+          composer: null,
+          reference_key: null,
+          reference_bpm: null,
+        },
+      ],
+      sessions: [
+        {
+          id: SESSION_A,
+          label: "2026-05-31 Synthetic First Session",
+          date: "2026-05-31",
+        },
+        {
+          id: SESSION_B,
+          label: "2026-07-26 Synthetic Second Session",
+          date: "2026-07-26",
+        },
+        {
+          id: "empty-session",
+          label: "2026-08-01 Empty fixture session",
+          date: "2026-08-01",
+        },
+      ],
+      recordings: rows.map((row) => ({
+        file: row.file,
+        session_id: row.session_id,
+        song_id: ["SYN_0001.MOV", "SYN_0004.m4a"].includes(row.file)
+          ? "synthetic-alpha"
+          : null,
+        played_key: row.file === "SYN_0001.MOV" ? "D minor" : null,
+        played_bpm: row.file === "SYN_0001.MOV" ? 108.5 : null,
+      })),
+      references: [
+        {
+          id: "alpha-cover",
+          song_id: "synthetic-alpha",
+          kind: "cover",
+          label: "Synthetic cover arrangement",
+          url: "https://www.youtube.com/watch?v=Fixture0003",
+          artist: "Cover Artist",
+          youtube_id: "Fixture0003",
+        },
+        {
+          id: "alpha-original",
+          song_id: "synthetic-alpha",
+          kind: "original",
+          label: "Synthetic original soundtrack",
+          url: "https://www.youtube.com/watch?v=Fixture0001",
+          artist: "Fixture Artist",
+          youtube_id: "Fixture0001",
+        },
+        {
+          id: "unrecorded-original",
+          song_id: "unrecorded",
+          kind: "original",
+          label: "Synthetic unrecorded soundtrack",
+          url: "https://www.youtube.com/watch?v=Fixture0002",
+          artist: null,
+          youtube_id: "Fixture0002",
+        },
+      ],
+      repertoire: [],
+    }),
+  );
   await writeFile(join(directory, "thumbs", "synthetic.png"), png);
   await writeFile(join(directory, "audio", "SYN_0001.wav"), wav(6, 440));
   await writeFile(join(directory, "audio", "SYN_0002.wav"), wav(6, 550));
@@ -369,7 +447,9 @@ export async function createFixture(directory) {
       const range = /^bytes=(\d*)-(\d*)$/.exec(request.headers.range || "");
       if (range && (range[1] || range[2])) {
         const start = range[1] ? Number(range[1]) : 0;
-        const end = range[2] ? Math.min(Number(range[2]), body.length - 1) : body.length - 1;
+        const end = range[2]
+          ? Math.min(Number(range[2]), body.length - 1)
+          : body.length - 1;
         response.writeHead(206, {
           ...headers,
           "content-range": `bytes ${start}-${end}/${body.length}`,

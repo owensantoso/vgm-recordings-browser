@@ -1,3 +1,94 @@
+# Cohesive music workspace — active redesign, October 6
+
+Purpose: browse songs, chosen repertoire and rehearsal history while one
+transport keeps playing. The user rejected the first songbook's cohesion and
+authorized a full redesign. The following direction supersedes the historical
+ledger-first composition below; it is proposed, not yet human-accepted.
+
+## Feedback and correction
+
+Confirmed: meaningful icons; one global search locus; fixed player coordinates
+across destinations; no session/media dropdowns; Sessions as a distinct
+navigation destination; nullable song reference key/BPM and take played key/BPM.
+A universal bottom player is a proposed mechanism, not a firm user requirement.
+Repertoire membership and shared/private scope remain unchosen.
+
+Reflection: I extended an archive-owned composition with an independently
+searched song page. Source: agent assumption. That preserved conflicting
+search/toolbar geometry and list-derived playback. Correct this project's shell
+and identity ownership; do not generalize it into a universal layout rule.
+
+## Domain and reuse
+
+Song is musical identity. A soundtrack/reference source and our rehearsal take
+retain independent media identity, timings, provenance and credits. Adapt the
+private Workbench's Song/Recording/Arrangement separation and one transport
+contract; its current song selection stops media, so its routing is not copied.
+No private catalog/media import is in scope. Songs and takes keep their IDs.
+Song reference key/BPM and per-take played key/BPM are nullable and independent;
+unknown never means inherited, measured or guessed. No analysis or edit backend.
+
+Reuse the tested YouTube/local-audio provider and literal highlighting. Use
+Lucide named React icons. Native pressed buttons suit simple filter choices;
+Radix ToggleGroup was reviewed, but a roving toolbar adds little to these short
+independent controls. Custom work addresses the missing shared shell/global
+results and library relationships, not another media engine. No new menus.
+
+## Structural experiment
+
+Actual Opus 5.5 identified list-derived playback, page-owned player geometry and
+view-owned search as the root couplings. It recommends a fixed right Now Playing
+rail at wide widths because video needs a visible media region, then a compact
+dock at smaller widths. Compare this against a global bottom dock for audio-first
+use. Both use identical components/content and one active transport. Retain the
+prior candidate as the rejected structural control, not a rejected palette.
+
+App owns loaded library data, route/return scroll, the global query and active
+playable identity. Library/Search/Sessions render those inputs. Player owns the
+provider and clock, keyed by playable ID, at the shell root. Browsing, filters
+and zero search results cannot change or dispose it. Only an explicit new media
+selection can. A rendering adapter may reuse the provider without persisting
+fake rehearsal takes. Time remains local, not a whole-app clock rerender.
+
+Navigation: Songs, Repertoire, Takes and Sessions are peer destinations. Sessions
+index/detail routes replace dropdowns and duplicated jump controls. Search is
+always in the same shell region, with grouped Song/Take/Session results, literal
+highlights and compact matching context. Escape/clear returns to browsing;
+entity/result activation never changes playback. Media filters are buttons.
+Retain legacy session/hash links as compatibility, not as visible dropdowns.
+
+Content priority: song title/game; sourced originals or clearly labeled reference
+versions; our takes; known musical values and optional source detail. Omit large
+empty composer/reference placeholders. Repertoire remains explicit, including
+zero-take songs. References are sourced; uploader is not automatically artist.
+
+Fixed shell tokens define navigation, search and playing regions independently
+of headings/filter rows. The media element is never reparented across routes or
+breakpoints. In compact/dock modes, takes default to local audio. Showing video
+opens a stable visible player region; collapsing switches a take to audio or
+pauses a YouTube-only reference. This preserves the provider's visible-player
+requirement without pretending a collapsed YouTube frame is audio playback.
+
+## Review scenarios and acceptance
+
+Play a take → search → another song → session → Back: same provider node,
+continuing time, stable player bounds. Hide the active take via audio-only or
+zero-result search: playback continues. Source kinds distinguish Original from
+Our take. Unknown key/tempo remain unknown; a differing played key does not
+rewrite the song reference. No selects, one searchbox, visible active filters.
+Exercise original source errors, section/full bounds, zero-take songs, empty
+repertoire, 375/768/1024/1440 widths, final-row access and reduced motion.
+The main region owns scroll. Video reserves a right region on wide dock/tablet
+layouts and a top region on taller compact screens; short layouts preserve a
+side video region and shorten navigation/transport. The same provider node
+survives these CSS changes. Closing a not-yet-ready reference clears its play
+intent before readiness. Physical keyboard/safe-area behavior and human design
+judgment remain open.
+
+---
+
+# Historical composition and evidence
+
 # React ledger review — 2026-09-08
 
 ## Intent and authority

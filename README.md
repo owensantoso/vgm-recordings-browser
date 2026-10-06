@@ -1,6 +1,7 @@
 # VGM Recordings Browser
 
-React + TypeScript browser for the 2026 music jam archive. The original 22
+React + TypeScript music workspace: songs, listening references, explicit
+repertoire and the 2026 rehearsal archive. The original 22
 recordings, CSV schema, thumbnails, audio paths, Drive links, and YouTube IDs
 remain the source of truth.
 
@@ -14,12 +15,15 @@ FFmpeg. Set `CHROME_PATH` to the browser executable when it is not discovered
 automatically, especially on Windows. Without a discovered browser the suite
 skips; check the test totals before treating a run as browser validation.
 
-- `src/App.tsx`: archive loading, filtering, sorting, selection, URL restoration,
-  downloads, and the responsive ledger.
-- `src/Player.tsx`: selected-take controls and disposable YouTube/audio backends.
+- `src/App.tsx`: shared shell, global search, browsing history/scroll, independently
+  loaded catalog/archive and active playable identity.
+- `src/Library.tsx`: Songs, Repertoire, Takes, Sessions and global search results.
+- `src/musicLibrary.ts`: literal cross-library search and reference provider adapters.
+- `src/Player.tsx`: one persistent transport for original/reference sources and
+  our takes, with disposable YouTube/audio backends.
 - `src/recordings.ts`: typed CSV boundary, search/sort, section bounds, and URLs.
-- `src/styles.css`: ledger styling and separate desktop/mobile composition.
-- `src/Catalog.tsx`: song/repertoire views and permanent song-ID URLs.
+- `src/styles.css`: fixed shell, rail/dock comparison and reserved media regions.
+- `src/Catalog.tsx`: catalog types and stable song/session/search routes.
 - `data/catalog.sql`: reviewed identity, reference and repertoire source.
 - `scripts/catalog.mjs`: SQLite materialization, foreign-key/archive checks and
   public JSON projection; see [catalog ownership](docs/SONG_CATALOG.md).
@@ -35,8 +39,12 @@ settings. CI rebuilds and rejects stale bundles and catalog JSON. A host with a 
 instead serve `dist/`.
 
 All asset URLs are relative, so repository subpaths continue to work. The
-`?session=...#recording-stem` URL contract remains supported. Search and sort are
-transient controls; they are not encoded in shared URLs.
+`?session=...#recording-stem` URL contract remains supported. Global search is addressable with `?view=search&q=...`. The `play` parameter
+identifies an independent take filename or `ref:reference-id`; normal browser
+history restores browsing without replacing the currently playing source.
+Reload cues that source without autoplay. Sorting/media choices are local to
+the take page. `?layout=dock` selects the comparison composition; the wide
+default uses a fixed rail and compact screens use a bottom transport.
 
 A text-only checkout can build with a warning about missing media; it cannot
 prove playback. The full-checkout CI additionally verifies every referenced
@@ -46,9 +54,13 @@ restart it after changing the HTML or CSV.
 ## Validation limits
 
 DOM lifecycle tests use fake media backends. They verify teardown, offset and
-play-state transfer, filtering, selection, and deep links. The browser suite uses
+play-state transfer, independent navigation, selection, and deep links. The browser suite uses
 generated WAV/WebM and a fake YouTube API to exercise media decoding, controls,
 scrolling, responsive resizing, heading sorting, keyboard handling, and the
 player lifecycle. Neither suite proves real YouTube availability, native IME
 input, iOS behavior, production autoplay policy, or visual acceptance. See the
-remaining browser/device checks in `docs/DESIGN.md` before merging the migration.
+remaining browser/device checks in `docs/DESIGN.md` before merging the combined candidate.
+
+Reference/played key and BPM are independent nullable catalog fields, with no
+automatic analysis or metadata editor. All actual musical values remain unknown.
+Listening links have bounded provenance in `docs/REFERENCE_SOURCES.md`.

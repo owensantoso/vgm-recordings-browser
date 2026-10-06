@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   bounds,
   driveDownload,
@@ -7,6 +7,19 @@ import {
   videoLink,
 } from "./recordings";
 import type { Recording } from "./recordings";
+import {
+  ArrowUpRight,
+  AudioLines,
+  ChevronDown,
+  ChevronUp,
+  Copy,
+  Disc3,
+  Download,
+  Pause,
+  Play,
+  Video,
+  X,
+} from "lucide-react";
 
 type YoutubePlayer = {
   playVideo(): void;
@@ -15,6 +28,7 @@ type YoutubePlayer = {
   cueVideoById(options: { videoId: string; startSeconds: number }): void;
   getPlayerState(): number;
   getCurrentTime(): number;
+  getDuration?(): number;
   destroy(): void;
 };
 type YoutubeApi = {
@@ -74,21 +88,41 @@ export function Player({
   playRequest,
   pageLink,
   onFilter,
-  navigationKey = '',
+  identity,
+  onSong,
+  onVideoVisibility,
 }: {
   row: Recording;
   autoPlay: boolean;
   playRequest: number;
   pageLink: string;
   onFilter(value: string): void;
-  navigationKey?: string;
+  identity: {
+    title?: string;
+    kind: string;
+    artist: string;
+    songId: string;
+    musicalKey?: string | null;
+    bpm?: number | null;
+  };
+  onSong(): void;
+  onVideoVisibility(value: boolean): void;
 }) {
-  const range = bounds(row);
+  const [sourceDuration, setSourceDuration] = useState(
+    Number(row.duration_seconds) || 0,
+  );
+  const range = bounds({ ...row, duration_seconds: String(sourceDuration) });
+  const rangeRef = useRef(range);
+  rangeRef.current = range;
   const [mode, setMode] = useState<"video" | "audio">(
-    row.has_video === "yes" ? "video" : "audio",
+    row.has_audio === "yes" ? "audio" : "video",
   );
   const [expanded, setExpanded] = useState(false);
-  useEffect(() => { setExpanded(false); }, [navigationKey]);
+  const [videoVisible, setVideoVisible] = useState(row.has_audio !== "yes");
+  useEffect(() => {
+    onVideoVisibility(mode === "video" && videoVisible);
+    return () => onVideoVisibility(false);
+  }, [mode, videoVisible, onVideoVisibility]);
   const [ready, setReady] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [time, setTime] = useState(range.start);
@@ -97,24 +131,12 @@ export function Player({
   const container = useRef<HTMLDivElement>(null);
   const expandButton = useRef<HTMLButtonElement>(null);
   const surface = useRef<HTMLElement>(null);
-  useLayoutEffect(() => {
-    if (!expanded) return;
-    const reveal = () => {
-      const element = surface.current;
-      // The mobile player is a fixed overlay; leave its archive scroll alone.
-      if (element && window.getComputedStyle(element).position !== "fixed") {
-        element.scrollIntoView({ block: "start" });
-      }
-    };
-    reveal();
-    window.addEventListener("resize", reveal);
-    return () => window.removeEventListener("resize", reveal);
-  }, [expanded]);
   const backend = useRef<{
     play(): void;
     pause(): void;
     seek(t: number): void;
     time(): number;
+    duration(): number;
   } | null>(null);
   const position = useRef(range.start);
   const wantsPlay = useRef(autoPlay);
@@ -167,6 +189,7 @@ export function Player({
           audio.currentTime = t;
         },
         time: () => audio.currentTime,
+        duration: () => audio.duration,
       };
       audio.onloadedmetadata = loaded;
       audio.onplay = () => {
@@ -215,14 +238,22 @@ export function Player({
                     if (!player) return;
                     // YouTube seekTo starts playback from a cued/ended state.
                     // Cue the requested position when our transport is paused.
-                    if (!wantsPlay.current && (cuedPosition !== undefined || player.getPlayerState() !== 2)) {
+                    if (
+                      !wantsPlay.current &&
+                      (cuedPosition !== undefined ||
+                        player.getPlayerState() !== 2)
+                    ) {
                       cuedPosition = t;
-                      player.cueVideoById({ videoId: row.youtube_video_id, startSeconds: t });
+                      player.cueVideoById({
+                        videoId: row.youtube_video_id,
+                        startSeconds: t,
+                      });
                     } else player.seekTo(t, true);
                   },
                   // Cue commands settle asynchronously; the provider can report
                   // zero before Play even while its previous paused state remains.
                   time: () => cuedPosition ?? (player?.getCurrentTime() || 0),
+                  duration: () => player?.getDuration?.() || 0,
                 };
                 const iframe = container.current?.querySelector("iframe");
                 if (iframe) iframe.title = `${title(row)} — YouTube video`;
@@ -254,9 +285,24 @@ export function Player({
         Date.now() < seekUntil.current
       )
         return;
-      let next = Math.max(0, Math.min(range.full, backend.current.time()));
-      const stop = fullMode.current ? range.full : range.end;
-      if (playingRef.current && next >= stop - 0.1) {
+      const duration = backend.current.duration();
+      if (
+        Number.isFinite(duration) &&
+        duration > 0 &&
+        !Number(row.duration_seconds)
+      )
+        setSourceDuration((previous) =>
+          previous === duration ? previous : duration,
+        );
+      const current = rangeRef.current;
+      let next = Math.max(
+        0,
+        current.full
+          ? Math.min(current.full, backend.current.time())
+          : backend.current.time(),
+      );
+      const stop = fullMode.current ? current.full : current.end;
+      if (stop > 0 && playingRef.current && next >= stop - 0.1) {
         next = stop;
         updatePlaying(false);
         backend.current.pause();
@@ -294,6 +340,7 @@ export function Player({
   }
   function toggle() {
     if (!readyRef.current) return;
+    if (mode === "video" && !playingRef.current) setVideoVisible(true);
     if (playingRef.current) backend.current?.pause();
     else {
       if (
@@ -305,16 +352,42 @@ export function Player({
     }
   }
   function switchMode(next: "video" | "audio") {
-    if (mode === next) return;
+    if (mode === next) {
+      if (next === "video") setVideoVisible(true);
+      return;
+    }
     position.current = backend.current?.time() ?? position.current;
-    wantsPlay.current = playingRef.current;
     setMode(next);
+    setVideoVisible(next === "video");
+  }
+  function closeVideo() {
+    if (mode === "video") {
+      if (row.has_audio === "yes") switchMode("audio");
+      else {
+        updatePlaying(false);
+        backend.current?.pause();
+      }
+    }
+    setVideoVisible(false);
+    setExpanded(false);
+  }
+  function collapse() {
+    setExpanded(false);
   }
   useEffect(() => {
     function keydown(event: KeyboardEvent) {
-      if (event.defaultPrevented || event.isComposing || event.keyCode === 229) return;
-      if (event.key === "Escape" && expanded) {
-        setExpanded(false);
+      if (event.defaultPrevented || event.isComposing || event.keyCode === 229)
+        return;
+      if (
+        event.key === "Escape" &&
+        expanded &&
+        !(
+          event.target instanceof Element &&
+          event.target.closest("input,textarea,[contenteditable]")
+        )
+      ) {
+        event.preventDefault();
+        collapse();
         expandButton.current?.focus();
         return;
       }
@@ -361,32 +434,63 @@ export function Player({
     ["Format", row.audio_format],
     ["Device", row.device],
   ];
+  const isTake = identity.kind === "our take";
   return (
     <aside
       ref={surface}
-      className={`player ${expanded ? "expanded" : ""}`}
-      aria-label="Selected recording"
+      className={`player ${expanded ? "expanded" : ""} ${mode === "video" ? "video-mode" : "audio-mode"} ${videoVisible ? "video-open" : ""}`}
+      aria-label="Music player"
     >
       <header className="player-heading">
         <div>
           <span className="player-status">
-            {playing ? "Now playing" : "Selected take"}
+            {playing ? "NOW PLAYING" : "READY TO PLAY"}
           </span>
-          <h2>{title(row)}</h2>
+          <button
+            className="player-song"
+            disabled={!identity.songId}
+            onClick={onSong}
+          >
+            {identity.title || title(row)}
+          </button>
           <p className="player-game">
-            {row.game_title || row.franchise || "Game not identified"}
+            <span className="compact-source-kind">
+              {isTake
+                ? "Our take"
+                : identity.kind === "original"
+                  ? "Original soundtrack"
+                  : identity.kind}{" "}
+              ·{" "}
+            </span>
+            {row.game_title ||
+              row.franchise ||
+              (isTake ? "Unidentified song" : "Soundtrack reference")}
           </p>
         </div>
         <button
           ref={expandButton}
-          className="expand-control"
+          className="expand-control icon-button"
+          aria-label={expanded ? "Collapse player" : "Expand player"}
           aria-expanded={expanded}
           aria-controls="player-details"
-          onClick={() => setExpanded(!expanded)}
+          onClick={() => (expanded ? collapse() : setExpanded(true))}
         >
-          {expanded ? "Minimize" : "Expand"}
+          {expanded ? <ChevronDown size={20} /> : <ChevronUp size={20} />}
         </button>
       </header>
+      <div className="player-source">
+        <span className="source-badge">
+          {isTake ? <AudioLines size={13} /> : <Disc3 size={13} />}{" "}
+          {isTake
+            ? "Our take"
+            : identity.kind === "original"
+              ? "Original soundtrack"
+              : identity.kind}
+        </span>
+        <span>
+          {isTake ? row.recorded_create_date?.slice(0, 10) : identity.artist}
+        </span>
+      </div>
       <div className="transport">
         <button
           className="play-button"
@@ -396,7 +500,11 @@ export function Player({
             playing ? "Pause selected recording" : "Play selected recording"
           }
         >
-          {playing ? "Pause" : "Play"}
+          {playing ? (
+            <Pause size={19} fill="currentColor" />
+          ) : (
+            <Play size={19} fill="currentColor" />
+          )}
         </button>
         <span className="time">{formatTime(offset)}</span>
         <input
@@ -406,25 +514,27 @@ export function Player({
           max={range.duration}
           step="0.1"
           value={offset}
-          disabled={!ready || !controllable}
+          disabled={!ready || !controllable || !range.duration}
           onChange={(e) => seek(range.start + Number(e.target.value))}
         />
-        <span className="time">{formatTime(range.duration)}</span>
+        <span className="time">
+          {range.duration ? formatTime(range.duration) : "—:—"}
+        </span>
       </div>
       <div className="media-switch" role="group" aria-label="Playback mode">
-        <button
-          aria-pressed={mode === "video"}
-          disabled={row.has_video !== "yes"}
-          onClick={() => switchMode("video")}
-        >
-          Video
-        </button>
         <button
           aria-pressed={mode === "audio"}
           disabled={row.has_audio !== "yes"}
           onClick={() => switchMode("audio")}
         >
-          Audio
+          <AudioLines size={15} /> Audio
+        </button>
+        <button
+          aria-pressed={mode === "video"}
+          disabled={row.has_video !== "yes"}
+          onClick={() => switchMode("video")}
+        >
+          <Video size={15} /> Video
         </button>
         <span className="mode-status" role="status">
           {error
@@ -444,6 +554,24 @@ export function Player({
         </p>
       )}
       <div id="player-details" className="player-details">
+        {mode === "video" && (
+          <div className="video-window-heading">
+            <span>
+              {identity.kind === "our take"
+                ? "Our take"
+                : identity.kind === "original"
+                  ? "Original soundtrack"
+                  : identity.kind}
+            </span>
+            <button
+              className="icon-button"
+              aria-label="Close video"
+              onClick={closeVideo}
+            >
+              <X size={16} />
+            </button>
+          </div>
+        )}
         <div className="preview">
           {mode === "video" && row.youtube_video_id ? (
             <div ref={container} className="youtube-host" />
@@ -456,106 +584,125 @@ export function Player({
             />
           ) : (
             <div className="audio-art">
-              <img src={row.thumbnail} alt="" />
-              <span>Audio recording · {row.length}</span>
-            </div>
-          )}
-        </div>
-        {(range.start > 0 || range.end < range.full) && (
-          <div className="full-timeline">
-            <div>
-              <label htmlFor="full-seek">Full recording</label>
+              {row.thumbnail ? (
+                <img src={row.thumbnail} alt="" />
+              ) : (
+                <Disc3 size={70} strokeWidth={1} />
+              )}
               <span>
-                {formatTime(time)} / {formatTime(range.full)}
+                {isTake ? "Our rehearsal recording" : identity.artist}
               </span>
             </div>
-            <input
-              id="full-seek"
-              type="range"
-              min="0"
-              max={range.full}
-              step="0.1"
-              value={time}
-              disabled={!ready || !controllable}
-              onChange={(e) => seek(Number(e.target.value), true)}
-            />
-            <p>
-              Selected section {formatTime(range.start)}–{formatTime(range.end)}
-            </p>
+          )}
+        </div>
+        <div className="player-extra">
+          {(range.start > 0 || range.end < range.full) && (
+            <div className="full-timeline">
+              <div>
+                <label htmlFor="full-seek">Full recording</label>
+                <span>
+                  {formatTime(time)} / {formatTime(range.full)}
+                </span>
+              </div>
+              <input
+                id="full-seek"
+                type="range"
+                min="0"
+                max={range.full}
+                step="0.1"
+                value={time}
+                disabled={!ready || !controllable}
+                onChange={(e) => seek(Number(e.target.value), true)}
+              />
+              <p>
+                Selected section {formatTime(range.start)}–
+                {formatTime(range.end)}
+              </p>
+            </div>
+          )}
+          <div className="player-musical">
+            <span>
+              {isTake ? "Played key" : "Reference key"}
+              <strong>{identity.musicalKey || "Not recorded"}</strong>
+            </span>
+            <span>
+              Tempo
+              <strong>
+                {identity.bpm ? `${identity.bpm} BPM` : "Not recorded"}
+              </strong>
+            </span>
           </div>
-        )}
-        <div className="performers">
-          {(["drums", "piano", "guitar", "bass"] as const)
-            .filter((part) => row[part])
-            .map((part) => (
-              <div key={part}>
-                <span>{part}</span>
-                <button
-                  className="text-link"
-                  onClick={() => onFilter(row[part])}
-                >
-                  {row[part]}
-                </button>
-              </div>
-            ))}
-        </div>
-        <div className="source-actions">
-          {sourceVideo && (
-            <a href={sourceVideo} target="_blank" rel="noopener noreferrer">
-              {row.youtube_video_id ? "Open YouTube" : "Open video"}
-            </a>
-          )}
-          {row.audio_url && (
-            <a href={row.audio_url} target="_blank" rel="noopener noreferrer">
-              Open audio
-            </a>
-          )}
-          {row.video_file_id && (
-            <a
-              href={driveDownload(row.video_file_id)}
-              target="_blank"
-              rel="noopener noreferrer"
-              download
-            >
-              Download video
-            </a>
-          )}
-          {row.audio_file_id && (
-            <a
-              href={driveDownload(row.audio_file_id)}
-              target="_blank"
-              rel="noopener noreferrer"
-              download
-            >
-              Download audio
-            </a>
-          )}
-          <button onClick={() => void copy(pageLink, "Page link")}>
-            Copy page link
-          </button>
-          {sourceVideo && (
-            <button onClick={() => void copy(sourceVideo, "Video link")}>
-              Copy video link
+          <div className="performers">
+            {(["drums", "piano", "guitar", "bass"] as const)
+              .filter((part) => row[part])
+              .map((part) => (
+                <div key={part}>
+                  <span>{part}</span>
+                  <button
+                    className="text-link"
+                    onClick={() => onFilter(row[part])}
+                  >
+                    {row[part]}
+                  </button>
+                </div>
+              ))}
+          </div>
+          <div className="source-actions">
+            {sourceVideo && (
+              <a href={sourceVideo} target="_blank" rel="noopener noreferrer">
+                <ArrowUpRight size={15} />{" "}
+                {row.youtube_video_id ? "Open YouTube" : "Open video"}
+              </a>
+            )}
+            {row.audio_url && (
+              <a href={row.audio_url} target="_blank" rel="noopener noreferrer">
+                <ArrowUpRight size={15} /> Open audio
+              </a>
+            )}
+            {row.video_file_id && (
+              <a
+                href={driveDownload(row.video_file_id)}
+                target="_blank"
+                rel="noopener noreferrer"
+                download
+              >
+                <Download size={15} /> Video
+              </a>
+            )}
+            {row.audio_file_id && (
+              <a
+                href={driveDownload(row.audio_file_id)}
+                target="_blank"
+                rel="noopener noreferrer"
+                download
+              >
+                <Download size={15} /> Audio
+              </a>
+            )}
+            <button onClick={() => void copy(pageLink, "Page link")}>
+              <Copy size={14} /> Page link
             </button>
+          </div>
+          <p className="copy-status" role="status">
+            {copied}
+          </p>
+          {copied.startsWith("Could not") && (
+            <a href={pageLink}>Recording page link</a>
+          )}
+          {isTake && (
+            <details className="metadata">
+              <summary>Recording details</summary>
+              <dl>
+                {details.map(([label, value]) => (
+                  <div key={label}>
+                    <dt>{label}</dt>
+                    <dd>{value}</dd>
+                  </div>
+                ))}
+              </dl>
+            </details>
           )}
         </div>
-        <p className="copy-status" role="status">
-          {copied}
-        </p>
-        {copied.startsWith("Could not") && (
-          <a href={pageLink}>Recording page link</a>
-        )}
-        <details className="metadata">
-          <summary>Recording details</summary>
-          <dl>
-            {details.map(([label, value]) => (
-              <div key={label}>
-                <dt>{label}</dt>
-                <dd>{value}</dd>
-              </div>
-            ))}
-          </dl>
-        </details>
       </div>
     </aside>
   );

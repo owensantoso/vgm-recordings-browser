@@ -11,7 +11,8 @@
     "search",
     "navigable-state",
     "multi-region-shell",
-    "locally-resolved-interactions"
+    "locally-resolved-interactions",
+    "iconography"
   ],
   "classifications": [
     {
@@ -31,8 +32,8 @@
     },
     {
       "id": "iconography",
-      "status": "absent",
-      "reason": "Controls and instruments use text labels; VGM is a typographic wordmark."
+      "status": "present",
+      "reason": "Named locally bundled Lucide React icons support navigation, source kinds, filters and transport; text/accessibility labels remain."
     },
     {
       "id": "locally-resolved-interactions",
@@ -63,12 +64,12 @@
       "implementationState": "implemented",
       "implementationPaths": [
         "src/App.tsx",
-        "src/Catalog.tsx",
+        "src/Library.tsx",
         "src/Player.tsx",
         "src/styles.css"
       ],
       "verificationEvidence": [
-        "docs/VALIDATION-2026-10-06.md"
+        "docs/VALIDATION-COHESION-2026-10-06.md"
       ],
       "acceptanceEvidence": []
     },
@@ -89,7 +90,7 @@
       "version": 1,
       "applicable": false,
       "disposition": "not_applicable",
-      "reason": "No multiple appearances or pictogram UI is shipped; see explicit classifications.",
+      "reason": "Only one light appearance is shipped; there is no theme transition.",
       "decisionPath": "docs/DESIGN.md",
       "implementationState": "not_started",
       "implementationPaths": [],
@@ -106,21 +107,21 @@
       "implementationState": "implemented",
       "implementationPaths": [
         "src/App.tsx",
-        "src/Catalog.tsx",
+        "src/Library.tsx",
         "src/Player.tsx",
         "src/styles.css"
       ],
       "verificationEvidence": [
-        "docs/VALIDATION-2026-10-06.md"
+        "docs/VALIDATION-COHESION-2026-10-06.md"
       ],
       "acceptanceEvidence": []
     },
     {
       "id": "iconography.source-integrity",
       "version": 1,
-      "applicable": false,
-      "disposition": "not_applicable",
-      "reason": "No multiple appearances or pictogram UI is shipped; see explicit classifications.",
+      "applicable": true,
+      "disposition": "defer",
+      "reason": "Lucide React 1.52.0 is pinned in the npm lockfile and its ISC/Feather MIT notices retained. Toolbox authenticated archive pilot presently approves Phosphor only; Lucide pilot verification is unclaimed.",
       "decisionPath": "docs/DESIGN.md",
       "implementationState": "not_started",
       "implementationPaths": [],
@@ -161,12 +162,12 @@
       "implementationState": "implemented",
       "implementationPaths": [
         "src/App.tsx",
-        "src/Catalog.tsx",
+        "src/Library.tsx",
         "src/Player.tsx",
         "src/styles.css"
       ],
       "verificationEvidence": [
-        "docs/VALIDATION-2026-10-06.md"
+        "docs/VALIDATION-COHESION-2026-10-06.md"
       ],
       "acceptanceEvidence": []
     },
@@ -180,12 +181,12 @@
       "implementationState": "implemented",
       "implementationPaths": [
         "src/App.tsx",
-        "src/Catalog.tsx",
+        "src/Library.tsx",
         "src/Player.tsx",
         "src/styles.css"
       ],
       "verificationEvidence": [
-        "docs/VALIDATION-2026-10-06.md"
+        "docs/VALIDATION-COHESION-2026-10-06.md"
       ],
       "acceptanceEvidence": []
     },
@@ -199,12 +200,12 @@
       "implementationState": "implemented",
       "implementationPaths": [
         "src/App.tsx",
-        "src/Catalog.tsx",
+        "src/Library.tsx",
         "src/Player.tsx",
         "src/styles.css"
       ],
       "verificationEvidence": [
-        "docs/VALIDATION-2026-10-06.md"
+        "docs/VALIDATION-COHESION-2026-10-06.md"
       ],
       "acceptanceEvidence": []
     }

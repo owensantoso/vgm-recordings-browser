@@ -46,7 +46,7 @@
   "workingState": [
     {
       "key": "catalog:search",
-      "label": "Song search"
+      "label": "Global search query, results and return route"
     },
     {
       "key": "catalog:scroll",
@@ -76,7 +76,7 @@
       "key": "song:yoshi",
       "kind": "entity",
       "role": "recomposed",
-      "owner": "SongCatalog",
+      "owner": "Library",
       "source": [
         "list:song"
       ],
@@ -88,7 +88,7 @@
       "key": "song:title",
       "kind": "facet",
       "role": "persistent",
-      "owner": "SongCatalog",
+      "owner": "Library",
       "source": [
         "list:title"
       ],
@@ -100,7 +100,7 @@
       "key": "song:game",
       "kind": "facet",
       "role": "persistent",
-      "owner": "SongCatalog",
+      "owner": "Library",
       "source": [
         "list:game"
       ],
@@ -124,12 +124,12 @@
       "key": "catalog:search",
       "kind": "state",
       "role": "persistent",
-      "owner": "SongCatalog",
+      "owner": "App",
       "source": [
-        "state:query"
+        "search:query"
       ],
       "target": [
-        "state:query"
+        "history:query"
       ]
     },
     {
@@ -160,7 +160,7 @@
       "key": "song:open",
       "kind": "control",
       "role": "exit",
-      "owner": "SongCatalog",
+      "owner": "Library",
       "source": [
         "list:link"
       ],
@@ -170,7 +170,7 @@
       "key": "song:back",
       "kind": "control",
       "role": "enter",
-      "owner": "SongCatalog",
+      "owner": "Library",
       "source": [],
       "target": [
         "detail:back"
@@ -191,8 +191,8 @@
   ],
   "paths": {
     "forward": "Push a song-ID URL; title/game map to detail and counts disclose their exact recording links. Player remains mounted.",
-    "reverse": "Return to the same Songs/Repertoire view with search and saved scroll.",
-    "interruption": "Latest navigation wins; new take selection alone replaces the player.",
+    "reverse": "Browser Back restores global query and the main scrollport; All songs returns to the songbook. Neither changes the active source.",
+    "interruption": "Latest browsing route wins; only explicit media activation replaces the player. Audio defaults are unchanged by resize.",
     "fallback": "Unknown ID shows Song not found and a list return. Missing data shows an error without changing archive playback.",
     "reducedMotion": "Navigation is atomic; existing reduced-motion transport rules remain."
   },
@@ -211,7 +211,7 @@
     },
     "state": {
       "mode": "preserve",
-      "commitment": "Song query and scroll have the same owner; playback stays filename-keyed."
+      "commitment": "Global query/return state belongs to App; Player keeps a typed reference ID or take filename independently of the main scrollport."
     },
     "control": {
       "mode": "change",
@@ -226,7 +226,7 @@
     "start": "Song row names the title/game and take count.",
     "midpoint": "Atomic commit: no interpolated transient layout.",
     "settled": "Detail title/game and take IDs agree with the source row.",
-    "reverse": "Same list query and saved scroll restored.",
+    "reverse": "Back restores the same query and saved main scroll while retaining current playback.",
     "interrupted": "Latest route owns the main pane; only explicit take activation replaces media.",
     "fallback": "Unknown/missing data has an honest recoverable state.",
     "reducedMotion": "Same IDs, route and playback ownership without animation."

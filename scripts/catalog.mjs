@@ -2,13 +2,29 @@ import { DatabaseSync } from 'node:sqlite';
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { parseCsv } from '../src/recordings.ts';
 
+export function referenceYoutubeId(url) {
+  const hosts = ['youtube.com', 'www.youtube.com', 'm.youtube.com'];
+  let id;
+  if (url.hostname === 'youtu.be') {
+    id = url.pathname.match(/^\/([^/]+)\/?$/)?.[1];
+  } else if (hosts.includes(url.hostname)) {
+    id = url.pathname === '/watch'
+      ? url.searchParams.get('v')
+      : url.pathname.match(/^\/(?:embed|shorts|live)\/([^/]+)\/?$/)?.[1];
+  } else {
+    return null;
+  }
+  if (!id || !/^[A-Za-z0-9_-]{11}$/.test(id)) throw new Error('Invalid YouTube reference URL.');
+  return id;
+}
+
 export function buildCatalog(sql, csv, databasePath = ':memory:') {
   const db = new DatabaseSync(databasePath);
   try {
     db.exec('PRAGMA foreign_keys=ON;');
     db.exec(sql);
     const recordings = parseCsv(csv);
-    const links = db.prepare('SELECT file, session_id, song_id FROM recordings ORDER BY file').all();
+    const links = db.prepare('SELECT file, session_id, song_id, played_key, played_bpm FROM recordings ORDER BY file').all();
     const byFile = new Map(recordings.map(row => [row.file, row]));
     if (links.length !== recordings.length) throw new Error('Catalog must cover every archive take exactly once.');
     for (const link of links) {
@@ -20,10 +36,15 @@ export function buildCatalog(sql, csv, databasePath = ':memory:') {
     for (const ref of references) {
       const url = new URL(ref.url);
       if (!['https:', 'http:'].includes(url.protocol)) throw new Error(`Invalid reference URL: ${ref.id}`);
+      ref.youtube_id = referenceYoutubeId(url);
+    }
+    const songs = db.prepare('SELECT id, title, game, franchise, composer, reference_key, reference_bpm FROM songs ORDER BY title COLLATE NOCASE, id').all();
+    if ([...songs.map(song => song.reference_bpm), ...links.map(take => take.played_bpm)].some(bpm => bpm !== null && !Number.isFinite(bpm))) {
+      throw new Error('Tempo must be a finite positive number.');
     }
     return {
-      version: 1,
-      songs: db.prepare('SELECT id, title, game, franchise, composer FROM songs ORDER BY title COLLATE NOCASE, id').all(),
+      version: 2,
+      songs,
       sessions: db.prepare('SELECT id, label, date FROM sessions ORDER BY date DESC').all(),
       recordings: links,
       references,
