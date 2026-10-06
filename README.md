@@ -20,7 +20,7 @@ skips; check the test totals before treating a run as browser validation.
 - `src/Library.tsx`: Songs, Repertoire, Takes, Sessions and global search results.
 - `src/musicLibrary.ts`: literal cross-library search and reference provider adapters.
 - `src/Player.tsx`: one persistent transport for original/reference sources and
-  our takes, with disposable YouTube/audio backends.
+  our takes, with disposable YouTube/audio and synchronized stem backends.
 - `src/practice.ts` and `src/PracticeControls.tsx`: source-bound A/B ranges, Repeat and paused-on-open practice links.
 - `src/recordings.ts`: typed CSV boundary, search/sort, section bounds, and URLs.
 - `src/styles.css`: fixed shell, rail/dock comparison and reserved media regions.
@@ -75,6 +75,4 @@ include originals. See [practice ownership and next model](docs/PRACTICE.md).
 
 In the player, use Repeat for the selected excerpt, or expand and Apply an A/B
 range. Copy practice link includes the exact source and range and opens paused.
-Repeat is local-audio only and uses native media seeking; no gapless timing is
-claimed. Named musical sections, bars, chords and stems are the next reviewed
-model, not fabricated catalog content.
+Original Audio repeats with native media seeking. Private source-owned named sections persist in SQLite with stable links; the first Logic six-stem pilot covers Beneath the Mask original seconds 30–120. Stems share one Web Audio clock and support volume, mute and solo. Bars/chords and automatic musical analysis remain deferred. The private runtime must mount `createPracticeHandler` from `scripts/practice-store.mjs`; static hosting alone cannot edit sections. No downloaded originals, stems, receipts or practice database are committed.

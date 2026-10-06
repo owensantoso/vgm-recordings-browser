@@ -6,6 +6,7 @@ export interface PracticeTarget {
   range: LoopRange | null;
   repeat: boolean;
   error: string;
+  sectionId?: string;
 }
 
 export function validateLoopRange(range: LoopRange, duration: number): string {
@@ -31,6 +32,7 @@ export function parsePracticeTarget(
   href: string,
   sourceId: string,
   duration: number,
+  sections?: readonly { id: string; start: number; end: number }[],
 ): PracticeTarget {
   const empty: PracticeTarget = { range: null, repeat: false, error: "" };
   let url: URL;
@@ -40,8 +42,9 @@ export function parsePracticeTarget(
     return { ...empty, error: "This practice link is not a valid address." };
   }
   const hasRange = url.searchParams.has("t"),
-    hasRepeat = url.searchParams.has("repeat");
-  if (!hasRange && !hasRepeat) return empty;
+    hasRepeat = url.searchParams.has("repeat"),
+    hasSection = url.searchParams.has("section");
+  if (!hasRange && !hasRepeat && !hasSection) return empty;
   if (
     !validSourceId(sourceId) ||
     url.searchParams.getAll("play").length !== 1 ||
@@ -55,7 +58,9 @@ export function parsePracticeTarget(
   }
   if (
     url.searchParams.getAll("t").length > 1 ||
-    url.searchParams.getAll("repeat").length > 1
+    url.searchParams.getAll("repeat").length > 1 ||
+    url.searchParams.getAll("section").length > 1 ||
+    (hasSection && hasRange)
   ) {
     return {
       ...empty,
@@ -67,6 +72,14 @@ export function parsePracticeTarget(
       ...empty,
       error: "This practice link has an invalid Repeat setting.",
     };
+  if (hasSection) {
+    const id = url.searchParams.get("section") || "";
+    const section = sections?.find(value => value.id === id);
+    if (!section) return { ...empty, error: "This section is not available for the linked source. Reload sections or choose a range." };
+    const range = { start: section.start, end: section.end };
+    const error = validateLoopRange(range, duration);
+    return error ? { ...empty, error } : { range, repeat: hasRepeat, error: "", sectionId: id };
+  }
   if (!hasRange)
     return {
       ...empty,
@@ -96,10 +109,24 @@ export function makePracticeLink(
   if (error) throw new Error(error);
   const url = new URL(href);
   url.searchParams.set("play", sourceId);
+  url.searchParams.delete("section");
   url.searchParams.set(
     "t",
     `${Object.is(range.start, -0) ? 0 : range.start},${range.end}`,
   );
+  if (repeat) url.searchParams.set("repeat", "1");
+  else url.searchParams.delete("repeat");
+  url.hash = "";
+  return url.toString();
+}
+
+export function makeSectionLink(href: string, sourceId: string, sectionId: string, repeat: boolean): string {
+  if (!validSourceId(sourceId) || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(sectionId))
+    throw new Error("Choose a saved section before copying its link.");
+  const url = new URL(href);
+  url.searchParams.set("play", sourceId);
+  url.searchParams.set("section", sectionId);
+  url.searchParams.delete("t");
   if (repeat) url.searchParams.set("repeat", "1");
   else url.searchParams.delete("repeat");
   url.hash = "";

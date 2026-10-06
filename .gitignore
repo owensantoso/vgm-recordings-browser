@@ -10,3 +10,6 @@ reference-audio/
 private-dist/
 private-dist.next/
 private-dist.previous/
+
+# User-authored practice sections stay private.
+private-data/

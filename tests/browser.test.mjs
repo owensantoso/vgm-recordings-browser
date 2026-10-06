@@ -68,6 +68,29 @@ async function open(name, path, options = {}) {
     reducedMotion: options.reducedMotion,
   });
   await context.addInitScript(initScript);
+  if (options.practiceFailFirst) {
+    let fail = true;
+    await context.route('**/api/practice?*',route=>{if(fail){fail=false;return route.fulfill({status:503,contentType:'application/json',body:JSON.stringify({error:'Synthetic sections unavailable.'})});}return route.continue();});
+  }
+  if (!options.practice) await context.route('**/api/practice**', route => route.fulfill({status:404,contentType:'application/json',body:JSON.stringify({error:'Synthetic static build has no practice API.'})}));
+  if (options.practice) await context.addInitScript(({failDecode})=>{
+    const Original = window.AudioContext;
+    window.__stemContexts=[];window.__stemStarts=[];window.__stemStops=[];window.__stemGains=[];
+    window.AudioContext=class extends Original {
+      constructor(options){super(options);this.testId=window.__stemContexts.length;window.__stemContexts.push(this);}
+      createBufferSource(){const source=super.createBufferSource(),start=source.start.bind(source),stop=source.stop.bind(source),context=this;
+        source.start=(when,offset,...rest)=>{window.__stemStarts.push({context:context.testId,when,offset,loop:source.loop,loopStart:source.loopStart,loopEnd:source.loopEnd});return start(when,offset,...rest);};
+        source.stop=(...args)=>{window.__stemStops.push({context:context.testId,time:context.currentTime});return stop(...args);};return source;}
+      createGain(){const gain=super.createGain(),target=gain.gain.setTargetAtTime.bind(gain.gain),context=this;
+        gain.gain.setTargetAtTime=(value,when,tau)=>{window.__stemGains.push({context:context.testId,value,when});return target(value,when,tau);};return gain;}
+      decodeAudioData(...args){if(failDecode)return Promise.reject(new DOMException('Synthetic decode failure','EncodingError'));return super.decodeAudioData(...args);}
+    };
+  },{failDecode:Boolean(options.failDecode)});
+  let releaseStems;
+  if(options.delayStems) {
+    const pending=new Promise(resolve=>{releaseStems=resolve;});
+    await context.route('**/reference-audio/stems/*.wav',async route=>{await pending;try{await route.continue();}catch{/* Replacement can abort the pending request. */}});
+  }
   let releaseArchive;
   if(options.delayArchive) {
     const pending=new Promise(resolve=>{releaseArchive=resolve;});
@@ -99,6 +122,7 @@ async function open(name, path, options = {}) {
   );
   const page = await context.newPage();
   page.releaseArchive=releaseArchive;
+  page.releaseStems=releaseStems;
   page.setDefaultTimeout(6000);
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));
@@ -1434,4 +1458,126 @@ test('private practice fast full-source repetitions survive native end and timer
     await page.click('.play-button');await waitLive(page,'audio',false);await page.waitForTimeout(250);assert.equal((await playing(page)).length,0,'explicit Pause wins over pending native or polling wraps');noErrors(page);
   }catch(error){console.log(JSON.stringify({status:await status(page),media:await media(page),events:(await audioEvents(page)).slice(-15)}));throw error;}
   finally{await page.context().close();}
+});
+
+const stemState = page => page.evaluate(()=>({contexts:window.__stemContexts.map(context=>({state:context.state,time:context.currentTime,rate:context.sampleRate})),starts:window.__stemStarts,stops:window.__stemStops,gains:window.__stemGains}));
+const stemsButton = page => page.getByRole('button',{name:'Stems',exact:true});
+const sectionRow = (page,label) => page.locator('.section-row').filter({has:page.getByRole('button',{name:`Play ${label}`,exact:true})});
+const savedSection = async (label,start,end) => {
+  const response=await fetch(fixture.origin+'/api/practice',{method:'POST',headers:{'Content-Type':'application/json',Origin:fixture.origin},body:JSON.stringify({sourceId:'ref:alpha-original',sourceHash:fixture.sourceHash,label,start,end})});
+  assert.equal(response.status,201);return (await response.json()).section;
+};
+const setDraftRange = async (page,start,end) => {
+  await page.getByRole('spinbutton',{name:'A (seconds)',exact:true}).fill(String(start));
+  await page.getByRole('spinbutton',{name:'B (seconds)',exact:true}).fill(String(end));
+  await page.getByRole('button',{name:'Apply range',exact:true}).click();
+};
+const pilotScenario = (label,fn,options={}) => test(`practice pilot: ${label}`,{skip:!executablePath},async()=>{
+  const page=await open(options.mobile?'mobile':'desktop',privatePath(options.query||'&t=.75%2C1.5'),{referenceAudio:true,practice:true,clipboard:'capture',failDecode:options.failDecode});
+  try{await waitLive(page,'audio',false);await expandPractice(page);await page.locator('.source-sections').waitFor();await page.getByRole('button',{name:'Add section',exact:true}).waitFor();await fn(page);noErrors(page);}catch(error){await page.shot('pilot-failure-'+label.replaceAll(/[^a-z0-9]+/gi,'-'));console.log(JSON.stringify({label,url:page.url(),status:await status(page),stem:await stemState(page),text:await page.locator('.player-extra').innerText().catch(()=>''),media:await media(page)}));throw error;}finally{await page.context().close();}
+});
+
+pilotScenario('sections save, rename by stable UUID, reopen paused and manual ranges replace semantic targets',async page=>{
+  await page.getByRole('button',{name:'Add section',exact:true}).click();
+  await page.getByRole('textbox',{name:'Section name',exact:true}).fill('Synthetic verse');
+  assert.equal(await page.getByRole('spinbutton',{name:'Original start (seconds)',exact:true}).inputValue(),'0.75');
+  await page.getByRole('button',{name:'Create section',exact:true}).click();
+  const row=sectionRow(page,'Synthetic verse');await row.waitFor();
+  await row.getByRole('button',{name:'Play Synthetic verse',exact:true}).click();
+  await page.waitForFunction(()=>new URL(location.href).searchParams.has('section'));
+  const id=new URL(page.url()).searchParams.get('section');assert.match(id,/^[0-9a-f-]{36}$/);assert.equal(new URL(page.url()).searchParams.has('t'),false);
+  const quick=page.getByRole('button',{name:'Repeat selected excerpt',exact:true});
+  if(await quick.getAttribute('aria-pressed')!=='true')await quick.click();
+  if(await status(page)!=='Playing')await page.click('.play-button');
+  await waitLive(page,'audio',true);const providers=(await media(page)).length;
+  await row.getByRole('button',{name:'Edit Synthetic verse',exact:true}).click();
+  await page.getByRole('textbox',{name:'Section name',exact:true}).fill('Synthetic verse renamed');
+  await page.getByRole('button',{name:'Update section',exact:true}).click();
+  const renamed=sectionRow(page,'Synthetic verse renamed');await renamed.waitFor();
+  assert.equal(new URL(page.url()).searchParams.get('section'),id);
+  await waitLive(page,'audio',true);assert.equal((await media(page)).length,providers,'rename leaves the transport intact');
+  await renamed.getByRole('button',{name:'Copy Synthetic verse renamed link',exact:true}).click();
+  const copied=await page.evaluate(()=>window.__copiedPractice);assert.equal(new URL(copied).searchParams.get('section'),id);
+  await page.reload();await page.waitForSelector('.workspace-main h1');await waitLive(page,'audio',false);await expandPractice(page);
+  await sectionRow(page,'Synthetic verse renamed').waitFor();assert.equal(new URL(page.url()).searchParams.get('section'),id);
+  assert.ok(Math.abs((await live(page))[0].time-.75)<.08);
+  await setDraftRange(page,.8,1.4);assert.equal(new URL(page.url()).searchParams.has('section'),false);assert.equal(new URL(page.url()).searchParams.get('t'),'0.8,1.4');
+});
+
+pilotScenario('six stems use one clock, gains preserve playback, loops survive browsing and Pause wins',async page=>{
+  const quick=page.getByRole('button',{name:'Repeat selected excerpt',exact:true});await quick.click();
+  await stemsButton(page).click();await page.locator('.stem-mixer').waitFor();await waitStatus(page,'Paused');
+  assert.equal((await playing(page)).length,0,'full mix stops before stems');
+  assert.equal((await stemState(page)).contexts.filter(context=>context.state!=='closed').length,1);
+  await page.click('.play-button');await waitStatus(page,'Playing');
+  await page.waitForFunction(()=>window.__stemStarts.length>=6);
+  const initial=await stemState(page),starts=initial.starts.slice(-6);assert.equal(new Set(starts.map(start=>start.context)).size,1);assert.equal(new Set(starts.map(start=>start.when)).size,1);assert.equal(new Set(starts.map(start=>start.offset)).size,1);assert.ok(starts.every(start=>start.loop));
+  const count=initial.starts.length;
+  await page.getByRole('slider',{name:'Vocals volume',exact:true}).evaluate(input=>{Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,'35');input.dispatchEvent(new Event('input',{bubbles:true}));input.dispatchEvent(new Event('change',{bubbles:true}));});
+  await page.getByRole('button',{name:'Solo Vocals',exact:true}).click();await page.getByRole('button',{name:'Solo Bass',exact:true}).click();await page.getByRole('button',{name:'Mute Vocals',exact:true}).click();
+  assert.equal((await stemState(page)).starts.length,count,'gain, mute and multi-solo do not restart tracks');
+  assert.deepEqual((await stemState(page)).gains.slice(-6).map(gain=>gain.value),[0,0,1,0,0,0],'mute wins, multiple solos retain independent state');
+  await collapsePractice(page);await nav(page,'Sessions');await filterBySong(page,'no-pilot-matches');await page.waitForTimeout(1800);
+  assert.equal(await status(page),'Playing');assert.equal((await stemState(page)).starts.length,count,'loop and browsing reuse scheduled source nodes');
+  await page.click('.play-button');await waitStatus(page,'Paused');await page.waitForTimeout(300);assert.equal(await status(page),'Paused');assert.equal((await stemState(page)).stops.length,count);assert.equal((await playing(page)).length,0);
+});
+
+pilotScenario('named ranges crossing stem coverage stay intact with an explicit error',async page=>{
+  const section=await savedSection('Outside stem coverage',0,.75);
+  await page.reload();await waitLive(page,'audio',false);await expandPractice(page);
+  await sectionRow(page,section.label).getByRole('button',{name:`Play ${section.label}`,exact:true}).click();
+  await page.waitForFunction(id=>new URL(location.href).searchParams.get('section')===id,section.id);
+  const original=page.url();await stemsButton(page).click();
+  await page.getByText(/cover.*(?:only|source)|outside.*(?:coverage|excerpt)|section.*outside/i).first().waitFor();
+  assert.equal(new URL(page.url()).searchParams.get('section'),section.id);assert.equal(new URL(page.url()).searchParams.has('t'),false);assert.equal((await stemState(page)).starts.length,0);
+  assert.equal(await stemsButton(page).getAttribute('aria-pressed'),'false');assert.equal(new URL(original).searchParams.get('section'),section.id);
+});
+
+pilotScenario('failed stem decoding closes its context and leaves an explicit full-mix fallback',async page=>{
+  await stemsButton(page).click();await page.getByText(/decode failure|could not.*stem|cannot.*stem|unable.*stem/i).first().waitFor();
+  await page.waitForFunction(()=>window.__stemContexts.length>0&&window.__stemContexts.every(context=>context.state==='closed'));
+  assert.equal((await stemState(page)).starts.length,0);assert.equal((await playing(page)).length,0);
+  await page.getByRole('group',{name:'Playback options'}).getByRole('button',{name:'Audio',exact:true}).click();await waitLive(page,'audio',false);
+  await page.click('.play-button');await waitLive(page,'audio',true);
+},{failDecode:true});
+
+pilotScenario('phone section drafts and six mixer rows remain reachable without overflow',async page=>{
+  await page.getByRole('button',{name:'Add section',exact:true}).click();
+  const field=page.getByRole('textbox',{name:'Section name',exact:true});await field.fill('Phone rehearsal section');assert.ok(await field.evaluate(input=>parseFloat(getComputedStyle(input).fontSize)>=16));
+  await page.getByRole('button',{name:'Create section',exact:true}).click();await sectionRow(page,'Phone rehearsal section').waitFor();
+  await stemsButton(page).click();await page.locator('.stem-mixer').waitFor();
+  await page.getByRole('button',{name:'Mute Other',exact:true}).click();assert.equal(await page.getByRole('button',{name:'Mute Other',exact:true}).getAttribute('aria-pressed'),'true');
+  await noOverflow(page);const geometry=await page.locator('.player-extra').evaluate(panel=>({width:panel.clientWidth,scrollWidth:panel.scrollWidth,rect:panel.getBoundingClientRect().toJSON(),overflows:[...panel.querySelectorAll('*')].filter(element=>element.getBoundingClientRect().right>panel.getBoundingClientRect().right+.5).map(element=>({tag:element.tagName,class:element.className,text:element.textContent.slice(0,60),rect:element.getBoundingClientRect().toJSON()}))}));assert.equal(geometry.scrollWidth>geometry.width,false,JSON.stringify(geometry));await page.shot('practice-pilot-phone');
+},{mobile:true});
+
+
+test('practice pilot: replacing a source during stem loading aborts it without hidden starts',{skip:!executablePath},async()=>{
+  const page=await open('desktop',privatePath('&t=.75%2C1.5'),{referenceAudio:true,practice:true,delayStems:true});
+  try{
+    await waitLive(page,'audio',false);await expandPractice(page);
+    const requested=page.waitForRequest('**/reference-audio/stems/*.wav');await stemsButton(page).click();await requested;
+    await collapsePractice(page);await nav(page,'Our takes');await playTake(page,'SYN_0002.MOV');await waitLive(page,'audio',true);
+    page.releaseStems();await page.waitForFunction(()=>window.__stemContexts.every(context=>context.state==='closed'));
+    assert.equal((await stemState(page)).starts.length,0);assert.equal(await heading(page),'Bravo full take');assert.equal((await playing(page)).length,1);noErrors(page);
+  }finally{page.releaseStems();await page.context().close();}
+});
+
+
+test('practice pilot: API retry resolves a pending section but cannot override newer manual intent',{skip:!executablePath},async()=>{
+  const section=await savedSection('Retry section',.75,1.5);
+  for(const replace of ['retry','range','repeat']){
+    const page=await open('desktop',privatePath('&section='+section.id+'&repeat=1'),{referenceAudio:true,practice:true,practiceFailFirst:true});
+    try{
+      await waitLive(page,'audio',false);await expandPractice(page);await page.getByText('Synthetic sections unavailable.',{exact:true}).waitFor();
+      if(replace==='range')await setDraftRange(page,.8,1.4);
+      if(replace==='repeat')await page.getByRole('button',{name:'Repeat selected excerpt',exact:true}).click();
+      await page.getByRole('button',{name:'Reload sections',exact:true}).click();
+      await sectionRow(page,section.label).waitFor();await page.waitForTimeout(100);
+      const url=new URL(page.url());assert.equal(await status(page),'Paused');
+      if(replace==='range'){assert.equal(url.searchParams.has('section'),false);assert.equal(url.searchParams.get('t'),'0.8,1.4');assert.equal(await page.getByRole('spinbutton',{name:'A (seconds)',exact:true}).inputValue(),'0.8');}
+      else if(replace==='repeat'){assert.equal(url.searchParams.has('section'),false);assert.equal(url.searchParams.get('t'),'0,2.5');assert.equal(url.searchParams.get('repeat'),'1');assert.equal(await page.getByRole('spinbutton',{name:'A (seconds)',exact:true}).inputValue(),'0');}
+      else{assert.equal(url.searchParams.get('section'),section.id);assert.equal(url.searchParams.has('t'),false);assert.equal(await page.getByRole('spinbutton',{name:'A (seconds)',exact:true}).inputValue(),'0.75');}
+      noErrors(page);
+    }finally{await page.context().close();}
+  }
 });

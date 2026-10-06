@@ -52,7 +52,7 @@ ability, not a prerequisite for this original practice flow. Repeated choruses
 need distinct stable occurrence IDs. Use musical labels only after reviewing
 the actual source boundaries; no labels have been fabricated.
 
-## Proposed next increment: one reviewed original chart
+## Deferred chart model: bars and chords
 
 Actual GPT-6 Astra reviewed VGM and the Song Practice Workbench source. Workbench
 implements section/time targets and transport validation, but has no implemented
@@ -82,25 +82,61 @@ inside contiguous covered segments. Unknown mappings remain unavailable. Never
 reuse original timestamps on a differently paced cover. Future links can add
 `practice=<version-id>&section=<section-id>` or `bar=<bar-id>` after these IDs and
 mappings exist. Conflicting semantic/time targets need explicit validation.
-These are proposed contracts, not currently accepted persisted schema or routes.
+These chart contracts remain proposed. The October 7 source-owned section pilot below supersedes the need for a practice-version/chart before naming an original passage.
 
-## Stems and storage decision
+## October 7 source-owned section and stem pilot
 
-First audition a 60–90-second Logic Pro six-stem result using the existing app.
-No documented public separation API was found; GUI/export suitability remains
-untested. MVSEP registered free is the strongest hosted comparison without local
-weights: current published limits are 50 jobs/day, one concurrent, <=10 minutes
-and 100 MB per input. All 14 downloaded inputs meet those input limits; account,
-model access, queue and quality need a pilot. No audio has been uploaded and no
-models or separated outputs have been installed/generated.
+Confirmed increment: name and return to parts of an original; audition one real
+Logic-separated original before deciding on full-song or batch processing.
+Sections use stable UUIDs, a source ID and exact source SHA-256, editable labels,
+original start/end seconds and optimistic revisions. The private SQLite store
+is `private-data/practice.sqlite`; it is not a browser-local approximation or
+part of the public catalog. Source/hash drift and stale edits fail visibly.
+`GET/POST api/practice` and `PUT api/practice/<UUID>` validate verified audio,
+finite bounds and an exact mutation-origin allowlist. The durable private runtime
+must mount `createPracticeHandler` from `scripts/practice-store.mjs` before its
+static file handler. A static public host does not provide section editing.
 
-Six four-minute stereo 44.1 kHz/16-bit WAV stems are roughly 254 MB per song,
-3.56 GB for fourteen songs; storage is more consequential than modest model
-weights. A 90-second pilot is roughly 95 MB. Preserve common time zero, duration,
-sample rate/frame count and source hash, with separation provenance. Later stem
-playback should use one Web Audio clock with per-stem gain, not independently
-started HTML audio elements. Decode memory and physical phone behavior need a
-pilot before full-track multitrack playback.
+Saved links use `play=ref:<reference-id>&section=<UUID>&repeat=1` and resolve
+against private data, preparing paused. A UUID survives a rename or retiming;
+manual A/B changes replace the semantic target with `t=start,end`. Conflicting
+`section` and `t` parameters are invalid. These source-time sections do not claim
+bar identity or alignment onto rehearsal takes. Labels and boundaries are user
+reviewed; no Verse/Chorus labels have been guessed.
+
+Logic Pro 12.3.1's actual GUI separated a task-owned 90-second WAV excerpt of
+Beneath the Mask (Lyn), original seconds **30–120**, with Separate All Stems.
+The six raw outputs are Vocals, Drums, Bass, Guitar, Piano and Other. Each is
+stereo 44.1 kHz/16-bit PCM, exactly 3,969,000 frames (90 seconds), 15,907,140 bytes.
+The six assets total **95,442,840 bytes** (91.0 MiB). Existing Logic processed the
+pilot without downloading a new model or uploading audio. A separate project
+preserved the user's open project. Input extraction used accurate output seek;
+no normalized export, effects or project tail was added.
+
+`reference-audio/stems/manifest.json` records the exact original hash, explicit
+excerpt coverage, stem IDs/files/bytes/hashes/common frames and Logic provenance.
+Private builds verify and symlink only those files. Public builds include no
+stem metadata, sources, database or generated audio. Browser loading verifies
+bytes/hash and decoded frame count/rate/channels; failure leaves original Audio
+available. The pilot uses one Web Audio context and a shared scheduled start,
+with per-instrument gain ramps, mute and multiple solo selection. Instrument
+changes do not recreate sources. Native buffer loops share the same clock.
+Every displayed/linked position remains on the full original clock; only the
+engine subtracts the excerpt's 30-second offset.
+
+Stems have an explicit coverage boundary. Entering the pilot prepares playback
+paused, retaining a compatible range or visibly preparing the 30–120 excerpt.
+A named section crossing that boundary is not clamped. Original Audio remains
+the full-song practice path. Active section timing edits pause and reprepare;
+renaming preserves playback. The six decoded buffers occupy about 190.5 MB;
+loading is bounded to six tracks and a 300 MiB decoded budget. Full-song and
+phone-memory suitability require this pilot's result before expansion.
+
+Numerical alignment of recombined stems over source seconds 50–55 found zero
+sample lag and 0.999908 correlation to the extracted input. This establishes
+timing/recombination evidence only; instrument bleed/artifacts and usefulness
+still require listening. MVSEP and local models remain researched alternatives,
+with no account, upload, model download or batch job performed.
 
 Primary references: [Logic Stem Splitter](https://support.apple.com/guide/logicpro/extract-vocal-instrumental-stems-stem-lgcp61bae908/mac),
 [MVSEP plans](https://www.mvsep.com/en/plans), [MVSEP API](https://www.mvsep.com/en/full_api),
@@ -112,5 +148,4 @@ Primary references: [Logic Stem Splitter](https://support.apple.com/guide/logicp
 
 Automated tests can establish decoding, source ownership, paused links, loop
 wraps, failures and browser layout. Audible seam quality, actual iPhone/keyboard
-behavior and human design acceptance remain open. No named sections, bars,
-chords, stems or guessed musical analysis are shipped in this slice.
+behavior and human design acceptance remain open. Bars, chords and guessed musical analysis remain unimplemented. Named source sections and the explicitly bounded real stem pilot are the October 7 increment; audible quality and physical phone acceptance remain open.

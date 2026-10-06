@@ -22,12 +22,20 @@ import {
   Repeat2,
 } from "lucide-react";
 import { PracticeControls } from "./PracticeControls";
+import { SourceSections } from "./SourceSections";
+import { StemMixer } from "./StemMixer";
+import type { StemMixValue } from "./StemMixer";
+import { fetchPracticeSource } from "./practiceData";
+import type { PracticeSource, PracticeSection } from "./practiceData";
+import { loadStemPlayback } from "./StemPlaybackEngine";
+import type { StemPlaybackEngine } from "./StemPlaybackEngine";
 import {
   makePracticeLink,
+  makeSectionLink,
   parsePracticeTarget,
   validateLoopRange,
 } from "./practice";
-import type { LoopRange } from "./practice";
+import type { LoopRange, PracticeTarget } from "./practice";
 import { catalogHref } from "./Catalog";
 
 type YoutubePlayer = {
@@ -125,8 +133,9 @@ export function Player({
     duration_seconds: String(sourceDuration),
   });
   const initialHref = useRef(location.href);
-  const initialTarget = useRef(
-    baseRange.full > 0
+  const linkedSection = useRef(new URL(initialHref.current).searchParams.has("section"));
+  const initialTarget = useRef<PracticeTarget>(
+    baseRange.full > 0 && !linkedSection.current
       ? parsePracticeTarget(initialHref.current, row.file, baseRange.full)
       : { range: null, repeat: false, error: "" },
   );
@@ -137,7 +146,19 @@ export function Player({
   const [practiceError, setPracticeError] = useState(
     initialTarget.current.error,
   );
-  const targetHandled = useRef(baseRange.full > 0);
+  const targetHandled = useRef(baseRange.full > 0 && !linkedSection.current);
+  const [practiceData, setPracticeData] = useState<PracticeSource | null>(null);
+  const [sectionsLoading, setSectionsLoading] = useState(false);
+  const [sectionsError, setSectionsError] = useState("");
+  const [sectionsReload, setSectionsReload] = useState(0);
+  const [activeSectionId, setActiveSectionId] = useState("");
+  const activeSectionRef = useRef(activeSectionId);
+  activeSectionRef.current = activeSectionId;
+  const [stemMix, setStemMix] = useState<Record<string, StemMixValue>>({});
+  const stemMixRef = useRef(stemMix);
+  stemMixRef.current = stemMix;
+  const [stemNotice, setStemNotice] = useState("");
+  const stemEngine = useRef<StemPlaybackEngine | null>(null);
   const range = loopRange
     ? {
         ...baseRange,
@@ -148,14 +169,19 @@ export function Player({
     : baseRange;
   const rangeRef = useRef(range);
   rangeRef.current = range;
-  const [mode, setMode] = useState<"video" | "audio">(
+  const [mode, setMode] = useState<"video" | "audio" | "stems">(
     row.has_audio === "yes" ? "audio" : "video",
   );
   const [expanded, setExpanded] = useState(
     Boolean(initialTarget.current.range),
   );
   const repeatRef = useRef(repeat);
-  repeatRef.current = repeat && mode === "audio";
+  repeatRef.current = repeat && mode !== "video";
+  const stemSet = practiceData?.stemSet ?? null;
+  const providerStemSet = mode === "stems" ? stemSet : null;
+  const covered = (next: LoopRange) => Boolean(stemSet && next.start >= stemSet.start && next.end <= stemSet.end);
+  const stemRangeValid = mode !== "stems" || covered(range);
+  const resolvingSection = linkedSection.current && !targetHandled.current && !sectionsError;
   const [videoVisible, setVideoVisible] = useState(row.has_audio !== "yes");
   useEffect(() => {
     onVideoVisibility(mode === "video" && videoVisible);
@@ -178,18 +204,41 @@ export function Player({
     duration(): number;
   } | null>(null);
   const position = useRef(range.start);
-  const wantsPlay = useRef(autoPlay);
+  const wantsPlay = useRef(autoPlay && !linkedSection.current);
   const fullMode = useRef(false);
   const seekUntil = useRef(0);
   const readyRef = useRef(false);
   const playingRef = useRef(false);
   const controllable =
-    mode === "audio" ? Boolean(row.audio_file) : Boolean(row.youtube_video_id);
+    mode === "stems" ? Boolean(stemSet) && stemRangeValid : mode === "audio" ? Boolean(row.audio_file) : Boolean(row.youtube_video_id);
   const updatePlaying = (value: boolean) => {
     playingRef.current = value;
     wantsPlay.current = value;
     setPlaying(value);
   };
+
+  useEffect(() => {
+    if (!row.file.startsWith("ref:") || row.has_audio !== "yes") {
+      if (linkedSection.current && !targetHandled.current) setSectionsError("Sections are unavailable for this source. Choose an audio range instead.");
+      return;
+    }
+    let disposed = false;
+    setSectionsLoading(true);
+    setSectionsError("");
+    void fetchPracticeSource(row.file).then(data => {
+      if (disposed) return;
+      if (data.sourceId !== row.file || !Number.isFinite(data.duration) || data.duration <= 0 ||
+          (data.stemSet && (data.stemSet.sourceId !== row.file || data.stemSet.sourceHash !== data.sourceHash))) {
+        throw new Error("Practice data does not match this source. Reload sections.");
+      }
+      setPracticeData(previous => previous?.stemSet && data.stemSet && JSON.stringify(previous.stemSet) === JSON.stringify(data.stemSet)
+        ? { ...data, stemSet: previous.stemSet } : data);
+      setSourceDuration(data.duration);
+    }).catch(failure => {
+      if (!disposed) setSectionsError(failure instanceof Error ? failure.message : "Sections are unavailable.");
+    }).finally(() => { if (!disposed) setSectionsLoading(false); });
+    return () => { disposed = true; };
+  }, [row.file, row.has_audio, sectionsReload]);
 
   useEffect(() => {
     let disposed = false;
@@ -212,7 +261,47 @@ export function Player({
       backend.current?.seek(position.current);
       if (wantsPlay.current) backend.current?.play();
     }
-    if (mode === "audio" && row.audio_file) {
+    if (mode === "stems") {
+      const controller = new AbortController();
+      let engine: StemPlaybackEngine | null = null;
+      let playEpoch = 0;
+      dispose = () => {
+        ++playEpoch;
+        controller.abort();
+        if (stemEngine.current === engine) stemEngine.current = null;
+        if (engine) void engine.destroy().catch(() => {});
+      };
+      if (!providerStemSet) fail("Stem preview is unavailable. Choose Audio for the full mix.");
+      else void loadStemPlayback(providerStemSet, controller.signal).then(loadedEngine => {
+        if (disposed) { void loadedEngine.destroy().catch(() => {}); return; }
+        engine = loadedEngine;
+        stemEngine.current = engine;
+        for (const [id, value] of Object.entries(stemMixRef.current)) {
+          if (providerStemSet.tracks.some(track => track.id === id)) engine.setMix(id, value);
+        }
+        engine.setLoop(repeatRef.current ? { start: rangeRef.current.start, end: rangeRef.current.end } : null);
+        backend.current = {
+          play: () => {
+            const request = ++playEpoch;
+            wantsPlay.current = true;
+            void engine!.play().then(() => {
+              if (!disposed && request === playEpoch && wantsPlay.current) updatePlaying(true);
+            }).catch(failure => fail(failure instanceof Error ? failure.message : "Stems could not start."));
+          },
+          pause: () => { ++playEpoch; engine!.pause(); },
+          seek: value => engine!.seek(value),
+          time: () => engine!.time(),
+          duration: () => rangeRef.current.full,
+        };
+        loaded();
+      }).catch(failure => {
+        if (!disposed) {
+          if (engine) { void engine.destroy().catch(() => {}); if (stemEngine.current === engine) stemEngine.current = null; }
+          backend.current = null;
+          fail(failure instanceof Error ? failure.message : "Stems could not load.");
+        }
+      });
+    } else if (mode === "audio" && row.audio_file) {
       const audio = new Audio(
         row.audio_path || `audio/${encodeURIComponent(row.audio_file)}`,
       );
@@ -335,6 +424,7 @@ export function Player({
         disposed ||
         !readyRef.current ||
         !backend.current ||
+        (mode === "stems" && (!providerStemSet || rangeRef.current.start < providerStemSet.start || rangeRef.current.end > providerStemSet.end)) ||
         Date.now() < seekUntil.current
       )
         return;
@@ -359,7 +449,8 @@ export function Player({
       const boundary =
         stop > 0 &&
         playingRef.current &&
-        next >= (repeatRef.current && !fullMode.current ? stop : stop - 0.1);
+        !(mode === "stems" && repeatRef.current) &&
+        next >= (mode === "stems" || (repeatRef.current && !fullMode.current) ? stop : stop - 0.1);
       if (boundary) {
         if (repeatRef.current && !fullMode.current) {
           next = current.start;
@@ -387,33 +478,45 @@ export function Player({
       backend.current = null;
       readyRef.current = false;
     };
-  }, [mode, row]);
+  }, [mode, row, providerStemSet]);
 
   useEffect(() => {
-    if (!autoPlay || !playRequest) return;
+    if (!autoPlay || !playRequest || (linkedSection.current && !targetHandled.current)) return;
     wantsPlay.current = true;
     if (readyRef.current) backend.current?.play();
   }, [playRequest, autoPlay]);
 
   useEffect(() => {
-    if (targetHandled.current || !baseRange.full) return;
+    if (targetHandled.current || !baseRange.full || (linkedSection.current && !practiceData)) return;
     targetHandled.current = true;
     const target = parsePracticeTarget(
       initialHref.current,
       row.file,
       baseRange.full,
+      practiceData?.sections,
     );
     setPracticeError(target.error);
     setLoopRange(target.range);
     setRepeat(target.repeat);
+    setActiveSectionId(target.sectionId || "");
     if (target.range) {
+      updatePlaying(false);
+      backend.current?.pause();
       position.current = target.range.start;
       setTime(target.range.start);
       backend.current?.seek(target.range.start);
+      setExpanded(true);
     }
-  }, [baseRange.full, row.file]);
-  function writePractice(next: LoopRange, enabled: boolean) {
-    const href = makePracticeLink(location.href, row.file, next, enabled);
+  }, [baseRange.full, row.file, practiceData]);
+
+  useEffect(() => {
+    if (mode !== "stems" || !stemEngine.current || !stemRangeValid) return;
+    stemEngine.current.setLoop(repeat ? { start: range.start, end: range.end } : null);
+  }, [mode, repeat, range.start, range.end, stemRangeValid]);
+
+  function writePractice(next: LoopRange, enabled: boolean, sectionId = activeSectionRef.current) {
+    targetHandled.current = true;
+    const href = sectionId ? makeSectionLink(location.href, row.file, sectionId, enabled) : makePracticeLink(location.href, row.file, next, enabled);
     history.replaceState(history.state, "", href);
     onPracticeTargetChange(href);
   }
@@ -421,18 +524,24 @@ export function Player({
     const message = validateLoopRange(next, baseRange.full);
     setPracticeError(message);
     if (message) return;
+    if (mode === "stems" && !covered(next)) { setPracticeError("This range is outside the stem preview. Choose Audio for the full mix."); return; }
+    targetHandled.current = true;
+    activeSectionRef.current = "";
+    setActiveSectionId("");
     setLoopRange(next);
+    rangeRef.current = { ...baseRange, ...next, duration: next.end - next.start };
     fullMode.current = false;
+    if (mode === "stems") stemEngine.current?.setLoop(repeat ? next : null);
     const current = position.current;
     if (current < next.start || current >= next.end) {
       position.current = next.start;
       setTime(next.start);
       backend.current?.seek(next.start);
     }
-    writePractice(next, repeat);
+    writePractice(next, repeat, "");
   }
   function changeRepeat(enabled: boolean) {
-    if (mode !== "audio" || !row.audio_file || !readyRef.current || error)
+    if (mode === "video" || !row.audio_file || !readyRef.current || error || !stemRangeValid || resolvingSection)
       return;
     const next = { start: range.start, end: range.end };
     const message = validateLoopRange(next, baseRange.full);
@@ -441,6 +550,7 @@ export function Player({
     setRepeat(enabled);
     repeatRef.current = enabled;
     fullMode.current = false;
+    if (mode === "stems") stemEngine.current?.setLoop(enabled ? next : null);
     writePractice(next, enabled);
     if (
       enabled &&
@@ -452,10 +562,9 @@ export function Player({
     }
   }
   async function copyPractice() {
-    const href = makePracticeLink(
-      identity.songId
-        ? catalogHref(location.href, "songs", identity.songId)
-        : location.href,
+    const context = identity.songId ? catalogHref(location.href, "songs", identity.songId) : location.href;
+    const href = activeSectionRef.current ? makeSectionLink(context, row.file, activeSectionRef.current, repeat) : makePracticeLink(
+      context,
       row.file,
       { start: range.start, end: range.end },
       repeat,
@@ -463,7 +572,10 @@ export function Player({
     await copy(href, "Practice link");
   }
   function seek(value: number, full = false) {
-    if (!readyRef.current) return;
+    if (!readyRef.current || resolvingSection) return;
+    if (mode === "stems" && (full || !stemSet || !Number.isFinite(value) || value < stemSet.start || value > stemSet.end)) {
+      setPracticeError("Stems cover the disclosed preview only. Choose Audio to seek through the full recording."); return;
+    }
     fullMode.current = full;
     if (full && repeat) {
       setRepeat(false);
@@ -480,7 +592,7 @@ export function Player({
     backend.current?.seek(next);
   }
   function toggle() {
-    if (!readyRef.current) return;
+    if (!readyRef.current || resolvingSection || !stemRangeValid) return;
     if (mode === "video" && !playingRef.current) setVideoVisible(true);
     if (playingRef.current) {
       updatePlaying(false);
@@ -494,14 +606,80 @@ export function Player({
       backend.current?.play();
     }
   }
-  function switchMode(next: "video" | "audio") {
+  function switchMode(next: "video" | "audio" | "stems") {
     if (mode === next) {
       if (next === "video") setVideoVisible(true);
       return;
     }
-    position.current = backend.current?.time() ?? position.current;
+    if (next === "stems" && (!stemSet || (activeSectionRef.current && !covered(range)))) {
+      setPracticeError("This section is outside the stem preview. Choose Audio for the full mix."); return;
+    }
+    const current = stemRangeValid ? (backend.current?.time() ?? position.current) : position.current;
+    const resume = wantsPlay.current && mode !== "stems" && next !== "stems";
+    backend.current?.pause();
+    updatePlaying(false);
+    wantsPlay.current = resume;
+    position.current = current;
+    seekUntil.current = 0;
+    if (next === "stems" && stemSet) {
+      targetHandled.current = true;
+      fullMode.current = false;
+      if (!covered(range)) {
+        const preview = { start: stemSet.start, end: stemSet.end };
+        setLoopRange(preview);
+        rangeRef.current = { ...baseRange, ...preview, duration: preview.end - preview.start };
+        activeSectionRef.current = ""; setActiveSectionId("");
+        writePractice(preview, repeat, "");
+      }
+      if (position.current < rangeRef.current.start || position.current >= rangeRef.current.end) position.current = rangeRef.current.start;
+      setExpanded(true);
+      setStemNotice(`Stem preview prepared · original ${formatTime(stemSet.start)}–${formatTime(stemSet.end)}. Press Play to listen.`);
+    }
+    setTime(position.current);
+    setPracticeError("");
     setMode(next);
     setVideoVisible(next === "video");
+  }
+
+  function selectSection(section: PracticeSection, play = true) {
+    const next = { start: section.start, end: section.end };
+    const message = validateLoopRange(next, baseRange.full);
+    if (message || (mode === "stems" && !covered(next))) {
+      updatePlaying(false); backend.current?.pause();
+      setPracticeError(message || "This section is outside the stem preview. Choose Audio for the full mix."); return;
+    }
+    updatePlaying(false); backend.current?.pause();
+    targetHandled.current = true;
+    activeSectionRef.current = section.id; setActiveSectionId(section.id);
+    setPracticeError(""); setLoopRange(next);
+    rangeRef.current = { ...baseRange, ...next, duration: next.end - next.start };
+    fullMode.current = false; seekUntil.current = 0; position.current = next.start; setTime(next.start);
+    writePractice(next, repeat, section.id);
+    wantsPlay.current = play;
+    if (mode === "video") { wantsPlay.current = play; setMode("audio"); setVideoVisible(false); }
+    else {
+      if (mode === "stems") stemEngine.current?.setLoop(repeat ? next : null);
+      backend.current?.seek(next.start);
+      if (play && readyRef.current) backend.current?.play();
+    }
+  }
+  function savedSection(section: PracticeSection) {
+    const previous = practiceData?.sections.find(value => value.id === section.id);
+    setPracticeData(data => data ? { ...data, sections: previous ? data.sections.map(value => value.id === section.id ? section : value) : [...data.sections, section] } : data);
+    if (activeSectionRef.current !== section.id || (previous?.start === section.start && previous.end === section.end)) return;
+    if (mode === "stems" && !covered(section)) {
+      updatePlaying(false); backend.current?.pause();
+      const next = { start: section.start, end: section.end };
+      setLoopRange(next); rangeRef.current = { ...baseRange, ...next, duration: next.end - next.start };
+      position.current = next.start; setTime(next.start);
+      setPracticeError("The saved section is outside the stem preview. Choose Audio for the full mix.");
+      return;
+    }
+    selectSection(section, false);
+  }
+  function changeMix(id: string, value: StemMixValue) {
+    stemEngine.current?.setMix(id, value);
+    setStemMix(current => ({ ...current, [id]: value }));
   }
   function closeVideo() {
     if (mode === "video") {
@@ -582,7 +760,7 @@ export function Player({
   return (
     <aside
       ref={surface}
-      className={`player ${expanded ? "expanded" : ""} ${mode === "video" ? "video-mode" : "audio-mode"} ${videoVisible ? "video-open" : ""}`}
+      className={`player ${expanded ? "expanded" : ""} ${mode === "video" ? "video-mode" : "audio-mode"} ${mode === "stems" ? "stem-mode" : ""} ${videoVisible ? "video-open" : ""}`}
       aria-label="Music player"
     >
       <header className="player-heading">
@@ -639,7 +817,7 @@ export function Player({
         <button
           className="play-button"
           onClick={toggle}
-          disabled={!ready || !controllable}
+          disabled={!ready || !controllable || resolvingSection}
           aria-label={
             playing ? "Pause selected recording" : "Play selected recording"
           }
@@ -658,7 +836,7 @@ export function Player({
           max={range.duration}
           step="any"
           value={offset}
-          disabled={!ready || !controllable || !range.duration}
+          disabled={!ready || !controllable || !range.duration || resolvingSection}
           onChange={(e) => seek(range.start + Number(e.target.value))}
         />
         <span className="time">
@@ -669,12 +847,14 @@ export function Player({
         <button
           className="repeat-quick icon-button"
           aria-label="Repeat selected excerpt"
-          aria-pressed={repeat && mode === "audio"}
+          aria-pressed={repeat && mode !== "video"}
           title="Repeat selected excerpt"
           disabled={
-            mode !== "audio" ||
+            mode === "video" ||
             !row.audio_file ||
             !ready ||
+            resolvingSection ||
+            !stemRangeValid ||
             Boolean(error) ||
             range.duration < 0.25
           }
@@ -697,6 +877,7 @@ export function Player({
         >
           <Video size={15} /> Video
         </button>
+        {stemSet && <button aria-pressed={mode === "stems"} onClick={() => switchMode("stems")}><AudioLines size={15} /> Stems</button>}
         <span className="mode-status" role="status">
           {error
             ? "Unavailable"
@@ -762,20 +943,42 @@ export function Player({
           )}
         </div>
         <div className="player-extra">
+          {(row.file.startsWith("ref:") && row.has_audio === "yes") || linkedSection.current ? <SourceSections
+            data={practiceData}
+            loading={sectionsLoading}
+            error={sectionsError}
+            range={{ start: range.start, end: range.end }}
+            currentTime={time}
+            activeId={activeSectionId}
+            onSelect={section => selectSection(section)}
+            onCopy={section => void copy(makeSectionLink(identity.songId ? catalogHref(location.href, "songs", identity.songId) : location.href, row.file, section.id, repeat), "Section link")}
+            onSaved={savedSection}
+            onReload={() => setSectionsReload(value => value + 1)}
+          /> : null}
+          {stemSet && <>
+            {mode === "stems" && stemNotice && <p className="stem-note" role="status">{stemNotice}</p>}
+            <StemMixer stemSet={stemSet} mix={stemMix} enabled={mode === "stems" && ready && !error} onChange={changeMix} />
+            {mode !== "stems" && <p className="stem-note">Choose Stems to listen to the instrument preview.</p>}
+            {mode === "stems" && <button type="button" onClick={() => switchMode("audio")}>Use full mix</button>}
+          </>}
           <PracticeControls
             duration={baseRange.full}
             currentTime={time}
             defaultRange={{ start: baseRange.start, end: baseRange.end }}
             range={{ start: range.start, end: range.end }}
-            repeat={repeat && mode === "audio"}
+            repeat={repeat && mode !== "video"}
             available={
-              mode === "audio" && Boolean(row.audio_file) && ready && !error
+              mode !== "video" && Boolean(row.audio_file) && ready && !error && !resolvingSection && stemRangeValid
             }
             error={practiceError}
             unavailableReason={
               error
                 ? "Audio is unavailable. Open the source or choose another recording."
-                : mode !== "audio" && row.audio_file
+                : mode === "stems" && !stemRangeValid
+                  ? "This section is outside the stem preview. Choose Audio for the full mix."
+                : resolvingSection
+                  ? "Resolving the saved section."
+                : mode === "video" && row.audio_file
                   ? "Choose Audio to set a practice range."
                   : !ready && row.audio_file
                     ? "Waiting for audio to load."
@@ -801,10 +1004,11 @@ export function Player({
                 max={range.full}
                 step="any"
                 value={time}
-                disabled={!ready || !controllable}
+                disabled={!ready || !controllable || mode === "stems" || resolvingSection}
                 onChange={(e) => seek(Number(e.target.value), true)}
               />
               <p>
+                {mode === "stems" && "Choose Audio to seek outside the stem preview. "}
                 Selected section {formatTime(range.start)}–
                 {formatTime(range.end)}
               </p>

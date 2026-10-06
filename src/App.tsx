@@ -38,6 +38,7 @@ export function App() {
   const practiceTarget = useRef({
     t: new URL(location.href).searchParams.get("t"),
     repeat: new URL(location.href).searchParams.get("repeat"),
+    section: new URL(location.href).searchParams.get("section"),
   });
   const [autoPlay, setAutoPlay] = useState(false);
   const [playRequest, setPlayRequest] = useState(0);
@@ -177,7 +178,7 @@ export function App() {
   function select(id: string, play = true) {
     const different = selectedRef.current !== id;
     selectedRef.current = id;
-    if (different) practiceTarget.current = { t: null, repeat: null };
+    if (different) practiceTarget.current = { t: null, repeat: null, section: null };
     setSelected(id);
     setAutoPlay(play);
     setPlayRequest((current) => current + 1);
@@ -186,6 +187,7 @@ export function App() {
     if (different) {
       url.searchParams.delete("t");
       url.searchParams.delete("repeat");
+      url.searchParams.delete("section");
     }
     url.hash = "";
     history.replaceState(history.state, "", url);
@@ -399,6 +401,7 @@ export function App() {
               practiceTarget.current = {
                 t: url.searchParams.get("t"),
                 repeat: url.searchParams.get("repeat"),
+                section: url.searchParams.get("section"),
               };
               setBrowse((current) => ({ ...current }));
             }}

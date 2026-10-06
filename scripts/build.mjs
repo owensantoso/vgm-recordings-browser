@@ -10,10 +10,12 @@ import {
 } from "node:fs/promises";
 import { resolve } from "node:path";
 import { buildPrivateCatalog } from "./catalog.mjs";
+import { readVerifiedStemSets } from "./practice-store.mjs";
 
 const privateAudio = process.argv.includes("--private-audio");
 const output = privateAudio ? "private-dist.next" : "dist";
 let privateCatalog;
+let stemSets = [];
 // Verify all private source associations before touching an existing preview.
 if (privateAudio) {
   const catalog = JSON.parse(await readFile("data/catalog.json", "utf8"));
@@ -21,6 +23,7 @@ if (privateAudio) {
     await readFile("reference-audio/manifest.json", "utf8"),
   );
   privateCatalog = buildPrivateCatalog(catalog, receipt, "reference-audio");
+  stemSets = readVerifiedStemSets(process.cwd());
 }
 await rm(output, { recursive: true, force: true });
 await mkdir(output, { recursive: true });
@@ -55,6 +58,12 @@ if (privateCatalog) {
       resolve("reference-audio", ref.audio_file),
       `${output}/reference-audio/${ref.audio_file}`,
     );
+  if (stemSets.length) {
+    await mkdir(`${output}/reference-audio/stems`, {recursive:true});
+    for (const set of stemSets) for (const track of set.tracks)
+      await symlink(resolve("reference-audio/stems",track.file),`${output}/reference-audio/stems/${track.file}`);
+    console.log(`Private stem sets: ${stemSets.length} verified.`);
+  }
   console.log(
     `Private listening audio: ${privateCatalog.references.filter((ref) => ref.audio_file).length} verified sources.`,
   );

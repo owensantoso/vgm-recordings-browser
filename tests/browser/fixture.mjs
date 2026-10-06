@@ -1,6 +1,8 @@
 // Synthetic archive used by the real-browser tests. Nothing here touches the
 // committed CSV, audio, or thumbnails: every byte is generated at test time.
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
+import { createPracticeHandler } from "../../scripts/practice-store.mjs";
 import { cp, mkdir, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { extname, join } from "node:path";
@@ -438,8 +440,23 @@ export async function createFixture(directory) {
     sourcemap: "inline",
     logLevel: "silent",
   });
+  const sourceBytes = await readFile(join(directory, 'reference-audio', referenceAudio.audio_file));
+  const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
+  const sourceHash = sha256(sourceBytes);
+  await writeFile(join(directory, 'reference-audio/manifest.json'), JSON.stringify({version:1,checked_at:'2026-10-07T00:00:00Z',assets:[{reference_id:'alpha-original',youtube_id:'Fixture0001',...referenceAudio,bytes:sourceBytes.length,sha256:sourceHash}]}));
+  await mkdir(join(directory, 'reference-audio/stems'), {recursive:true});
+  const stemTracks = [];
+  for (const [index,label] of ['Vocals','Drums','Bass','Guitar','Piano','Other'].entries()) {
+    const bytes = wav(1.5, 220 + index * 110, 44100), file = label.toLowerCase()+'.wav';
+    await writeFile(join(directory, 'reference-audio/stems',file),bytes);
+    stemTracks.push({id:label.toLowerCase(),label,file,bytes:bytes.length,sha256:sha256(bytes)});
+  }
+  const stemSet = {id:'bc35051c-f639-4d55-a436-7c0cf76aaf83',sourceId:'ref:alpha-original',sourceHash,coverage:'excerpt',start:.5,end:2,sampleRate:44100,channels:1,frames:66150,tracks:stemTracks};
+  await writeFile(join(directory,'reference-audio/stems/manifest.json'),JSON.stringify({version:1,stemSets:[stemSet]}));
+  let practice;
   const server = createServer(async (request, response) => {
     const path = decodeURIComponent(new URL(request.url, "http://x").pathname);
+    if (practice && await practice(request,response,path)) return;
     const file = join(directory, path === "/" ? "index.html" : path);
     try {
       const info = await stat(file);
@@ -473,10 +490,13 @@ export async function createFixture(directory) {
   });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   const { port } = server.address();
+  practice = createPracticeHandler({repoRoot:directory,allowedOrigins:[`http://127.0.0.1:${port}`]});
   return {
     origin: `http://127.0.0.1:${port}`,
     referenceAudio,
+    sourceHash,
+    stemSet,
     youtubeApi: youtubeApi(videoSource),
-    close: () => new Promise((resolve) => server.close(resolve)),
+    close: () => new Promise((resolve) => server.close(() => {practice.close();resolve();})),
   };
 }

@@ -4,6 +4,7 @@ import {
   validateLoopRange,
   parsePracticeTarget,
   makePracticeLink,
+  makeSectionLink,
 } from "../src/practice.ts";
 
 const base =
@@ -170,4 +171,94 @@ test("practice link creation rejects invalid source IDs and invalid intrinsic ra
     { start: 0, end: 0.1 },
   ])
     assert.throws(() => makePracticeLink(base, source, range, true));
+});
+
+
+const sectionId = "bc35051c-f639-4d55-a436-7c0cf76aaf83";
+const savedSection = { id: sectionId, label: "Verse", start: 30.125, end: 42.875, revision: 1 };
+
+test("saved section links resolve exact source, fractional bounds and optional Repeat", () => {
+  for (const repeat of [true, false]) {
+    const href = makeSectionLink(base, source, sectionId, repeat);
+    assert.deepEqual(parsePracticeTarget(href, source, 100, [savedSection]), {
+      range: { start: savedSection.start, end: savedSection.end },
+      repeat,
+      error: "",
+      sectionId,
+    });
+    const wrong = parsePracticeTarget(href, "ref:another-original", 100, [savedSection]);
+    assert.equal(wrong.range, null);
+    assert.equal(wrong.repeat, false);
+    assert.equal(wrong.sectionId, undefined);
+    assert.match(wrong.error, /different recording/);
+  }
+});
+
+test("unresolved and conflicting section targets never fall back to manual timestamps", () => {
+  const href = makeSectionLink(base, source, sectionId, true);
+  for (const sections of [undefined, []]) {
+    const target = parsePracticeTarget(href, source, 100, sections);
+    assert.equal(target.range, null);
+    assert.equal(target.repeat, false);
+    assert.equal(target.sectionId, undefined);
+    assert.match(target.error, /not available/);
+  }
+  for (const mutate of [
+    (url: URL) => url.searchParams.set("t", "1,2"),
+    (url: URL) => url.searchParams.append("section", sectionId),
+    (url: URL) => url.searchParams.append("repeat", "1"),
+  ]) {
+    const url = new URL(href); mutate(url);
+    const target = parsePracticeTarget(url.toString(), source, 100, [savedSection]);
+    assert.equal(target.range, null);
+    assert.equal(target.repeat, false);
+    assert.match(target.error, /conflicting/);
+  }
+  const unknown = new URL(href); unknown.searchParams.set("section", "00000000-0000-4000-8000-000000000001");
+  assert.match(parsePracticeTarget(unknown.toString(), source, 100, [savedSection]).error, /not available/);
+  const badRepeat = new URL(href); badRepeat.searchParams.set("repeat", "true");
+  assert.match(parsePracticeTarget(badRepeat.toString(), source, 100, [savedSection]).error, /Repeat setting/);
+  const missingSource = new URL(href); missingSource.searchParams.delete("play");
+  assert.match(parsePracticeTarget(missingSource.toString(), source, 100, [savedSection]).error, /different recording/);
+});
+
+test("semantic and manual links replace each other while preserving browsing context", () => {
+  const manual = makePracticeLink(base, source, { start: 1.125, end: 2.75 }, true);
+  const context = new URL(manual); context.searchParams.set("q", "Mask & piano");
+  const semantic = makeSectionLink(context.toString(), source, sectionId, false);
+  const url = new URL(semantic);
+  assert.equal(url.searchParams.has("t"), false);
+  assert.equal(url.searchParams.has("repeat"), false);
+  assert.equal(url.searchParams.get("section"), sectionId);
+  for (const key of ["view", "song", "session", "layout", "q"]) assert.equal(url.searchParams.get(key), context.searchParams.get(key));
+  assert.equal(url.hash, "");
+  assert.equal(makeSectionLink(semantic, source, sectionId, false), semantic);
+  const timed = new URL(makePracticeLink(semantic, source, { start: 2.125, end: 8.75 }, true));
+  assert.equal(timed.searchParams.has("section"), false);
+  assert.equal(timed.searchParams.get("t"), "2.125,8.75");
+  assert.equal(timed.searchParams.get("repeat"), "1");
+  for (const key of ["view", "song", "session", "layout", "q"]) assert.equal(timed.searchParams.get(key), context.searchParams.get(key));
+});
+
+test("renaming retains section links, changed bounds resolve by the same UUID and invalid saved bounds fail", () => {
+  const href = makeSectionLink(base, source, sectionId, true);
+  const renamed = { ...savedSection, label: "Verse 1", revision: 2 };
+  assert.deepEqual(parsePracticeTarget(href, source, 100, [renamed]), parsePracticeTarget(href, source, 100, [savedSection]));
+  const retimed = { ...renamed, start: 33.25, end: 40.5, revision: 3 };
+  assert.deepEqual(parsePracticeTarget(href, source, 100, [retimed]), { range: { start: 33.25, end: 40.5 }, repeat: true, error: "", sectionId });
+  for (const bounds of [
+    { start: -1, end: 40 }, { start: 40, end: 30 }, { start: 1, end: 1.249 },
+    { start: 30, end: 101 }, { start: NaN, end: 40 }, { start: 30, end: Infinity },
+  ]) {
+    const target = parsePracticeTarget(href, source, 100, [{ ...savedSection, ...bounds }]);
+    assert.equal(target.range, null);
+    assert.equal(target.repeat, false);
+    assert.equal(target.sectionId, undefined);
+    assert.ok(target.error);
+  }
+});
+
+test("saved link creation rejects missing/invalid UUIDs or source identities", () => {
+  for (const id of ["", "Verse", "../section", "00000000-0000-0000-0000-000000000000", sectionId + "extra"]) assert.throws(() => makeSectionLink(base, source, id, true));
+  for (const id of ["", " ", "bad\u0000source"]) assert.throws(() => makeSectionLink(base, id, sectionId, true));
 });

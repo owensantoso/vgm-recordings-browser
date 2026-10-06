@@ -3,7 +3,7 @@
 Purpose: browse songs, chosen repertoire and rehearsal history while one
 transport keeps playing. The user rejected the first songbook's cohesion and
 authorized a full redesign. The following direction supersedes the historical
-ledger-first composition below; it is proposed, not yet human-accepted.
+ledger-first composition below; the shown candidate was visually accepted on October 7; audible/device acceptance is separate.
 
 ## Feedback and correction
 
@@ -70,6 +70,37 @@ pauses a YouTube-only reference. This preserves the provider's visible-player
 requirement without pretending a collapsed YouTube frame is audio playback.
 
 Practice controls and source-bound range ownership are documented in [PRACTICE.md](PRACTICE.md). The persistent player owns Apply/Repeat; browsing owns no playback clock.
+
+## Original-first practice pilot — October 7
+
+Operate surface: open the original, choose a named part, repeat it and adjust
+instrument balance while the library remains browsable. Owen authorized the
+first real stem/section pilot after seeing the current candidate. Preserve the
+accepted shell and tokens; compare against the actual current app, not a new
+mockup. Named sections initially belong to a source/hash in original seconds;
+no bar chart, key, tempo, form or section labels are guessed.
+
+Adapt PracticeControls' draft/apply pattern, native labeled inputs and pressed
+buttons. SourceSections owns editing drafts, while Player owns the selected
+section/range and sole transport. Persist stable section IDs in the private
+SQLite store; public hosting stays read-only. Source metadata fetch does not
+start audio. Saved time edits pause/reprepare; rename preserves transport.
+
+StemMixer uses labeled instrument rows with native gain sliders and independent
+Mute/Solo buttons. One Web Audio clock schedules every stem; gain changes do not
+restart tracks. The Logic pilot covers original seconds 30–120 only, visibly
+labeled; any section outside that coverage stays playable as original audio and
+cannot be silently truncated for stems. Mixer/section tools live in expanded
+player details, leaving the persistent browse shell and compact dock stable.
+On phone, fields use at least 16px and tools scroll inside the details panel.
+
+Actual Astra challenged partial coverage, section-vs-time URL conflicts, stale
+editing and independent clocks. `section=<UUID>` and `t=A,B` are mutually exclusive;
+manual A/B clears the semantic section. Browse/history preserve the current
+source and target; source replacement clears both. Deep links resolve from the
+same private database and open paused. Missing/stale API data stays visible and
+must not invent or activate another section. The proof is a real six-stem pilot,
+section save/reload/share and gain/mute/solo with loop/pause/navigation checks.
 
 ## Review scenarios and acceptance
 
