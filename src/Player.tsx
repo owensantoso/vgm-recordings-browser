@@ -1,4 +1,8 @@
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { PracticeWorkspace } from "./PracticeWorkspace";
+import { loadChunkedStemPlayback } from "./ChunkedStemPlaybackEngine";
+import type { ChunkedStemPlaybackEngine } from "./ChunkedStemPlaybackEngine";
 import {
   bounds,
   driveDownload,
@@ -10,20 +14,12 @@ import type { Recording } from "./recordings";
 import {
   ArrowUpRight,
   AudioLines,
-  ChevronDown,
-  ChevronUp,
-  Copy,
-  Disc3,
   Download,
   Pause,
   Play,
   Video,
   X,
-  Repeat2,
 } from "lucide-react";
-import { PracticeControls } from "./PracticeControls";
-import { SourceSections } from "./SourceSections";
-import { StemMixer } from "./StemMixer";
 import type { StemMixValue } from "./StemMixer";
 import { fetchPracticeSource } from "./practiceData";
 import type { PracticeSource, PracticeSection } from "./practiceData";
@@ -103,16 +99,16 @@ export function Player({
   row,
   autoPlay,
   playRequest,
-  onFilter,
   identity,
   onSong,
   onVideoVisibility,
   onPracticeTargetChange,
+  practiceHost,
 }: {
   row: Recording;
+  practiceHost: HTMLElement | null;
   autoPlay: boolean;
   playRequest: number;
-  onFilter(value: string): void;
   identity: {
     title?: string;
     kind: string;
@@ -157,8 +153,11 @@ export function Player({
   const [stemMix, setStemMix] = useState<Record<string, StemMixValue>>({});
   const stemMixRef = useRef(stemMix);
   stemMixRef.current = stemMix;
-  const [stemNotice, setStemNotice] = useState("");
-  const stemEngine = useRef<StemPlaybackEngine | null>(null);
+  const stemEngine = useRef<StemPlaybackEngine | ChunkedStemPlaybackEngine | null>(null);
+  const initialAudioSelection = useRef(row.file.startsWith("ref:") && row.has_audio === "yes");
+  const [audioRoutingPending, setAudioRoutingPending] = useState(initialAudioSelection.current);
+  const [buffering, setBuffering] = useState(false);
+  const [originalPreferred, setOriginalPreferred] = useState(false);
   const range = loopRange
     ? {
         ...baseRange,
@@ -172,12 +171,12 @@ export function Player({
   const [mode, setMode] = useState<"video" | "audio" | "stems">(
     row.has_audio === "yes" ? "audio" : "video",
   );
-  const [expanded, setExpanded] = useState(
-    Boolean(initialTarget.current.range),
-  );
   const repeatRef = useRef(repeat);
   repeatRef.current = repeat && mode !== "video";
-  const stemSet = practiceData?.stemSet ?? null;
+  const stableStemSet = useRef(practiceData?.stemSet ?? null);
+  const incomingStemSet = practiceData?.stemSet ?? null;
+  if (JSON.stringify(stableStemSet.current) !== JSON.stringify(incomingStemSet)) stableStemSet.current = incomingStemSet;
+  const stemSet = stableStemSet.current;
   const providerStemSet = mode === "stems" ? stemSet : null;
   const covered = (next: LoopRange) => Boolean(stemSet && next.start >= stemSet.start && next.end <= stemSet.end);
   const stemRangeValid = mode !== "stems" || covered(range);
@@ -194,8 +193,6 @@ export function Player({
   const [copied, setCopied] = useState("");
   const [manualLink, setManualLink] = useState("");
   const container = useRef<HTMLDivElement>(null);
-  const expandButton = useRef<HTMLButtonElement>(null);
-  const surface = useRef<HTMLElement>(null);
   const backend = useRef<{
     play(): void;
     pause(): void;
@@ -241,11 +238,30 @@ export function Player({
   }, [row.file, row.has_audio, sectionsReload]);
 
   useEffect(() => {
+    if (!initialAudioSelection.current || (!practiceData && !sectionsError)) return;
+    if (linkedSection.current && !targetHandled.current && !sectionsError) return;
+    initialAudioSelection.current = false;
+    setAudioRoutingPending(false);
+    const selectedSet = practiceData?.stemSet;
+    if (!originalPreferred && mode === "audio" && selectedSet && (selectedSet.coverage === "full-source" || (rangeRef.current.start >= selectedSet.start && rangeRef.current.end <= selectedSet.end))) {
+      const resume = wantsPlay.current;
+      // Before native metadata arrives, its clock is still zero. Keep the
+      // requested practice position until that backend has actually sought.
+      position.current = readyRef.current ? (backend.current?.time() ?? position.current) : position.current;
+      backend.current?.pause();
+      playingRef.current = false; setPlaying(false);
+      wantsPlay.current = resume;
+      setMode("stems");
+    } else if (wantsPlay.current && readyRef.current && !linkedSection.current) backend.current?.play();
+  }, [practiceData, sectionsError, originalPreferred, mode, range.start, range.end, activeSectionId]);
+
+  useEffect(() => {
     let disposed = false;
     readyRef.current = false;
     setReady(false);
     setError("");
     setPlaying(false);
+    setBuffering(false);
     playingRef.current = false;
     let dispose = () => {};
     function fail(message: string) {
@@ -259,23 +275,33 @@ export function Player({
       readyRef.current = true;
       setReady(true);
       backend.current?.seek(position.current);
-      if (wantsPlay.current) backend.current?.play();
+      if (wantsPlay.current && !initialAudioSelection.current) backend.current?.play();
     }
     if (mode === "stems") {
       const controller = new AbortController();
-      let engine: StemPlaybackEngine | null = null;
+      let engine: StemPlaybackEngine | ChunkedStemPlaybackEngine | null = null;
+      let unsubscribe = () => {};
       let playEpoch = 0;
       dispose = () => {
         ++playEpoch;
+        unsubscribe();
         controller.abort();
         if (stemEngine.current === engine) stemEngine.current = null;
         if (engine) void engine.destroy().catch(() => {});
       };
       if (!providerStemSet) fail("Stem preview is unavailable. Choose Audio for the full mix.");
-      else void loadStemPlayback(providerStemSet, controller.signal).then(loadedEngine => {
+      else void (providerStemSet.chunks?.length ? loadChunkedStemPlayback(providerStemSet, controller.signal) : loadStemPlayback(providerStemSet, controller.signal)).then(async loadedEngine => {
         if (disposed) { void loadedEngine.destroy().catch(() => {}); return; }
         engine = loadedEngine;
         stemEngine.current = engine;
+        if ("subscribe" in engine) unsubscribe = engine.subscribe(snapshot => {
+          if (disposed) return;
+          setBuffering(snapshot.buffering);
+          playingRef.current = snapshot.playing;
+          setPlaying(snapshot.playing);
+          if (snapshot.state === "error") fail(snapshot.error || "Instrument audio could not load. Choose Original mix.");
+          if (snapshot.state === "ended") updatePlaying(false);
+        });
         for (const [id, value] of Object.entries(stemMixRef.current)) {
           if (providerStemSet.tracks.some(track => track.id === id)) engine.setMix(id, value);
         }
@@ -285,15 +311,22 @@ export function Player({
             const request = ++playEpoch;
             wantsPlay.current = true;
             void engine!.play().then(() => {
-              if (!disposed && request === playEpoch && wantsPlay.current) updatePlaying(true);
+              if (!disposed && request === playEpoch && wantsPlay.current && !("subscribe" in engine!)) updatePlaying(true);
             }).catch(failure => fail(failure instanceof Error ? failure.message : "Stems could not start."));
           },
           pause: () => { ++playEpoch; engine!.pause(); },
-          seek: value => engine!.seek(value),
+          seek: value => {
+            try { void Promise.resolve(engine!.seek(value)).catch(failure => fail(failure instanceof Error ? failure.message : "The audio could not seek.")); }
+            catch (failure) { fail(failure instanceof Error ? failure.message : "The audio could not seek."); }
+          },
           time: () => engine!.time(),
           duration: () => rangeRef.current.full,
         };
-        loaded();
+        await engine.seek(position.current);
+        if (disposed) return;
+        readyRef.current = true;
+        setReady(true);
+        if (wantsPlay.current) backend.current.play();
       }).catch(failure => {
         if (!disposed) {
           if (engine) { void engine.destroy().catch(() => {}); if (stemEngine.current === engine) stemEngine.current = null; }
@@ -306,15 +339,17 @@ export function Player({
         row.audio_path || `audio/${encodeURIComponent(row.audio_file)}`,
       );
       audio.preload = "metadata";
+      let playEpoch = 0;
+      function playAudio(message: string) {
+        const request = ++playEpoch;
+        wantsPlay.current = true;
+        void audio.play().catch(() => {
+          if (!disposed && request === playEpoch && wantsPlay.current) fail(message);
+        });
+      }
       backend.current = {
-        play: () => {
-          void audio
-            .play()
-            .catch(() =>
-              fail("Playback could not start. Press Play to try again."),
-            );
-        },
-        pause: () => audio.pause(),
+        play: () => playAudio("Playback could not start. Press Play to try again."),
+        pause: () => { ++playEpoch; audio.pause(); },
         seek: (t) => {
           audio.currentTime = t;
         },
@@ -335,16 +370,13 @@ export function Player({
           position.current = start;
           setTime(start);
           audio.currentTime = start;
-          void audio
-            .play()
-            .catch(() =>
-              fail("Playback could not repeat. Press Play to try again."),
-            );
+          playAudio("Playback could not repeat. Press Play to try again.");
         } else updatePlaying(false);
       };
       audio.onerror = () =>
         fail("The audio could not load. Open the source audio below.");
       dispose = () => {
+        ++playEpoch;
         audio.onpause = null;
         audio.onplay = null;
         audio.onended = null;
@@ -481,7 +513,7 @@ export function Player({
   }, [mode, row, providerStemSet]);
 
   useEffect(() => {
-    if (!autoPlay || !playRequest || (linkedSection.current && !targetHandled.current)) return;
+    if (!autoPlay || !playRequest || initialAudioSelection.current || (linkedSection.current && !targetHandled.current)) return;
     wantsPlay.current = true;
     if (readyRef.current) backend.current?.play();
   }, [playRequest, autoPlay]);
@@ -505,7 +537,6 @@ export function Player({
       position.current = target.range.start;
       setTime(target.range.start);
       backend.current?.seek(target.range.start);
-      setExpanded(true);
     }
   }, [baseRange.full, row.file, practiceData]);
 
@@ -573,13 +604,14 @@ export function Player({
   }
   function seek(value: number, full = false) {
     if (!readyRef.current || resolvingSection) return;
-    if (mode === "stems" && (full || !stemSet || !Number.isFinite(value) || value < stemSet.start || value > stemSet.end)) {
+    if (mode === "stems" && (!stemSet || !Number.isFinite(value) || value < stemSet.start || value > stemSet.end)) {
       setPracticeError("Stems cover the disclosed preview only. Choose Audio to seek through the full recording."); return;
     }
     fullMode.current = full;
     if (full && repeat) {
       setRepeat(false);
       repeatRef.current = false;
+      if (mode === "stems") stemEngine.current?.setLoop(null);
       writePractice({ start: range.start, end: range.end }, false);
     }
     const next = Math.max(
@@ -592,9 +624,9 @@ export function Player({
     backend.current?.seek(next);
   }
   function toggle() {
-    if (!readyRef.current || resolvingSection || !stemRangeValid) return;
+    if (!readyRef.current || initialAudioSelection.current || resolvingSection || !stemRangeValid) return;
     if (mode === "video" && !playingRef.current) setVideoVisible(true);
-    if (playingRef.current) {
+    if (playingRef.current || wantsPlay.current) {
       updatePlaying(false);
       backend.current?.pause();
     } else {
@@ -603,6 +635,7 @@ export function Player({
         (fullMode.current ? range.full : range.end) - 0.15
       )
         seek(fullMode.current ? 0 : range.start, fullMode.current);
+      wantsPlay.current = true;
       backend.current?.play();
     }
   }
@@ -632,8 +665,6 @@ export function Player({
         writePractice(preview, repeat, "");
       }
       if (position.current < rangeRef.current.start || position.current >= rangeRef.current.end) position.current = rangeRef.current.start;
-      setExpanded(true);
-      setStemNotice(`Stem preview prepared · original ${formatTime(stemSet.start)}–${formatTime(stemSet.end)}. Press Play to listen.`);
     }
     setTime(position.current);
     setPracticeError("");
@@ -683,59 +714,50 @@ export function Player({
   }
   function closeVideo() {
     if (mode === "video") {
-      if (row.has_audio === "yes") switchMode("audio");
+      if (row.has_audio === "yes") chooseAudio(originalPreferred);
       else {
         updatePlaying(false);
         backend.current?.pause();
       }
     }
     setVideoVisible(false);
-    setExpanded(false);
   }
-  function collapse() {
-    setExpanded(false);
-  }
+  const spacePauseKey = useRef(false);
   useEffect(() => {
     function keydown(event: KeyboardEvent) {
       if (event.defaultPrevented || event.isComposing || event.keyCode === 229)
         return;
       if (
         event.key === "Escape" &&
-        expanded &&
+        mode === "video" && videoVisible &&
         !(
           event.target instanceof Element &&
           event.target.closest("input,textarea,[contenteditable]")
         )
       ) {
         event.preventDefault();
-        collapse();
-        expandButton.current?.focus();
+        closeVideo();
         return;
       }
-      if (
-        event.ctrlKey ||
-        event.metaKey ||
-        event.altKey ||
-        (event.target instanceof Element &&
-          event.target.closest(
-            "input, select, textarea, button, a, [contenteditable]",
-          ))
-      )
-        return;
+      if (event.ctrlKey || event.metaKey || event.altKey ||
+        (event.target instanceof Element && event.target.closest('input:not([type="range"]),select,textarea,[contenteditable],video,audio,iframe'))) return;
+      if (event.key === " " && spacePauseKey.current) { event.preventDefault(); return; }
       if (event.key === " ") {
-        event.preventDefault();
-        toggle();
+        event.preventDefault(); spacePauseKey.current = true; toggle(); return;
       }
       if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
         event.preventDefault();
-        seek(
-          position.current + (event.key === "ArrowLeft" ? -5 : 5),
-          fullMode.current,
-        );
+        seekTimeline(position.current + (event.key === "ArrowLeft" ? -5 : 5));
       }
     }
+    function keyup(event: KeyboardEvent) {
+      if (event.key === " " && spacePauseKey.current) { event.preventDefault(); spacePauseKey.current = false; }
+    }
+    function blur() { spacePauseKey.current = false; }
     document.addEventListener("keydown", keydown);
-    return () => document.removeEventListener("keydown", keydown);
+    document.addEventListener("keyup", keyup);
+    window.addEventListener("blur", blur);
+    return () => { document.removeEventListener("keydown", keydown); document.removeEventListener("keyup", keyup); window.removeEventListener("blur", blur); };
   });
   async function copy(value: string, label: string) {
     setManualLink(value);
@@ -746,360 +768,47 @@ export function Player({
       setCopied("Could not copy. Select the link below to copy it manually.");
     }
   }
-  const offset = Math.max(0, Math.min(range.duration, time - range.start));
   const sourceVideo = videoLink(row);
-  const details = [
-    ["Recorded", row.recorded_create_date],
-    ["Source file", row.file],
-    ["Video", `${row.size_mb} MB · ${row.resolution} · ${row.rotation}°`],
-    ["Audio", `${row.audio_file} · ${row.audio_size_mb} MB`],
-    ["Format", row.audio_format],
-    ["Device", row.device],
-  ];
   const isTake = identity.kind === "our take";
-  return (
-    <aside
-      ref={surface}
-      className={`player ${expanded ? "expanded" : ""} ${mode === "video" ? "video-mode" : "audio-mode"} ${mode === "stems" ? "stem-mode" : ""} ${videoVisible ? "video-open" : ""}`}
-      aria-label="Music player"
-    >
-      <header className="player-heading">
-        <div>
-          <span className="player-status">
-            {playing ? "NOW PLAYING" : "READY TO PLAY"}
-          </span>
-          <button
-            className="player-song"
-            disabled={!identity.songId}
-            onClick={onSong}
-          >
-            {identity.title || title(row)}
-          </button>
-          <p className="player-game">
-            <span className="compact-source-kind">
-              {isTake
-                ? "Our take"
-                : identity.kind === "original"
-                  ? "Original soundtrack"
-                  : identity.kind}{" "}
-              ·{" "}
-            </span>
-            {row.game_title ||
-              row.franchise ||
-              (isTake ? "Unidentified song" : "Soundtrack reference")}
-          </p>
-        </div>
-        <button
-          ref={expandButton}
-          className="expand-control icon-button"
-          aria-label={expanded ? "Collapse player" : "Expand player"}
-          aria-expanded={expanded}
-          aria-controls="player-details"
-          onClick={() => (expanded ? collapse() : setExpanded(true))}
-        >
-          {expanded ? <ChevronDown size={20} /> : <ChevronUp size={20} />}
-        </button>
-      </header>
-      <div className="player-source">
-        <span className="source-badge">
-          {isTake ? <AudioLines size={13} /> : <Disc3 size={13} />}{" "}
-          {isTake
-            ? "Our take"
-            : identity.kind === "original"
-              ? "Original soundtrack"
-              : identity.kind}
-        </span>
-        <span>
-          {isTake ? row.recorded_create_date?.slice(0, 10) : identity.artist}
-        </span>
-      </div>
-      <div className="transport">
-        <button
-          className="play-button"
-          onClick={toggle}
-          disabled={!ready || !controllable || resolvingSection}
-          aria-label={
-            playing ? "Pause selected recording" : "Play selected recording"
-          }
-        >
-          {playing ? (
-            <Pause size={19} fill="currentColor" />
-          ) : (
-            <Play size={19} fill="currentColor" />
-          )}
-        </button>
-        <span className="time">{formatTime(offset)}</span>
-        <input
-          aria-label="Seek within selected section"
-          type="range"
-          min="0"
-          max={range.duration}
-          step="any"
-          value={offset}
-          disabled={!ready || !controllable || !range.duration || resolvingSection}
-          onChange={(e) => seek(range.start + Number(e.target.value))}
-        />
-        <span className="time">
-          {range.duration ? formatTime(range.duration) : "—:—"}
-        </span>
-      </div>
-      <div className="media-switch" role="group" aria-label="Playback options">
-        <button
-          className="repeat-quick icon-button"
-          aria-label="Repeat selected excerpt"
-          aria-pressed={repeat && mode !== "video"}
-          title="Repeat selected excerpt"
-          disabled={
-            mode === "video" ||
-            !row.audio_file ||
-            !ready ||
-            resolvingSection ||
-            !stemRangeValid ||
-            Boolean(error) ||
-            range.duration < 0.25
-          }
-          onClick={() => changeRepeat(!repeat)}
-        >
-          <Repeat2 size={17} />
-        </button>
-
-        <button
-          aria-pressed={mode === "audio"}
-          disabled={row.has_audio !== "yes"}
-          onClick={() => switchMode("audio")}
-        >
-          <AudioLines size={15} /> Audio
-        </button>
-        <button
-          aria-pressed={mode === "video"}
-          disabled={row.has_video !== "yes"}
-          onClick={() => switchMode("video")}
-        >
-          <Video size={15} /> Video
-        </button>
-        {stemSet && <button aria-pressed={mode === "stems"} onClick={() => switchMode("stems")}><AudioLines size={15} /> Stems</button>}
-        <span className="mode-status" role="status">
-          {error
-            ? "Unavailable"
-            : ready
-              ? playing
-                ? "Playing"
-                : "Paused"
-              : controllable
-                ? "Loading…"
-                : "Source preview"}
-        </span>
-      </div>
-      {error && (
-        <p className="playback-error" role="alert">
-          {error}
-        </p>
-      )}
-      {practiceError && !expanded && (
-        <p className="practice-link-error" role="alert">
-          {practiceError}
-        </p>
-      )}
-      <div id="player-details" className="player-details">
-        {mode === "video" && (
-          <div className="video-window-heading">
-            <span>
-              {identity.kind === "our take"
-                ? "Our take"
-                : identity.kind === "original"
-                  ? "Original soundtrack"
-                  : identity.kind}
-            </span>
-            <button
-              className="icon-button"
-              aria-label="Close video"
-              onClick={closeVideo}
-            >
-              <X size={16} />
-            </button>
-          </div>
-        )}
-        <div className="preview">
-          {mode === "video" && row.youtube_video_id ? (
-            <div ref={container} className="youtube-host" />
-          ) : mode === "video" && row.video_file_id ? (
-            <iframe
-              title={`${title(row)} — Drive preview`}
-              src={`https://drive.google.com/file/d/${encodeURIComponent(row.video_file_id)}/preview`}
-              allow="autoplay"
-              allowFullScreen
-            />
-          ) : (
-            <div className="audio-art">
-              {row.thumbnail ? (
-                <img src={row.thumbnail} alt="" />
-              ) : (
-                <Disc3 size={70} strokeWidth={1} />
-              )}
-              <span>
-                {isTake ? "Our rehearsal recording" : identity.artist}
-              </span>
-            </div>
-          )}
-        </div>
-        <div className="player-extra">
-          {(row.file.startsWith("ref:") && row.has_audio === "yes") || linkedSection.current ? <SourceSections
-            data={practiceData}
-            loading={sectionsLoading}
-            error={sectionsError}
-            range={{ start: range.start, end: range.end }}
-            currentTime={time}
-            activeId={activeSectionId}
-            onSelect={section => selectSection(section)}
-            onCopy={section => void copy(makeSectionLink(identity.songId ? catalogHref(location.href, "songs", identity.songId) : location.href, row.file, section.id, repeat), "Section link")}
-            onSaved={savedSection}
-            onReload={() => setSectionsReload(value => value + 1)}
-          /> : null}
-          {stemSet && <>
-            {mode === "stems" && stemNotice && <p className="stem-note" role="status">{stemNotice}</p>}
-            <StemMixer stemSet={stemSet} mix={stemMix} enabled={mode === "stems" && ready && !error} onChange={changeMix} />
-            {mode !== "stems" && <p className="stem-note">Choose Stems to listen to the instrument preview.</p>}
-            {mode === "stems" && <button type="button" onClick={() => switchMode("audio")}>Use full mix</button>}
-          </>}
-          <PracticeControls
-            duration={baseRange.full}
-            currentTime={time}
-            defaultRange={{ start: baseRange.start, end: baseRange.end }}
-            range={{ start: range.start, end: range.end }}
-            repeat={repeat && mode !== "video"}
-            available={
-              mode !== "video" && Boolean(row.audio_file) && ready && !error && !resolvingSection && stemRangeValid
-            }
-            error={practiceError}
-            unavailableReason={
-              error
-                ? "Audio is unavailable. Open the source or choose another recording."
-                : mode === "stems" && !stemRangeValid
-                  ? "This section is outside the stem preview. Choose Audio for the full mix."
-                : resolvingSection
-                  ? "Resolving the saved section."
-                : mode === "video" && row.audio_file
-                  ? "Choose Audio to set a practice range."
-                  : !ready && row.audio_file
-                    ? "Waiting for audio to load."
-                    : undefined
-            }
-            onChange={changeRange}
-            onRepeat={changeRepeat}
-            onCopy={() => void copyPractice()}
-          />
-
-          {(range.start > 0 || range.end < range.full) && (
-            <div className="full-timeline">
-              <div>
-                <label htmlFor="full-seek">Full recording</label>
-                <span>
-                  {formatTime(time)} / {formatTime(range.full)}
-                </span>
-              </div>
-              <input
-                id="full-seek"
-                type="range"
-                min="0"
-                max={range.full}
-                step="any"
-                value={time}
-                disabled={!ready || !controllable || mode === "stems" || resolvingSection}
-                onChange={(e) => seek(Number(e.target.value), true)}
-              />
-              <p>
-                {mode === "stems" && "Choose Audio to seek outside the stem preview. "}
-                Selected section {formatTime(range.start)}–
-                {formatTime(range.end)}
-              </p>
-            </div>
-          )}
-          <div className="player-musical">
-            <span>
-              {isTake ? "Played key" : "Reference key"}
-              <strong>{identity.musicalKey || "Not recorded"}</strong>
-            </span>
-            <span>
-              Tempo
-              <strong>
-                {identity.bpm ? `${identity.bpm} BPM` : "Not recorded"}
-              </strong>
-            </span>
-          </div>
-          <div className="performers">
-            {(["drums", "piano", "guitar", "bass"] as const)
-              .filter((part) => row[part])
-              .map((part) => (
-                <div key={part}>
-                  <span>{part}</span>
-                  <button
-                    className="text-link"
-                    onClick={() => onFilter(row[part])}
-                  >
-                    {row[part]}
-                  </button>
-                </div>
-              ))}
-          </div>
-          <div className="source-actions">
-            {sourceVideo && (
-              <a href={sourceVideo} target="_blank" rel="noopener noreferrer">
-                <ArrowUpRight size={15} />{" "}
-                {row.youtube_video_id ? "Open YouTube" : "Open video"}
-              </a>
-            )}
-            {row.audio_url && (
-              <a href={row.audio_url} target="_blank" rel="noopener noreferrer">
-                <ArrowUpRight size={15} /> Open audio
-              </a>
-            )}
-            {row.video_file_id && (
-              <a
-                href={driveDownload(row.video_file_id)}
-                target="_blank"
-                rel="noopener noreferrer"
-                download
-              >
-                <Download size={15} /> Video
-              </a>
-            )}
-            {row.audio_file_id && (
-              <a
-                href={driveDownload(row.audio_file_id)}
-                target="_blank"
-                rel="noopener noreferrer"
-                download
-              >
-                <Download size={15} /> Audio
-              </a>
-            )}
-            <button onClick={() => void copy(location.href, "Page link")}>
-              <Copy size={14} /> Page link
-            </button>
-          </div>
-          <p className="copy-status" role="status">
-            {copied}
-          </p>
-          {copied.startsWith("Could not") && (
-            <a className="manual-copy-link" href={manualLink}>
-              Open or copy this link
-            </a>
-          )}
-          {isTake && (
-            <details className="metadata">
-              <summary>Recording details</summary>
-              <dl>
-                {details.map(([label, value]) => (
-                  <div key={label}>
-                    <dt>{label}</dt>
-                    <dd>{value}</dd>
-                  </div>
-                ))}
-              </dl>
-            </details>
-          )}
-        </div>
+  const available = ready && !error && !audioRoutingPending && !resolvingSection && stemRangeValid;
+  function chooseAudio(original = false) {
+    initialAudioSelection.current = false; setAudioRoutingPending(false);
+    setOriginalPreferred(original);
+    switchMode(!original && stemSet ? "stems" : "audio");
+  }
+  function seekTimeline(seconds: number) {
+    const next = Math.max(0, Math.min(baseRange.full, seconds));
+    seek(next, !(repeat && next >= range.start && next < range.end));
+  }
+  const workspace = <PracticeWorkspace
+    data={practiceData} loading={sectionsLoading} error={sectionsError}
+    time={time} duration={baseRange.full} range={{ start: range.start, end: range.end }}
+    defaultRange={{ start: baseRange.start, end: baseRange.end }} repeat={repeat && mode !== "video"}
+    activeSectionId={activeSectionId} available={available && mode !== "video"}
+    stemsActive={mode === "stems"} mix={stemMix}
+    notice={buffering ? "Buffering instruments…" : mode === "stems" && stemSet?.coverage === "excerpt" ? `Instrument preview · original ${formatTime(stemSet.start)}–${formatTime(stemSet.end)}` : ""}
+    practiceError={practiceError} onSeek={seekTimeline} onRange={changeRange} onRepeat={changeRepeat}
+    onCopy={() => void copyPractice()} onSection={section => selectSection(section)}
+    onCopySection={section => void copy(makeSectionLink(identity.songId ? catalogHref(location.href, "songs", identity.songId) : location.href, row.file, section.id, repeat), "Section link")}
+    onSavedSection={savedSection}
+    onCopyAnnotation={annotation => void copy(makePracticeLink(identity.songId ? catalogHref(location.href, "songs", identity.songId) : location.href, row.file, { start: annotation.start, end: annotation.end }, false), "Annotation link")}
+    onSavedAnnotation={annotation => setPracticeData(data => data ? { ...data, annotations: (data.annotations || []).some(item => item.id === annotation.id) ? data.annotations.map(item => item.id === annotation.id ? annotation : item) : [...(data.annotations || []), annotation] } : data)}
+    onReload={() => setSectionsReload(value => value + 1)} onMix={changeMix}
+    onOriginal={() => chooseAudio(true)} onInstrumentMix={() => chooseAudio(false)}
+  />;
+  return <>
+    <aside className={`player compact-player ${mode === "video" ? "video-mode" : "audio-mode"} ${mode === "stems" ? "stem-mode" : ""} ${videoVisible ? "video-open" : ""}`} aria-label="Music player">
+      <header className="player-heading"><div><span className="player-status">{buffering ? "BUFFERING" : playing ? "NOW PLAYING" : "READY TO PLAY"}</span><button className="player-song" disabled={!identity.songId} onClick={onSong}>{identity.title || title(row)}</button><p className="player-game">{isTake ? "Our take" : identity.kind === "original" ? "Original soundtrack" : identity.kind}{identity.artist ? ` · ${identity.artist}` : ""}</p></div></header>
+      <div className="transport"><button className="play-button" onClick={toggle} disabled={!available || !controllable} aria-label={playing || (buffering && wantsPlay.current) ? "Pause selected recording" : "Play selected recording"}>{playing || (buffering && wantsPlay.current) ? <Pause size={19} fill="currentColor" /> : <Play size={19} fill="currentColor" />}</button><span className="time">{formatTime(time)}</span><input aria-label="Seek full recording" type="range" min="0" max={baseRange.full} step="any" value={Math.max(0, Math.min(baseRange.full, time))} disabled={!available || !controllable || !baseRange.full} onChange={event => seekTimeline(Number(event.target.value))} /><span className="time">{baseRange.full ? formatTime(baseRange.full) : "—:—"}</span></div>
+      <div className="media-switch" role="group" aria-label="Playback options"><button aria-pressed={mode !== "video"} disabled={row.has_audio !== "yes"} onClick={() => chooseAudio()}><AudioLines size={15} /> Audio</button><button aria-pressed={mode === "video" && videoVisible} disabled={row.has_video !== "yes"} onClick={() => mode === "video" && videoVisible ? closeVideo() : switchMode("video")}><Video size={15} /> Video</button><button className="open-practice-button" onClick={onSong} aria-label="Open practice">Practice</button><span className="mode-status" role="status">{error ? "Unavailable" : buffering ? "Buffering…" : audioRoutingPending || !ready ? "Loading…" : playing ? "Playing" : "Paused"}</span></div>
+      {error && <p className="playback-error" role="alert">{error}{row.audio_file && <button onClick={() => chooseAudio(true)}>Original mix</button>}</p>}
+      {practiceError && !practiceHost && <p className="practice-link-error" role="alert">{practiceError}</p>}
+      <div className="video-float" hidden={mode !== "video" || !videoVisible}>
+        <div className="video-window-heading"><span>{identity.title || title(row)} · Video</span><button className="icon-button" aria-label="Close video" onClick={closeVideo}><X size={16} /></button></div>
+        <div className="preview">{mode === "video" && row.youtube_video_id ? <div ref={container} className="youtube-host" /> : mode === "video" && row.video_file_id ? <iframe title={`${title(row)} — Drive preview`} src={`https://drive.google.com/file/d/${encodeURIComponent(row.video_file_id)}/preview`} allow="autoplay" allowFullScreen /> : null}</div>
+        {sourceVideo && <a className="video-source-link" href={sourceVideo} target="_blank" rel="noopener noreferrer">Open source video <ArrowUpRight size={14} /></a>}
       </div>
     </aside>
-  );
+    {practiceHost && createPortal(<>{workspace}{copied && <p className="copy-status" role="status">{copied}</p>}{manualLink && <details className="practice-link-detail"><summary>Practice link</summary><input aria-label="Practice link" readOnly value={manualLink} onFocus={event => event.target.select()} /></details>}<details className="practice-source-detail"><summary>Recording details & downloads</summary><dl><dt>Source</dt><dd>{isTake ? row.file : identity.artist}</dd><dt>{isTake ? "Played key" : "Reference key"}</dt><dd>{identity.musicalKey || "Not recorded"}</dd><dt>Tempo</dt><dd>{identity.bpm ? `${identity.bpm} BPM` : "Not recorded"}</dd></dl><div className="source-actions">{sourceVideo && <a href={sourceVideo} target="_blank" rel="noopener noreferrer"><ArrowUpRight size={15} /> Open video</a>}{row.audio_url && <a href={row.audio_url} target="_blank" rel="noopener noreferrer">Open audio</a>}{row.audio_file_id && <a href={driveDownload(row.audio_file_id)} target="_blank" rel="noopener noreferrer" download><Download size={15} /> Download audio</a>}{row.video_file_id && <a href={driveDownload(row.video_file_id)} target="_blank" rel="noopener noreferrer" download><Download size={15} /> Download video</a>}</div></details></>, practiceHost)}
+  </>;
 }

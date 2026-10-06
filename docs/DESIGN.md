@@ -102,6 +102,79 @@ same private database and open paused. Missing/stale API data stays visible and
 must not invent or activate another section. The proof is a real six-stem pilot,
 section save/reload/share and gain/mute/solo with loop/pause/navigation checks.
 
+## Full-page practice correction — October 7
+
+Confirmed feedback: playback works, but cramming sections and six instrument
+controls into a sidebar misses the intended practice workspace. Source: agent
+assumption that an expanded listening player could own the practice composition.
+The prior visual acceptance applies to browsing, not this rejected practice
+structure. This revision supersedes the pilot's expanded-sidebar tools.
+
+Purpose Operate: follow and return to a passage while practising an instrument.
+A song has Practice (default) and Overview; the main practice page uses the
+available width for a common seconds ruler, named section/chord strip, moving
+playhead and six aligned waveform lanes. Left controls label instrument, volume,
+Mute and Solo. Actual peaks come from the exact rendered stems; decorative
+waveforms and inferred tempo/bar/chord labels are prohibited. An unknown score
+stays unknown. Timed editable chords/notes are source/hash-bound content, not
+transcription claims. The private workspace can persist these now; shared
+accounts, authorship, replies, visibility and friend access remain future work.
+
+One mounted Player remains the controller. A React portal moves only its
+practice presentation into the matching song's main host. The compact bottom
+dock renders transport while browsing and has a return-to-practice action.
+There is no second source/clock on route changes. Opening another song cannot
+replace an already playing source. Opening practice without an active source
+may prepare its original paused; an explicit source choice replaces playback.
+
+Audio chooses verified full-source stems mixed together when available. Stems
+are instrument controls within Audio, not a separate media version or button.
+The actual original remains an explicit fallback/comparison, because separation
+may introduce artifacts even with all gains at unity. Optional Video is a
+visual source/provider toggle; it must not start a second audible source or
+hide a YouTube provider that requires visible controls.
+
+Full-song stems use contiguous verified 30-second lossless FLAC pieces and one Web Audio
+clock. Decode current/next needed groups with a bounded transient third;
+retain the 300 MiB cap. If a needed group is late, all instruments pause at the
+same committed horizon, show buffering and resume only unchanged Play intent.
+Waveform peak data is precomputed and small, so opening the practice page does
+not decode the full song. Source/hash, chunks, annotations and sections share
+one original-seconds clock; future bar maps can be attached after review.
+
+Adopt native form controls, current paper/ink/line tokens and existing section
+editing. Adapt the existing single-source Player via a presentation portal.
+WaveSurfer's waveform/region examples and Songsterr's track/loop/score workflow
+were inspected as working references. A custom SVG peak view reuses our clock
+and avoids introducing a second player/controller for six annotated lanes.
+Accepted Interface Toolbox reuse covers mobile text sizing; TSX range detection
+remains unsupported. The initial decision declined wheel-based gain changes to
+protect vertical browsing. Owen subsequently explicitly requested scrolling
+and slimmer sliders: that decision is superseded by wheel adjustments scoped
+to the hovered gain control, while ordinary page/timeline scrolling remains
+native. Each stem has an instrument icon, a current-state speaker icon (sound
+on versus red muted X), and a slim range track with a larger pointer/touch target.
+Timeline hover previews a ghost position/time without altering the playhead.
+Space and left/right arrows control transport after button or gain focus;
+editable text and native video controls retain their own keys. Per-instrument
+keyboard shortcuts remain undecided and are not assigned speculatively.
+
+Small-screen lanes stack controls above their waveform rather than compressing
+a desktop table. Editors stay below the shared timeline; one control locus per
+section/annotation. No full-page introductory hero, six separate cards or
+placeholder chord bars. Song artwork uses the reviewed original's YouTube
+thumbnail, falling back to an icon only on missing/failed artwork.
+
+Review: prepare a song paused → play → seek a waveform → loop across a chunk
+boundary → mute/solo while navigating away/back; exact source and one clock
+survive. Create a timed chord/note and reopen its range link paused. Compare
+full stem playback with Original mix, including end of song. Test spacebar pause
+from navigation/buttons, including starting paused playback and seeking, while
+protecting text entry and native video keys. Exercise
+375/768/1440 widths, late decode, failed metadata, changed source and empty score.
+Rendered design and full-song sound need Owen's judgment; no old acceptance is
+carried onto this new composition.
+
 ## Review scenarios and acceptance
 
 Play a take → search → another song → session → Back: same provider node,

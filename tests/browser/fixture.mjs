@@ -330,9 +330,10 @@ const types = {
   ".wav": "audio/wav",
   ".webm": "video/webm",
   ".m4a": "audio/mp4",
+  ".flac": "audio/flac",
 };
 
-export async function createFixture(directory) {
+export async function createFixture(directory, {flac=false,seconds=2.5}={}) {
   await mkdir(join(directory, "data"), { recursive: true });
   await mkdir(join(directory, "audio"), { recursive: true });
   await mkdir(join(directory, "thumbs"), { recursive: true });
@@ -425,9 +426,9 @@ export async function createFixture(directory) {
   await writeFile(join(directory, "audio", "SYN_0002.wav"), wav(6, 550));
   await writeFile(join(directory, "audio", "SYN_0003.wav"), wav(3, 660));
   await writeFile(join(directory, "audio", "SYN_0005.wav"), wav(6, 770));
-  const referenceResult = spawnSync('ffmpeg', ['-hide_banner','-loglevel','error','-f','lavfi','-i','sine=frequency=880:sample_rate=44100','-t','2.5','-c:a','aac','-b:a','96k','-y',join(directory,'reference-audio','Fixture0001.m4a')],{stdio:'ignore'});
-  const referenceAudio = referenceResult.status === 0 ? {audio_file:'Fixture0001.m4a',duration_seconds:2.5,audio_format:'m4a'} : {audio_file:'Fixture0001.wav',duration_seconds:2.5,audio_format:'wav'};
-  if(referenceResult.status !== 0) await writeFile(join(directory,'reference-audio',referenceAudio.audio_file),wav(2.5,880));
+  const referenceResult = spawnSync('ffmpeg', ['-hide_banner','-loglevel','error','-f','lavfi','-i','sine=frequency=880:sample_rate=44100','-t',String(seconds),'-c:a','aac','-b:a','96k','-y',join(directory,'reference-audio','Fixture0001.m4a')],{stdio:'ignore'});
+  const referenceAudio = referenceResult.status === 0 ? {audio_file:'Fixture0001.m4a',duration_seconds:seconds,audio_format:'m4a'} : {audio_file:'Fixture0001.wav',duration_seconds:seconds,audio_format:'wav'};
+  if(referenceResult.status !== 0) await writeFile(join(directory,'reference-audio',referenceAudio.audio_file),wav(seconds,880));
   const videoSource = await video(join(directory, "video.webm"));
   await cp("index.html", join(directory, "index.html"));
   await build({
@@ -445,14 +446,30 @@ export async function createFixture(directory) {
   const sourceHash = sha256(sourceBytes);
   await writeFile(join(directory, 'reference-audio/manifest.json'), JSON.stringify({version:1,checked_at:'2026-10-07T00:00:00Z',assets:[{reference_id:'alpha-original',youtube_id:'Fixture0001',...referenceAudio,bytes:sourceBytes.length,sha256:sourceHash}]}));
   await mkdir(join(directory, 'reference-audio/stems'), {recursive:true});
-  const stemTracks = [];
-  for (const [index,label] of ['Vocals','Drums','Bass','Guitar','Piano','Other'].entries()) {
-    const bytes = wav(1.5, 220 + index * 110, 44100), file = label.toLowerCase()+'.wav';
-    await writeFile(join(directory, 'reference-audio/stems',file),bytes);
-    stemTracks.push({id:label.toLowerCase(),label,file,bytes:bytes.length,sha256:sha256(bytes)});
+  const sourceFrames = flac ? Math.round(seconds*44100) : 66150;
+  const stemTracks = [], chunks = flac ? Array.from({length:Math.ceil(sourceFrames/55125)},(_,index)=>({startFrame:index*55125,frameCount:Math.min(55125,sourceFrames-index*55125),files:[]})) : undefined;
+  async function asset(file,frames,frequency) {
+    const bytes=wav(frames/44100,frequency,44100);
+    let audio=bytes;
+    if(flac){
+      const input=join(directory,'reference-audio/stems',file+'.input.wav'),target=join(directory,'reference-audio/stems',file);
+      await writeFile(input,bytes);
+      const result=spawnSync('ffmpeg',['-hide_banner','-loglevel','error','-y','-i',input,'-c:a','flac',target],{stdio:'pipe'});
+      if(result.status!==0)throw new Error('Synthetic FLAC encoding failed: '+result.stderr.toString());
+      audio=await readFile(target);await (await import('node:fs/promises')).unlink(input);
+    } else await writeFile(join(directory,'reference-audio/stems',file),audio);
+    return{file,bytes:audio.length,sha256:sha256(audio)};
   }
-  const stemSet = {id:'bc35051c-f639-4d55-a436-7c0cf76aaf83',sourceId:'ref:alpha-original',sourceHash,coverage:'excerpt',start:.5,end:2,sampleRate:44100,channels:1,frames:66150,tracks:stemTracks};
-  await writeFile(join(directory,'reference-audio/stems/manifest.json'),JSON.stringify({version:1,stemSets:[stemSet]}));
+  for (const [index,label] of ['Vocals','Drums','Bass','Guitar','Piano','Other'].entries()) {
+    const id=label.toLowerCase(), frequency=220+index*110;
+    stemTracks.push({id,label,...await asset(id+(flac?'.flac':'.wav'),sourceFrames,frequency)});
+    if(chunks)for(const [chunkIndex,chunk] of chunks.entries())chunk.files.push({trackId:id,...await asset(id+'_'+chunkIndex+'.flac',chunk.frameCount,frequency)});
+  }
+  const stemSet = {id:'bc35051c-f639-4d55-a436-7c0cf76aaf83',sourceId:'ref:alpha-original',sourceHash,coverage:flac?'full-source':'excerpt',start:flac?0:.5,end:flac?seconds:2,sampleRate:44100,channels:1,frames:sourceFrames,tracks:stemTracks,...(chunks?{chunks}:{})};
+  const bins=40,waves={sourceId:'ref:alpha-original',sourceHash,tracks:stemTracks.map((track,i)=>({id:track.id,peaks:Array.from({length:bins},(_,n)=>[-.3-.1*Math.sin(n+i),.3+.1*Math.cos(n+i)])}))};
+  const waveformBytes=Buffer.from(JSON.stringify(waves));await writeFile(join(directory,'reference-audio/stems/waveforms.json'),waveformBytes);
+  stemSet.waveforms={file:'waveforms.json',bytes:waveformBytes.length,sha256:sha256(waveformBytes),bins};
+  await writeFile(join(directory,'reference-audio/stems/manifest.json'),JSON.stringify({version:flac?2:1,stemSets:[stemSet]}));
   let practice;
   const server = createServer(async (request, response) => {
     const path = decodeURIComponent(new URL(request.url, "http://x").pathname);

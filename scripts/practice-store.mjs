@@ -34,6 +34,16 @@ function rangeFields(input, duration) {
   return { label: input.label.trim(), start, end };
 }
 
+function annotationFields(input, duration) {
+  if (!object(input) || !['chord', 'note'].includes(input.type) || typeof input.text !== 'string' || !input.text.trim() || input.text.trim().length > (input.type === 'chord' ? 80 : 2000)) fail(400, 'Enter a chord up to 80 characters or a note up to 2000 characters.');
+  const range = rangeFields({ ...input, label: 'Annotation' }, duration);
+  return { type: input.type, text: input.text.trim(), start: range.start, end: range.end };
+}
+
+function annotationView(row) {
+  return { id: row.id, type: row.type, text: row.text, start: row.start_seconds, end: row.end_seconds, revision: row.revision };
+}
+
 function assertHash(input, source) {
   if (!object(input) || typeof input.sourceHash !== 'string' || input.sourceHash !== source.sourceHash) fail(409, 'The source changed. Reload its sections before editing.');
 }
@@ -64,12 +74,54 @@ export function inspectWav(bytes) {
   return { channels, sampleRate, frames: data / blockAlign };
 }
 
+export function inspectFlac(bytes) {
+  if (bytes.length < 42 || bytes.toString('ascii', 0, 4) !== 'fLaC' || (bytes[4] & 0x7f) !== 0 || bytes.readUIntBE(5, 3) !== 34) throw new Error('Invalid FLAC STREAMINFO header.');
+  const packed = bytes.readBigUInt64BE(18);
+  const sampleRate = Number(packed >> 44n);
+  const channels = Number((packed >> 41n) & 7n) + 1;
+  const bitsPerSample = Number((packed >> 36n) & 31n) + 1;
+  const frames = Number(packed & 0xfffffffffn);
+  if (sampleRate <= 0 || frames <= 0 || bitsPerSample !== 16) throw new Error('FLAC must declare positive sample rate/frame count and 16-bit audio.');
+  return { sampleRate, channels, frames, bitsPerSample };
+}
+
+function inspectStemAudio(root, asset) {
+  const bytes = verifiedFile(root, asset, 'audio');
+  return asset.file.endsWith('.flac') ? inspectFlac(bytes) : inspectWav(bytes);
+}
+
+function verifiedFile(root, asset, extension) {
+  if (!object(asset) || typeof asset.file !== 'string' || !(extension === 'audio' ? /^[A-Za-z0-9_-]+\.(?:wav|flac)$/ : /^[A-Za-z0-9_-]+\.json$/).test(asset.file) || !Number.isSafeInteger(asset.bytes) || asset.bytes <= 0 || typeof asset.sha256 !== 'string' || !HASH.test(asset.sha256)) throw new Error('Invalid asset identity.');
+  const path = resolve(root, asset.file), stat = lstatSync(path);
+  if (!stat.isFile() || dirname(realpathSync(path)) !== realpathSync(root) || stat.size !== asset.bytes) throw new Error('Asset is not a contained verified file.');
+  const bytes = readFileSync(path);
+  if (createHash('sha256').update(bytes).digest('hex') !== asset.sha256.toLowerCase()) throw new Error('Asset hash mismatch.');
+  return bytes;
+}
+
+function waveformsFor(repoRoot, set) {
+  if (!set?.waveforms) return null;
+  try {
+    const metadata = set.waveforms;
+    if (!Number.isSafeInteger(metadata.bins) || metadata.bins < 1 || metadata.bins > 10000) throw new Error();
+    const data = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(verifiedFile(resolve(repoRoot, 'reference-audio/stems'), metadata, 'json')));
+    if (data.sourceId !== set.sourceId || data.sourceHash !== set.sourceHash || !Array.isArray(data.tracks) || data.tracks.length !== set.tracks.length) throw new Error();
+    const ids = new Set();
+    for (const track of data.tracks) {
+      if (!set.tracks.some(item => item.id === track.id) || ids.has(track.id) || !Array.isArray(track.peaks) || track.peaks.length !== metadata.bins) throw new Error();
+      ids.add(track.id);
+      if (track.peaks.some(pair => !Array.isArray(pair) || pair.length !== 2 || !pair.every(value => typeof value === 'number' && Number.isFinite(value) && value >= -1 && value <= 1) || pair[0] > pair[1])) throw new Error();
+    }
+    return { sourceId: data.sourceId, sourceHash: data.sourceHash, tracks: data.tracks };
+  } catch { fail(503, 'The waveform data does not match its verified source.'); }
+}
+
 function stemSetFor(repoRoot, source) {
   const root = resolve(repoRoot, 'reference-audio/stems'), path = resolve(root, 'manifest.json');
   if (!existsSync(path)) return null;
   try {
     const manifest = jsonFile(path);
-    if (manifest.version !== 1 || !Array.isArray(manifest.stemSets)) throw new Error();
+    if (![1, 2].includes(manifest.version) || !Array.isArray(manifest.stemSets)) throw new Error();
     const sets = manifest.stemSets.filter(set => set.sourceId === source.sourceId);
     if (sets.length > 1) throw new Error();
     if (!sets.length) return null;
@@ -78,15 +130,28 @@ function stemSetFor(repoRoot, source) {
     if (set.coverage === 'full-source' && (set.start !== 0 || Math.abs(set.end - source.duration) > 1 / set.sampleRate)) throw new Error();
     const ids = new Set(), files = new Set();
     for (const track of set.tracks) {
-      if (!object(track) || typeof track.id !== 'string' || !/^[A-Za-z0-9_-]{1,80}$/.test(track.id) || ids.has(track.id) || typeof track.label !== 'string' || !track.label.trim() || track.label !== track.label.trim() || track.label.length > 80 || typeof track.file !== 'string' || !/^[A-Za-z0-9_-]+\.wav$/.test(track.file) || files.has(track.file) || !Number.isSafeInteger(track.bytes) || track.bytes <= 0 || typeof track.sha256 !== 'string' || !HASH.test(track.sha256)) throw new Error();
+      if (!object(track) || typeof track.id !== 'string' || !/^[A-Za-z0-9_-]{1,80}$/.test(track.id) || ids.has(track.id) || typeof track.label !== 'string' || !track.label.trim() || track.label !== track.label.trim() || track.label.length > 80 || typeof track.file !== 'string' || !/^[A-Za-z0-9_-]+\.(?:wav|flac)$/.test(track.file) || files.has(track.file) || !Number.isSafeInteger(track.bytes) || track.bytes <= 0 || typeof track.sha256 !== 'string' || !HASH.test(track.sha256)) throw new Error();
       ids.add(track.id); files.add(track.file);
-      const file = resolve(root, track.file), stat = lstatSync(file);
-      if (!stat.isFile() || dirname(realpathSync(file)) !== realpathSync(root) || stat.size !== track.bytes) throw new Error();
-      const bytes = readFileSync(file);
-      if (createHash('sha256').update(bytes).digest('hex') !== track.sha256.toLowerCase()) throw new Error();
-      const wav = inspectWav(bytes);
+      const wav = inspectStemAudio(root, track);
       if (wav.sampleRate !== set.sampleRate || wav.channels !== set.channels || wav.frames !== set.frames) throw new Error();
     }
+    if (set.chunks !== undefined) {
+      if (!Array.isArray(set.chunks) || !set.chunks.length || set.chunks.length > 10000) throw new Error();
+      let nextFrame = 0;
+      for (const chunk of set.chunks) {
+        if (!object(chunk) || !Number.isSafeInteger(chunk.startFrame) || chunk.startFrame !== nextFrame || !Number.isSafeInteger(chunk.frameCount) || chunk.frameCount <= 0 || chunk.frameCount > set.sampleRate * 30 || nextFrame + chunk.frameCount > set.frames || !Array.isArray(chunk.files) || chunk.files.length !== set.tracks.length) throw new Error();
+        const trackIds = new Set();
+        for (const file of chunk.files) {
+          if (!object(file) || !ids.has(file.trackId) || trackIds.has(file.trackId) || files.has(file.file)) throw new Error();
+          trackIds.add(file.trackId); files.add(file.file);
+          const actual = inspectStemAudio(root, file);
+          if (actual.sampleRate !== set.sampleRate || actual.channels !== set.channels || actual.frames !== chunk.frameCount) throw new Error();
+        }
+        nextFrame += chunk.frameCount;
+      }
+      if (nextFrame !== set.frames) throw new Error();
+    }
+    waveformsFor(repoRoot, set);
     return set;
   } catch { fail(503, 'The stem files do not match their verified manifest.'); }
 }
@@ -97,7 +162,7 @@ export function readVerifiedStemSets(repoRoot) {
   if (!existsSync(path)) return [];
   let manifest;
   try { manifest = jsonFile(path); } catch { fail(503, 'The stem manifest is invalid.'); }
-  if (manifest.version !== 1 || !Array.isArray(manifest.stemSets)) fail(503, 'The stem manifest is invalid.');
+  if (![1, 2].includes(manifest.version) || !Array.isArray(manifest.stemSets)) fail(503, 'The stem manifest is invalid.');
   const sources = new Set(), ids = new Set();
   return manifest.stemSets.map(set => {
     if (!object(set) || sources.has(set.sourceId) || ids.has(set.id)) fail(503, 'Duplicate or invalid stem set identity.');
@@ -115,14 +180,24 @@ export function createPracticeStore({ repoRoot }) {
       id TEXT PRIMARY KEY, reference_id TEXT NOT NULL, source_sha256 TEXT NOT NULL,
       label TEXT NOT NULL, start_seconds REAL NOT NULL, end_seconds REAL NOT NULL,
       revision INTEGER NOT NULL DEFAULT 1);
-    CREATE INDEX IF NOT EXISTS sections_source ON sections(reference_id);`);
+    CREATE INDEX IF NOT EXISTS sections_source ON sections(reference_id);
+    CREATE TABLE IF NOT EXISTS annotations (
+      id TEXT PRIMARY KEY, reference_id TEXT NOT NULL, source_sha256 TEXT NOT NULL,
+      type TEXT NOT NULL, text TEXT NOT NULL, start_seconds REAL NOT NULL, end_seconds REAL NOT NULL,
+      revision INTEGER NOT NULL DEFAULT 1);
+    CREATE INDEX IF NOT EXISTS annotations_source ON annotations(reference_id);`);
   const get = db.prepare('SELECT * FROM sections WHERE id=?');
   const list = db.prepare('SELECT * FROM sections WHERE reference_id=? ORDER BY start_seconds, end_seconds, id');
+  const getAnnotation = db.prepare('SELECT * FROM annotations WHERE id=?');
+  const listAnnotations = db.prepare('SELECT * FROM annotations WHERE reference_id=? ORDER BY start_seconds, end_seconds, id');
   return {
     read(sourceId) {
       const source = sourceIdentity(repoRoot, sourceId), rows = list.all(source.referenceId);
       if (rows.some(row => row.source_sha256 !== source.sourceHash)) fail(409, 'Saved sections belong to an older source.');
-      return { sourceId: source.sourceId, sourceHash: source.sourceHash, duration: source.duration, sections: rows.map(sectionView), stemSet: stemSetFor(repoRoot, source) };
+      const annotations = listAnnotations.all(source.referenceId);
+      if (annotations.some(row => row.source_sha256 !== source.sourceHash)) fail(409, 'Saved annotations belong to an older source.');
+      const stemSet = stemSetFor(repoRoot, source);
+      return { sourceId: source.sourceId, sourceHash: source.sourceHash, duration: source.duration, sections: rows.map(sectionView), annotations: annotations.map(annotationView), stemSet, waveforms: waveformsFor(repoRoot, stemSet) };
     },
     create(input) {
       const source = sourceIdentity(repoRoot, input?.sourceId);
@@ -144,6 +219,27 @@ export function createPracticeStore({ repoRoot }) {
       const result = db.prepare('UPDATE sections SET label=?,start_seconds=?,end_seconds=?,revision=revision+1 WHERE id=? AND revision=? AND source_sha256=?').run(fields.label, fields.start, fields.end, id, input.revision, source.sourceHash);
       if (!result.changes) fail(409, 'This section was edited elsewhere. Reload before editing.');
       return sectionView(get.get(id));
+    },
+    createAnnotation(input) {
+      const source = sourceIdentity(repoRoot, input?.sourceId);
+      assertHash(input, source);
+      if (listAnnotations.all(source.referenceId).some(row => row.source_sha256 !== source.sourceHash)) fail(409, 'Saved annotations belong to an older source.');
+      const fields = annotationFields(input, source.duration), id = randomUUID();
+      db.prepare('INSERT INTO annotations(id,reference_id,source_sha256,type,text,start_seconds,end_seconds) VALUES(?,?,?,?,?,?,?)').run(id, source.referenceId, source.sourceHash, fields.type, fields.text, fields.start, fields.end);
+      return annotationView(getAnnotation.get(id));
+    },
+    updateAnnotation(id, input) {
+      if (typeof id !== 'string' || !UUID.test(id)) fail(400, 'Invalid annotation identity.');
+      const source = sourceIdentity(repoRoot, input?.sourceId);
+      assertHash(input, source);
+      const row = getAnnotation.get(id);
+      if (!row || row.reference_id !== source.referenceId) fail(404, 'Annotation not found for this source.');
+      if (row.source_sha256 !== source.sourceHash) fail(409, 'Saved annotations belong to an older source.');
+      if (!Number.isSafeInteger(input.revision) || input.revision < 1) fail(400, 'An annotation revision is required.');
+      const fields = annotationFields(input, source.duration);
+      const result = db.prepare('UPDATE annotations SET type=?,text=?,start_seconds=?,end_seconds=?,revision=revision+1 WHERE id=? AND revision=? AND source_sha256=?').run(fields.type, fields.text, fields.start, fields.end, id, input.revision, source.sourceHash);
+      if (!result.changes) fail(409, 'This annotation was edited elsewhere. Reload before editing.');
+      return annotationView(getAnnotation.get(id));
     },
     close() { db.close(); },
   };
@@ -181,12 +277,16 @@ export function createPracticeHandler({ repoRoot, allowedOrigins }) {
       } else {
         const input = await requestBody(req);
         if (req.method === 'POST') {
-          if (pathname !== '/api/practice') fail(404, 'Practice endpoint not found.');
-          respond(201, { section: store.create(input) });
+          if (pathname === '/api/practice/annotations') respond(201, { annotation: store.createAnnotation(input) });
+          else {
+            if (pathname !== '/api/practice') fail(404, 'Practice endpoint not found.');
+            respond(201, { section: store.create(input) });
+          }
         } else {
-          const id = pathname.slice('/api/practice/'.length);
+          const annotation = pathname.startsWith('/api/practice/annotations/');
+          const id = pathname.slice(annotation ? '/api/practice/annotations/'.length : '/api/practice/'.length);
           if (pathname === '/api/practice' || id.includes('/')) fail(404, 'Practice endpoint not found.');
-          respond(200, { section: store.update(id, input) });
+          respond(200, annotation ? { annotation: store.updateAnnotation(id, input) } : { section: store.update(id, input) });
         }
       }
     } catch (error) { respond(error.status || 503, { error: error.status ? error.message : 'Private practice data is unavailable.' }); }

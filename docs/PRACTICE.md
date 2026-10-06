@@ -24,9 +24,10 @@ The shell retains one active source while browsing/searching. Local references
 and takes default to Audio; Video explicitly switches provider at the retained
 position and play intent. Player owns source duration, range and Repeat; draft
 A/B fields are local to PracticeControls. Only Apply changes the active range.
-The quick Repeat control uses the selected excerpt; expanded player controls
-allow fractional A/B seconds, resetting to the archive excerpt and copying a
-practice link. Unavailable audio cannot enable repeat.
+The song Practice page holds the timeline, fractional A/B fields, sections and
+notes; the persistent bottom player handles transport while browsing. Repeat
+and Copy practice link have one locus in the practice toolbar. Unavailable
+audio cannot enable repeat.
 
 Links retain the existing song route and exact `play` identity, with
 `t=start,end&repeat=1`. Copy practice link targets the playing song even while
@@ -84,7 +85,7 @@ reuse original timestamps on a differently paced cover. Future links can add
 mappings exist. Conflicting semantic/time targets need explicit validation.
 These chart contracts remain proposed. The October 7 source-owned section pilot below supersedes the need for a practice-version/chart before naming an original passage.
 
-## October 7 source-owned section and stem pilot
+## October 7 source-owned section and stem pilot (historical)
 
 Confirmed increment: name and return to parts of an original; audition one real
 Logic-separated original before deciding on full-song or batch processing.
@@ -144,8 +145,72 @@ Primary references: [Logic Stem Splitter](https://support.apple.com/guide/logicp
 [Demucs caveats](https://github.com/facebookresearch/demucs),
 [Web Audio scheduling](https://www.w3.org/TR/2021/REC-webaudio-20210617/#AudioBufferSourceNode).
 
+## October 7 full-song practice increment
+
+Owen accepted the initial stem playback, then rejected the compressed player
+layout: following and practicing a song belongs in the main page. The default
+song tab is now Practice, with Overview retaining song/reference/take details.
+One persistent Player owns the transport and portals its practice workspace
+into the current source's main page. Waveform lanes, section/chord ranges and
+playhead all use original recording seconds. The bottom dock remains available
+while browsing. Source rows use original YouTube thumbnails with a fallback.
+Each instrument has a label icon. Speaker icons show sound on or a red muted X;
+Solo uses an accessible pressed headphone icon. Gain sliders have a 3px track,
+12px thumb and larger hit area; wheel input over a gain changes it by 2% and
+leaves ordinary page scrolling intact. Waveform hover previews position/time
+without seeking. Space toggles playback and left/right seek five seconds even
+with a button or gain focused; text entry and native media controls retain their
+keys. Held Space is latched until release or window blur; seeks clamp at source
+boundaries and disable Repeat only when leaving its selected range.
+
+The full Beneath the Mask original was processed in a separate task-owned
+Logic Pro 12.3.1 project using Separate All Stems. All six raw outputs have
+12,254,508 stereo frames at 44.1 kHz/16-bit (277.88 seconds). Raw files total
+294,108,192 bytes. Lossless FLAC full tracks total 60,875,976 bytes; the ten
+shared frame groups per instrument total 61,314,149 bytes. Both retained copies
+occupy 122,190,125 bytes in the ignored private asset directory. The task-owned
+Logic project retains the raw outputs. Existing 30–120 section links remain
+valid; no new Verse/Chorus boundaries have been invented.
+
+Manifest version 2 declares full-source coverage, exact contiguous chunk frame
+ranges, all six track IDs, file sizes/hashes and verified min/max waveform
+peaks. Builds and the private API validate the source hash and asset dimensions.
+The browser verifies each fetched chunk's hash and decoded dimensions. Audio
+automatically uses the instrument mix when available, with all stems enabled;
+Original mix is an explicit fallback for separation artifacts. Video remains
+optional. Other songs continue to use their original audio.
+
+`ChunkedStemPlaybackEngine` uses one Web Audio clock to schedule all six tracks
+in shared groups of at most 30 seconds. Current, next and loop-start groups are
+bounded to three, including pending decode reservations, under the existing
+300 MiB decoded budget. Two 30-second groups use about 121 MiB and three about
+182 MiB; these are audio buffer totals, not total browser process memory. A late
+successor pauses the coherent group at the scheduled horizon, exposes buffering
+and resumes only for unchanged play intent. Seeks abort obsolete preparation;
+Pause and source changes cannot restart stale audio. Short loops inside one
+chunk use native buffer looping; cross-chunk loops schedule exact frame ranges.
+Audible seam quality remains a listening gate. Two-second raw recombination
+checks at source 50, 180 and 265 seconds found zero-lag correlations of
+0.999893, 0.999913 and 0.999911. This supports combined timing/mix consistency,
+not the quality of any isolated instrument.
+
+Re-encoding to a lossy codec can further reduce disk/network bytes but does not
+reduce these decoded float buffers. A native Chrome 30-second stereo bass probe
+used 822,910 bytes as FLAC and 601,382 bytes as 160 kbps MP3. Both decoded to
+1,323,000 frames at 44.1 kHz. MP3 was evaluated, not installed as the playback
+format; current assets remain lossless FLAC.
+
+Private source-owned timed chords and notes now persist in SQLite. They use
+stable UUIDs, exact source SHA-256, original start/end seconds and optimistic
+revisions. `POST api/practice/annotations` and `PUT api/practice/annotations/<UUID>`
+validate bounds, type, text and exact mutation origin. Chords appear in the
+timeline; copied links target their exact source/range and open paused. Musical
+content is entered by the user. This is a timed chord/notes view, not a fabricated
+bar grid or staff score. Authentication, friend membership, author attribution,
+sharing permissions and annotation alignment onto cover takes remain deferred.
+
 ## Evidence boundary
 
 Automated tests can establish decoding, source ownership, paused links, loop
 wraps, failures and browser layout. Audible seam quality, actual iPhone/keyboard
-behavior and human design acceptance remain open. Bars, chords and guessed musical analysis remain unimplemented. Named source sections and the explicitly bounded real stem pilot are the October 7 increment; audible quality and physical phone acceptance remain open.
+behavior and human design acceptance remain open. Bar identity, staff notation and automatic musical analysis remain unimplemented. Full-source stems, source sections and user-entered timed chords/notes are implemented; audible quality, human design acceptance and physical phone behavior remain open.

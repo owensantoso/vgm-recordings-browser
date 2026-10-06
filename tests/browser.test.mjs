@@ -41,7 +41,7 @@ const viewports = {
   desktop: { width: 1280, height: 800 },
   mobile: { width: 375, height: 812 },
 };
-let browser, fixture, workdir;
+let browser, fixture, flacFixture, longFixture, workdir;
 
 before(async () => {
   if (!executablePath) return;
@@ -57,10 +57,15 @@ before(async () => {
 after(async () => {
   await browser?.close();
   await fixture?.close();
+  await flacFixture?.close();
+  await longFixture?.close();
   if (workdir) await rm(workdir, { recursive: true, force: true });
 });
 
 async function open(name, path, options = {}) {
+  if(options.chunked&&!flacFixture)flacFixture=await createFixture(join(workdir,"flac"),{flac:true});
+  if(options.long&&!longFixture)longFixture=await createFixture(join(workdir,"flac-long"),{flac:true,seconds:8});
+  const activeFixture=options.long?longFixture:options.chunked?flacFixture:fixture;
   const context = await browser.newContext({
     viewport: viewports[name],
     hasTouch: name === "mobile",
@@ -89,7 +94,7 @@ async function open(name, path, options = {}) {
   let releaseStems;
   if(options.delayStems) {
     const pending=new Promise(resolve=>{releaseStems=resolve;});
-    await context.route('**/reference-audio/stems/*.wav',async route=>{await pending;try{await route.continue();}catch{/* Replacement can abort the pending request. */}});
+    await context.route('**/reference-audio/stems/*.{wav,flac}',async route=>{await pending;try{await route.continue();}catch{/* Replacement can abort the pending request. */}});
   }
   let releaseArchive;
   if(options.delayArchive) {
@@ -107,7 +112,7 @@ async function open(name, path, options = {}) {
   if(options.referenceAudio) {
     await context.route('**/data/catalog.json', async route=>{
       const response=await route.fetch(), catalog=await response.json();
-      catalog.references=catalog.references.map(ref=>ref.id==='alpha-original'?{...ref,...fixture.referenceAudio,audio_file:options.referenceAudio==='missing'?'missing-reference.m4a':fixture.referenceAudio.audio_file}:ref);
+      catalog.references=catalog.references.map(ref=>ref.id==='alpha-original'?{...ref,...activeFixture.referenceAudio,audio_file:options.referenceAudio==='missing'?'missing-reference.m4a':activeFixture.referenceAudio.audio_file}:ref);
       await route.fulfill({json:catalog});
     });
   }
@@ -117,12 +122,14 @@ async function open(name, path, options = {}) {
   await context.route("https://www.youtube.com/iframe_api", (route) =>
     route.fulfill({
       contentType: "text/javascript",
-      body: fixture.youtubeApi,
+      body: activeFixture.youtubeApi,
     }),
   );
   const page = await context.newPage();
+  page.archiveReady=page.waitForResponse(response=>response.url().endsWith("/data/recordings.csv")).then(response=>response.finished()).catch(()=>{});
   page.releaseArchive=releaseArchive;
   page.releaseStems=releaseStems;
+  page.fixture=activeFixture;
   page.setDefaultTimeout(6000);
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));
@@ -137,7 +144,7 @@ async function open(name, path, options = {}) {
   page.errors = errors;
   page.shot = (label) =>
     page.screenshot({ path: join(artifacts, `${name}-${label}.png`) });
-  await page.goto(`${fixture.origin}${path}`);
+  await page.goto(`${activeFixture.origin}${path}`);
   await page.waitForSelector(".workspace-main h1");
   return page;
 }
@@ -186,7 +193,19 @@ const filterBySong = async (page, value) => {
   await page.fill("input[type=search]", value);
 };
 
-const playTake = (page, file) => rowButton(page, file).click();
+const overview = async page => {
+  const button=page.getByRole('navigation',{name:'Song views'}).getByRole('button',{name:'Overview',exact:true});
+  if(await button.isVisible())await button.click();
+};
+const playTake = async (page, file) => {
+  if(await rowButton(page,file).count()===0)await overview(page);
+  await rowButton(page,file).click();
+};
+const playReference = async (page,name) => {
+  const button=page.getByRole('button',{name,exact:true});
+  if(await button.count()===0)await overview(page);
+  await button.click();
+};
 const nav = (page, name) =>
   page
     .getByRole("navigation", { name: "Music workspace" })
@@ -197,7 +216,7 @@ const transportTime = (page) =>
   page.locator(".transport .time").first().textContent();
 const seek = async (page, value) =>
   page
-    .locator('input[aria-label="Seek within selected section"]')
+    .locator('input[aria-label="Seek full recording"]')
     .evaluate((input, value) => {
       Object.getOwnPropertyDescriptor(
         HTMLInputElement.prototype,
@@ -232,6 +251,9 @@ for (const name of Object.keys(viewports)) {
           JSON.stringify(
             await page.evaluate(() => ({
               viewport: [innerWidth, innerHeight],
+              media: window.__mediaState(),
+              playbackStatus: document.querySelector(".mode-status")?.textContent,
+              playbackError: document.querySelector(".playback-error")?.textContent,
               player: document
                 .querySelector(".persistent-player")
                 ?.getBoundingClientRect()
@@ -255,6 +277,7 @@ for (const name of Object.keys(viewports)) {
     async (page) => {
       await nav(page, "Songs");
       await page.getByRole("link", { name: "Alpha Song", exact: true }).click();
+      await overview(page);
       assert.equal(await page.locator(".recording-row").count(), 2);
       assert.match(
         await page.locator(".song-summary").innerText(),
@@ -284,16 +307,11 @@ for (const name of Object.keys(viewports)) {
           .getAttribute("href"),
         "https://www.youtube.com/watch?v=Fixture0001",
       );
-      await page
-        .getByRole("button", {
-          name: "Play original of Alpha Song",
-          exact: true,
-        })
-        .click();
+      await playReference(page, 'Play original of Alpha Song');
       await waitLive(page, "youtube", true);
       assert.equal(await heading(page), "Alpha Song");
       assert.match(
-        await page.locator(".player-source").innerText(),
+        await page.locator(".player-game").innerText(),
         /Original soundtrack/,
       );
       await page.waitForFunction(
@@ -307,7 +325,7 @@ for (const name of Object.keys(viewports)) {
       await playTake(page, "SYN_0001.MOV");
       await waitLive(page, "audio", true);
       assert.match(
-        await page.locator(".player-source").innerText(),
+        await page.locator(".player-game").innerText(),
         /Our take/,
       );
       await nav(page, "Repertoire");
@@ -320,6 +338,7 @@ for (const name of Object.keys(viewports)) {
       await page
         .getByRole("link", { name: "Unrecorded Song", exact: true })
         .click();
+      await overview(page);
       assert.equal(await page.locator(".recording-row").count(), 0);
       assert.match(
         await page.locator(".song-content").innerText(),
@@ -455,13 +474,13 @@ for (const name of Object.keys(viewports)) {
       assert.ok(Math.abs((await live(page))[0].time - before) < 1);
       await page.click(".play-button");
       await waitLive(page, "youtube", false);
-      await seek(page, 0.5);
+      await seek(page, 2.5);
       await page.waitForFunction(() =>
         window
           .__mediaState()
           .some((m) => m.src && Math.abs(m.time - 2.5) < 0.2),
       );
-      assert.equal(await transportTime(page), "0:01");
+      assert.equal(await transportTime(page), "0:03");
       await page
         .getByRole("group", { name: "Playback options" })
         .getByRole("button", { name: "Audio", exact: true })
@@ -472,11 +491,13 @@ for (const name of Object.keys(viewports)) {
         Math.abs((await live(page))[0].time - 2.5) < 0.3,
         JSON.stringify(await media(page)),
       );
+      await expandPractice(page);
+      await page.getByRole('button',{name:'Apply range',exact:true}).click();
       await page.click(".play-button");
       await waitLive(page, "audio", true);
       await waitLive(page, "audio", false);
       assert.ok(Math.abs((await live(page))[0].time - 5) < 0.3);
-      assert.equal(await transportTime(page), "0:03");
+      assert.equal(await transportTime(page), "0:05");
       await page.click(".play-button");
       await waitLive(page, "audio", true);
       assert.ok((await live(page))[0].time < 3);
@@ -581,12 +602,7 @@ for (const name of Object.keys(viewports)) {
     "normal Back changes browsing without restoring an older play token",
     async (page) => {
       await nav(page, "Songs");
-      await page
-        .getByRole("button", {
-          name: "Play original of Alpha Song",
-          exact: true,
-        })
-        .click();
+      await playReference(page, 'Play original of Alpha Song');
       await waitLive(page, "youtube", true);
       await nav(page, "Our takes");
       await playTake(page, "SYN_0002.MOV");
@@ -665,26 +681,14 @@ for (const name of Object.keys(viewports)) {
     async (page) => {
       await page.goto(`${fixture.origin}/?view=songs&layout=dock`);
       await page.waitForSelector(".song-row");
-      await page
-        .getByRole("button", {
-          name: "Play original of Alpha Song",
-          exact: true,
-        })
-        .click();
+      await playReference(page, 'Play original of Alpha Song');
       await waitLive(page, "youtube", true);
-      if (
-        (await page.getAttribute(".expand-control", "aria-expanded")) ===
-        "false"
-      )
-        await page.click(".expand-control");
+      await expandPractice(page);
       const before = (await media(page)).length;
       await filterBySong(page, "Alpha");
       await page.keyboard.press("Escape");
-      assert.equal(await page.locator("h1").innerText(), "Songs");
-      assert.equal(
-        await page.getAttribute(".expand-control", "aria-expanded"),
-        "true",
-      );
+      assert.equal(await page.locator("h1").innerText(), "Alpha Song");
+      assert.equal(await page.locator('.video-float').isVisible(),true);
       assert.equal(await playLabel(page), "Pause selected recording");
       assert.equal((await media(page)).length, before);
     },
@@ -776,13 +780,15 @@ for (const name of Object.keys(viewports)) {
       await waitLive(page, "audio", true);
       await page.keyboard.press("Space");
       await waitLive(page, "audio", false);
+      await seek(page, 0);
+      await page.evaluate(() => document.activeElement.blur());
       await page.keyboard.press("ArrowRight");
       await page.waitForFunction(() =>
         window.__mediaState().some((m) => m.src && Math.abs(m.time - 5) < 0.3),
       );
       await page.keyboard.press("ArrowLeft");
       await page.waitForFunction(() =>
-        window.__mediaState().some((m) => m.src && Math.abs(m.time - 2) < 0.3),
+        window.__mediaState().some((m) => m.src && Math.abs(m.time) < 0.3),
       );
       await page.keyboard.press("/");
       assert.equal(
@@ -828,12 +834,8 @@ for (const name of Object.keys(viewports)) {
         await page.setViewportSize(viewport);
         await noOverflow(page);
         const rect = await geometry();
-        if (viewport.width >= 1280) {
-          assert.equal(rect.y, 0);
-          assert.ok(Math.abs(rect.x + rect.width - viewport.width) < 1);
-        } else {
-          assert.ok(Math.abs(rect.y + rect.height - viewport.height) < 1);
-        }
+        assert.ok(Math.abs(rect.y + rect.height - viewport.height) < 1,JSON.stringify({rect,viewport,wrapper:await page.locator(".persistent-player").boundingBox()}));
+        assert.ok(Math.abs(rect.x + rect.width - viewport.width) < 1);
         assert.equal((await media(page)).length, total);
         assert.equal(await heading(page), "Bravo full take");
         await page.shot(`responsive-${viewport.width}`);
@@ -910,12 +912,7 @@ for (const name of Object.keys(viewports)) {
         "take keeps its musical position during video close",
       );
       await nav(page, "Songs");
-      await page
-        .getByRole("button", {
-          name: "Play original of Alpha Song",
-          exact: true,
-        })
-        .click();
+      await playReference(page, 'Play original of Alpha Song');
       await waitLive(page, "youtube", true);
       const count = (await media(page)).length;
       await page
@@ -952,12 +949,7 @@ for (const name of Object.keys(viewports)) {
         await page.locator(".load-error").innerText(),
         /Could not load/,
       );
-      await page
-        .getByRole("button", {
-          name: "Play original of Unrecorded Song",
-          exact: true,
-        })
-        .click();
+      await playReference(page, 'Play original of Unrecorded Song');
       await waitLive(page, "youtube", true);
       assert.equal(await heading(page), "Unrecorded Song");
       assert.equal(await page.locator(".recording-row").count(), 0);
@@ -971,12 +963,7 @@ test(
   async () => {
     const page = await open("desktop", "/?view=songs");
     try {
-      await page
-        .getByRole("button", {
-          name: "Play original of Alpha Song",
-          exact: true,
-        })
-        .click();
+      await playReference(page, 'Play original of Alpha Song');
       await waitLive(page, "youtube", true);
       await page.click(".play-button");
       await waitLive(page, "youtube", false);
@@ -1024,12 +1011,7 @@ test(
         await page
           .getByRole("link", { name: "Alpha Song", exact: true })
           .click();
-        await page
-          .getByRole("button", {
-            name: "Play original of Alpha Song",
-            exact: true,
-          })
-          .click();
+        await playReference(page, 'Play original of Alpha Song');
         await waitLive(page, "youtube", true);
         await page.click(".play-button");
         await waitLive(page, "youtube", false);
@@ -1069,15 +1051,10 @@ test(
           await gate;
           await route.fulfill({
             contentType: "text/javascript",
-            body: fixture.youtubeApi,
+            body: page.fixture.youtubeApi,
           });
         });
-      await page
-        .getByRole("button", {
-          name: "Play original of Alpha Song",
-          exact: true,
-        })
-        .click();
+      await playReference(page, 'Play original of Alpha Song');
       await request;
       await waitStatus(page, "Loading…");
       assert.equal(
@@ -1124,12 +1101,7 @@ test(
   async () => {
     const page = await open("mobile", "/?view=songs");
     try {
-      await page
-        .getByRole("button", {
-          name: "Play original of Alpha Song",
-          exact: true,
-        })
-        .click();
+      await playReference(page, 'Play original of Alpha Song');
       await waitLive(page, "youtube", true);
       await page.click(".play-button");
       await waitLive(page, "youtube", false);
@@ -1176,12 +1148,7 @@ test(
         await page
           .getByRole("link", { name: "Alpha Song", exact: true })
           .click();
-        await page
-          .getByRole("button", {
-            name: "Play original of Alpha Song",
-            exact: true,
-          })
-          .click();
+        await playReference(page, 'Play original of Alpha Song');
         await waitLive(page, "youtube", true);
         await page.click(".play-button");
         await waitLive(page, "youtube", false);
@@ -1241,35 +1208,25 @@ test(
       "/?view=songs&song=synthetic-alpha&layout=dock",
     );
     const expand = async () => {
-      if (
-        (await page.getAttribute(".expand-control", "aria-expanded")) ===
-        "false"
-      )
-        await page.click(".expand-control");
+      await expandPractice(page);
+      await page.getByText('Recording details & downloads',{exact:true}).click();
     };
     try {
-      await page
-        .getByRole("button", {
-          name: "Play original of Alpha Song",
-          exact: true,
-        })
-        .click();
+      await playReference(page, 'Play original of Alpha Song');
       await waitLive(page, "youtube", true);
       await expand();
       assert.match(
-        await page.locator(".player-musical").innerText(),
+        await page.locator(".practice-source-detail dl").innerText(),
         /C minor/,
       );
       assert.match(
-        await page.locator(".player-musical").innerText(),
+        await page.locator(".practice-source-detail dl").innerText(),
         /120 BPM/,
       );
-      await page
-        .getByRole("button", { name: "Play cover of Alpha Song", exact: true })
-        .click();
+      await playReference(page,'Play cover of Alpha Song');
       await waitLive(page, "youtube", true);
       await expand();
-      const cover = await page.locator(".player-musical").innerText();
+      const cover = await page.locator(".practice-source-detail dl").innerText();
       assert.equal(
         (cover.match(/Not recorded/g) || []).length,
         2,
@@ -1279,7 +1236,7 @@ test(
       await playTake(page, "SYN_0001.MOV");
       await waitLive(page, "audio", true);
       await expand();
-      const take = await page.locator(".player-musical").innerText();
+      const take = await page.locator(".practice-source-detail dl").innerText();
       assert.match(take, /D minor/);
       assert.match(take, /108.5 BPM/);
       assert.doesNotMatch(take, /C minor|120 BPM/);
@@ -1295,13 +1252,13 @@ const audioEvents = page => page.evaluate(()=>window.__audioEvents);
 const refWrapCount = async (page,start) => (await audioEvents(page)).filter(event=>event.type==='seeking'&&event.src.includes('reference-audio/')&&Math.abs(event.time-start)<.05).length;
 const waitRefWraps = (page,start,count) => page.waitForFunction(({start,count})=>window.__audioEvents.filter(event=>event.type==='seeking'&&event.src.includes('reference-audio/')&&Math.abs(event.time-start)<.05).length>=count,{start,count});
 const expandPractice = async page => {
-  if(await page.locator('.practice-controls').isVisible()) return;
-  await page.getByRole('button',{name:'Expand player',exact:true}).click();
+  if(await page.locator('.practice-controls').isVisible())return;
+  const control=page.getByRole('button',{name:'Open practice',exact:true});
+  if(await control.isVisible())await control.click();else await page.locator('.player-song').click();
+  await page.locator('.practice-workspace').waitFor();
 };
-const collapsePractice = async page => {
-  const control=page.getByRole('button',{name:'Collapse player',exact:true});
-  if(await control.isVisible())await control.click();
-};
+const collapsePractice = async page => {};
+
 
 for(const name of Object.keys(viewports)) {
   const privateScenario = (label,fn,options={}) => test(`${name}: private audio ${label}`,{skip:!executablePath},async()=>{
@@ -1310,7 +1267,7 @@ for(const name of Object.keys(viewports)) {
   });
   privateScenario('decodes local original and hands video back to audio paused or playing',async page=>{
     await waitLive(page,'audio',false);await assertOnlyLive(page,'audio','reference-audio/'+fixture.referenceAudio.audio_file);
-    assert.equal(await heading(page),'Alpha Song');assert.match(await page.locator('.player-source').innerText(),/Original soundtrack/);
+    assert.equal(await heading(page),'Alpha Song');assert.match(await page.locator('.player-game').innerText(),/Original soundtrack/);
     assert.equal(await page.getByRole('group',{name:'Playback options'}).getByRole('button',{name:'Audio',exact:true}).getAttribute('aria-pressed'),'true');
     await page.click('.play-button');await waitLive(page,'audio',true);
     await page.waitForFunction(()=>window.__mediaState().some(m=>m.src&&m.kind==='audio'&&m.time>.35));
@@ -1332,10 +1289,10 @@ for(const name of Object.keys(viewports)) {
     await waitRefWraps(page,.5,1);const baseline=await refWrapCount(page,.5);
     await page.click('.play-button');await waitLive(page,'audio',true);await waitRefWraps(page,.5,baseline+2);
     const providers=(await media(page)).length;
-    await collapsePractice(page);await page.getByRole('button',{name:'Play original of Alpha Song',exact:true}).click();await waitLive(page,'audio',true);
+    await collapsePractice(page);await playReference(page,'Play original of Alpha Song');await waitLive(page,'audio',true);
     assert.equal((await media(page)).length,providers,'explicit Play of the same source retains its provider');assert.equal(new URL(page.url()).searchParams.get('t'),'0.5,1.25');
     await nav(page,'Repertoire');await filterBySong(page,'nothing-matches-fixture');
-    assert.equal(await page.locator('.recording-row').count(),0);assert.equal(await quick.getAttribute('aria-pressed'),'true');
+    assert.equal(await page.locator('.recording-row').count(),0);assert.equal(new URL(page.url()).searchParams.get('repeat'),'1');
     await page.getByRole('button',{name:'Clear search',exact:true}).click();await nav(page,'Our takes');
     assert.equal((await media(page)).length,providers);assert.equal(new URL(page.url()).searchParams.get('t'),'0.5,1.25');
     await filterBySong(page,'Bravo');await playTake(page,'SYN_0002.MOV');await waitLive(page,'audio',true);
@@ -1343,10 +1300,10 @@ for(const name of Object.keys(viewports)) {
     await page.getByRole('button',{name:'Clear search',exact:true}).click();await page.goBack();
     await page.waitForFunction(()=>new URL(location.href).searchParams.get('play')==='SYN_0002.MOV');
     assert.equal(new URL(page.url()).searchParams.get('play'),'SYN_0002.MOV');assert.equal(new URL(page.url()).searchParams.has('t'),false);assert.equal(new URL(page.url()).searchParams.has('repeat'),false);
-    assert.equal(await quick.getAttribute('aria-pressed'),'false');
+    assert.equal(new URL(page.url()).searchParams.has('repeat'),false);
   },{query:'&t=0.5%2C1.25&repeat=1'});
   privateScenario('full-source native end repeats and disabling Repeat restores ordinary stop',async page=>{
-    await waitLive(page,'audio',false);await page.waitForSelector('button[aria-label="Play take SYN_0001.MOV"]');await collapsePractice(page);const baseline=(await media(page)).length;await page.click('.play-button');await waitLive(page,'audio',true);
+    await waitLive(page,'audio',false);await page.archiveReady;await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));await collapsePractice(page);const baseline=(await media(page)).length;await page.click('.play-button');await waitLive(page,'audio',true);
     await page.waitForFunction(()=>window.__audioEvents.some(event=>event.type==='ended'&&event.src.includes('reference-audio/')));
     await waitLive(page,'audio',true);assert.equal((await media(page)).length,baseline,'native end reuses its existing audio element');
     await page.getByRole('button',{name:'Repeat selected excerpt',exact:true}).click();
@@ -1382,9 +1339,9 @@ test('private practice quarter-second loop restarts without a stale seek grace i
     await waitLive(page,'audio',false);await waitRefWraps(page,1,1);
     await page.evaluate(()=>{window.__rangeSamples=[];window.__rangeTimer=setInterval(()=>{for(const m of window.__mediaState())if(m.src.includes('reference-audio/')&&!m.paused)window.__rangeSamples.push(m.time);},5);});
     const baseline=await refWrapCount(page,1);await page.click('.play-button');await waitLive(page,'audio',true);await waitRefWraps(page,1,baseline+3);
-    await page.click('.play-button');await waitLive(page,'audio',false);await seek(page,.25);
-    await page.waitForTimeout(500);assert.equal(await playLabel(page),'Play selected recording');assert.ok(Math.abs((await live(page))[0].time-1.25)<.03,JSON.stringify({media:await media(page),slider:await page.locator('input[aria-label="Seek within selected section"]').inputValue()}));
-    await page.click('.play-button');await waitLive(page,'audio',true);const restarted=await refWrapCount(page,1);await waitRefWraps(page,1,restarted+2);
+    await page.click('.play-button');await waitLive(page,'audio',false);await seek(page,1.25);
+    await page.waitForTimeout(500);assert.equal(await playLabel(page),'Play selected recording');assert.ok(Math.abs((await live(page))[0].time-1.25)<.03,JSON.stringify({media:await media(page),slider:await page.locator('input[aria-label="Seek full recording"]').inputValue()}));
+    await page.getByRole('button',{name:'Repeat selected excerpt',exact:true}).click();await page.click('.play-button');await waitLive(page,'audio',true);const restarted=await refWrapCount(page,1);await waitRefWraps(page,1,restarted+2);
     const max=await page.evaluate(()=>Math.max(...window.__rangeSamples));assert.ok(max<1.35,`quarter-second range overshot to ${max}`);
     assert.equal((await media(page)).length,1);noErrors(page);
   }finally{await page.context().close();}
@@ -1393,10 +1350,10 @@ test('private practice quarter-second loop restarts without a stale seek grace i
 test('private practice invalid direct ranges stay with the exact source and denied clipboard shows the attempted semantic link',{skip:!executablePath},async()=>{
   const page=await open('desktop',privatePath('&t=2%2C1&repeat=1'),{referenceAudio:true,clipboard:'denied'});
   try{
-    await waitLive(page,'audio',false);assert.equal(await heading(page),'Alpha Song');assert.match(await page.locator('.practice-link-error').innerText(),/B must come after A/);assert.equal(await page.getByRole('button',{name:'Repeat selected excerpt',exact:true}).getAttribute('aria-pressed'),'false');
+    await waitLive(page,'audio',false);assert.equal(await heading(page),'Alpha Song');assert.match(await page.locator('.practice-error').innerText(),/B must come after A/);assert.equal(await page.getByRole('button',{name:'Repeat selected excerpt',exact:true}).getAttribute('aria-pressed'),'false');
     await expandPractice(page);await page.getByRole('spinbutton',{name:'A (seconds)',exact:true}).fill('.25');await page.getByRole('spinbutton',{name:'B (seconds)',exact:true}).fill('1');await page.getByRole('button',{name:'Apply range',exact:true}).click();
-    await nav(page,'Songs');await page.getByRole('link',{name:'Unrecorded Song',exact:true}).click();await page.getByRole('button',{name:'Copy practice link',exact:true}).click();
-    const link=page.locator('.manual-copy-link');await link.waitFor();const href=new URL(await link.getAttribute('href'));
+    await nav(page,'Songs');await page.getByRole('link',{name:'Unrecorded Song',exact:true}).click();await expandPractice(page);await page.getByRole('button',{name:'Copy practice link',exact:true}).click();
+    await page.getByText('Practice link',{exact:true}).click();const link=page.getByRole('textbox',{name:'Practice link',exact:true});await link.waitFor();const href=new URL(await link.inputValue());
     assert.equal(href.searchParams.get('play'),'ref:alpha-original');assert.equal(href.searchParams.get('song'),'synthetic-alpha');assert.equal(href.searchParams.get('t'),'0.25,1');assert.equal(href.searchParams.has('repeat'),false);noErrors(page);
   }finally{await page.context().close();}
 });
@@ -1422,7 +1379,7 @@ test('private practice quick Repeat and transport remain genuinely reachable in 
     await waitLive(page,'audio',false);
     for(const width of [375,767]){
       await page.setViewportSize({width,height:375});
-      const quick=page.getByRole('button',{name:'Repeat selected excerpt',exact:true}), rect=await quick.boundingBox();
+      const quick=page.getByRole('button',{name:'Repeat selected excerpt',exact:true});await quick.scrollIntoViewIfNeeded();const rect=await quick.boundingBox();
       assert.ok(rect&&rect.x>=0&&rect.y>=0&&rect.x+rect.width<=width&&rect.y+rect.height<=375,JSON.stringify(rect));
       const buttons=[quick,page.getByRole('group',{name:'Playback options'}).getByRole('button',{name:'Audio',exact:true}),page.getByRole('group',{name:'Playback options'}).getByRole('button',{name:'Video',exact:true}),page.locator('.play-button')];
       const boxes=await Promise.all(buttons.map(button=>button.boundingBox()));
@@ -1440,7 +1397,7 @@ test('private practice original survives delayed archive hydration with the same
   try{
     await waitLive(page,'audio',false);await page.click('.play-button');await waitLive(page,'audio',true);
     const count=(await media(page)).length;assert.equal(count,1);
-    page.releaseArchive();await page.waitForSelector('button[aria-label="Play take SYN_0001.MOV"]');await waitLive(page,'audio',true);
+    page.releaseArchive();await page.archiveReady;await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));await waitLive(page,'audio',true);
     assert.equal((await media(page)).length,count,'archive data cannot reconstruct a reference backend');
     const baseline=await refWrapCount(page,.5);await waitRefWraps(page,.5,baseline+2);assert.equal(await heading(page),'Alpha Song');noErrors(page);
   }finally{page.releaseArchive();await page.context().close();}
@@ -1449,7 +1406,7 @@ test('private practice original survives delayed archive hydration with the same
 test('private practice fast full-source repetitions survive native end and timer ordering',{skip:!executablePath},async()=>{
   const page=await open('desktop',privatePath('&t=0%2C2.5&repeat=1'),{referenceAudio:true});
   try{
-    await waitLive(page,'audio',false);await page.waitForSelector('button[aria-label="Play take SYN_0001.MOV"]');
+    await waitLive(page,'audio',false);await page.archiveReady;await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
     await page.evaluate(()=>{window.__media.find(element=>element.dataset.kind==='audio'&&element.getAttribute('src')) .playbackRate=16;});
     const initial=await refWrapCount(page,0), count=(await media(page)).length;
     await page.click('.play-button');await waitLive(page,'audio',true);
@@ -1461,7 +1418,7 @@ test('private practice fast full-source repetitions survive native end and timer
 });
 
 const stemState = page => page.evaluate(()=>({contexts:window.__stemContexts.map(context=>({state:context.state,time:context.currentTime,rate:context.sampleRate})),starts:window.__stemStarts,stops:window.__stemStops,gains:window.__stemGains}));
-const stemsButton = page => page.getByRole('button',{name:'Stems',exact:true});
+const stemsButton = page => page.getByRole('button',{name:'Instrument mix',exact:true});
 const sectionRow = (page,label) => page.locator('.section-row').filter({has:page.getByRole('button',{name:`Play ${label}`,exact:true})});
 const savedSection = async (label,start,end) => {
   const response=await fetch(fixture.origin+'/api/practice',{method:'POST',headers:{'Content-Type':'application/json',Origin:fixture.origin},body:JSON.stringify({sourceId:'ref:alpha-original',sourceHash:fixture.sourceHash,label,start,end})});
@@ -1474,7 +1431,7 @@ const setDraftRange = async (page,start,end) => {
 };
 const pilotScenario = (label,fn,options={}) => test(`practice pilot: ${label}`,{skip:!executablePath},async()=>{
   const page=await open(options.mobile?'mobile':'desktop',privatePath(options.query||'&t=.75%2C1.5'),{referenceAudio:true,practice:true,clipboard:'capture',failDecode:options.failDecode});
-  try{await waitLive(page,'audio',false);await expandPractice(page);await page.locator('.source-sections').waitFor();await page.getByRole('button',{name:'Add section',exact:true}).waitFor();await fn(page);noErrors(page);}catch(error){await page.shot('pilot-failure-'+label.replaceAll(/[^a-z0-9]+/gi,'-'));console.log(JSON.stringify({label,url:page.url(),status:await status(page),stem:await stemState(page),text:await page.locator('.player-extra').innerText().catch(()=>''),media:await media(page)}));throw error;}finally{await page.context().close();}
+  try{await page.locator('.practice-workspace').waitFor();const original=page.locator('.practice-workspace').getByRole('button',{name:'Original mix',exact:true});await original.waitFor();await original.click();await waitLive(page,'audio',false);await page.locator('.source-sections').waitFor();await page.getByRole('button',{name:'Add section',exact:true}).waitFor();await fn(page);noErrors(page);}catch(error){await page.shot('pilot-failure-'+label.replaceAll(/[^a-z0-9]+/gi,'-'));console.log(JSON.stringify({label,url:page.url(),status:await status(page),error:await page.locator('.playback-error').innerText().catch(()=>''),stem:await stemState(page),text:await page.locator('.practice-workspace').innerText().catch(()=>''),media:await media(page)}));throw error;}finally{await page.context().close();}
 });
 
 pilotScenario('sections save, rename by stable UUID, reopen paused and manual ranges replace semantic targets',async page=>{
@@ -1498,15 +1455,15 @@ pilotScenario('sections save, rename by stable UUID, reopen paused and manual ra
   await waitLive(page,'audio',true);assert.equal((await media(page)).length,providers,'rename leaves the transport intact');
   await renamed.getByRole('button',{name:'Copy Synthetic verse renamed link',exact:true}).click();
   const copied=await page.evaluate(()=>window.__copiedPractice);assert.equal(new URL(copied).searchParams.get('section'),id);
-  await page.reload();await page.waitForSelector('.workspace-main h1');await waitLive(page,'audio',false);await expandPractice(page);
+  await page.reload();await page.waitForSelector('.workspace-main h1');await waitStatus(page,'Paused');await expandPractice(page);
   await sectionRow(page,'Synthetic verse renamed').waitFor();assert.equal(new URL(page.url()).searchParams.get('section'),id);
-  assert.ok(Math.abs((await live(page))[0].time-.75)<.08);
+  assert.ok(Math.abs(Number(await page.getByRole('slider',{name:'Seek song timeline',exact:true}).inputValue())-.75)<.08);
   await setDraftRange(page,.8,1.4);assert.equal(new URL(page.url()).searchParams.has('section'),false);assert.equal(new URL(page.url()).searchParams.get('t'),'0.8,1.4');
 });
 
 pilotScenario('six stems use one clock, gains preserve playback, loops survive browsing and Pause wins',async page=>{
   const quick=page.getByRole('button',{name:'Repeat selected excerpt',exact:true});await quick.click();
-  await stemsButton(page).click();await page.locator('.stem-mixer').waitFor();await waitStatus(page,'Paused');
+  await stemsButton(page).click();await page.locator('.instrument-lane').last().waitFor();await waitStatus(page,'Paused');
   assert.equal((await playing(page)).length,0,'full mix stops before stems');
   assert.equal((await stemState(page)).contexts.filter(context=>context.state!=='closed').length,1);
   await page.click('.play-button');await waitStatus(page,'Playing');
@@ -1524,20 +1481,20 @@ pilotScenario('six stems use one clock, gains preserve playback, loops survive b
 
 pilotScenario('named ranges crossing stem coverage stay intact with an explicit error',async page=>{
   const section=await savedSection('Outside stem coverage',0,.75);
-  await page.reload();await waitLive(page,'audio',false);await expandPractice(page);
+  await page.reload();await waitStatus(page,'Paused');await expandPractice(page);await page.locator('.practice-workspace').getByRole('button',{name:'Original mix',exact:true}).click();await waitLive(page,'audio',false);
   await sectionRow(page,section.label).getByRole('button',{name:`Play ${section.label}`,exact:true}).click();
   await page.waitForFunction(id=>new URL(location.href).searchParams.get('section')===id,section.id);
   const original=page.url();await stemsButton(page).click();
   await page.getByText(/cover.*(?:only|source)|outside.*(?:coverage|excerpt)|section.*outside/i).first().waitFor();
   assert.equal(new URL(page.url()).searchParams.get('section'),section.id);assert.equal(new URL(page.url()).searchParams.has('t'),false);assert.equal((await stemState(page)).starts.length,0);
-  assert.equal(await stemsButton(page).getAttribute('aria-pressed'),'false');assert.equal(new URL(original).searchParams.get('section'),section.id);
+  assert.equal(await page.getByRole('button',{name:'Original mix',exact:true}).count(),0);assert.equal(new URL(original).searchParams.get('section'),section.id);
 });
 
 pilotScenario('failed stem decoding closes its context and leaves an explicit full-mix fallback',async page=>{
   await stemsButton(page).click();await page.getByText(/decode failure|could not.*stem|cannot.*stem|unable.*stem/i).first().waitFor();
   await page.waitForFunction(()=>window.__stemContexts.length>0&&window.__stemContexts.every(context=>context.state==='closed'));
   assert.equal((await stemState(page)).starts.length,0);assert.equal((await playing(page)).length,0);
-  await page.getByRole('group',{name:'Playback options'}).getByRole('button',{name:'Audio',exact:true}).click();await waitLive(page,'audio',false);
+  await page.locator('.practice-workspace').getByRole('button',{name:'Original mix',exact:true}).click();await waitLive(page,'audio',false);
   await page.click('.play-button');await waitLive(page,'audio',true);
 },{failDecode:true});
 
@@ -1545,17 +1502,16 @@ pilotScenario('phone section drafts and six mixer rows remain reachable without 
   await page.getByRole('button',{name:'Add section',exact:true}).click();
   const field=page.getByRole('textbox',{name:'Section name',exact:true});await field.fill('Phone rehearsal section');assert.ok(await field.evaluate(input=>parseFloat(getComputedStyle(input).fontSize)>=16));
   await page.getByRole('button',{name:'Create section',exact:true}).click();await sectionRow(page,'Phone rehearsal section').waitFor();
-  await stemsButton(page).click();await page.locator('.stem-mixer').waitFor();
-  await page.getByRole('button',{name:'Mute Other',exact:true}).click();assert.equal(await page.getByRole('button',{name:'Mute Other',exact:true}).getAttribute('aria-pressed'),'true');
-  await noOverflow(page);const geometry=await page.locator('.player-extra').evaluate(panel=>({width:panel.clientWidth,scrollWidth:panel.scrollWidth,rect:panel.getBoundingClientRect().toJSON(),overflows:[...panel.querySelectorAll('*')].filter(element=>element.getBoundingClientRect().right>panel.getBoundingClientRect().right+.5).map(element=>({tag:element.tagName,class:element.className,text:element.textContent.slice(0,60),rect:element.getBoundingClientRect().toJSON()}))}));assert.equal(geometry.scrollWidth>geometry.width,false,JSON.stringify(geometry));await page.shot('practice-pilot-phone');
+  await stemsButton(page).click();await page.locator('.instrument-lane').last().waitFor();
+  await page.getByRole('button',{name:'Mute Other',exact:true}).click();assert.equal(await page.getByRole('button',{name:'Unmute Other',exact:true}).getAttribute('aria-pressed'),'true');
+  await noOverflow(page);const geometry=await page.locator('.practice-workspace').evaluate(panel=>({width:panel.clientWidth,scrollWidth:panel.scrollWidth,rect:panel.getBoundingClientRect().toJSON(),overflows:[...panel.querySelectorAll('*')].filter(element=>element.getBoundingClientRect().right>panel.getBoundingClientRect().right+.5).map(element=>({tag:element.tagName,class:element.className,text:element.textContent.slice(0,60),rect:element.getBoundingClientRect().toJSON()}))}));assert.equal(geometry.scrollWidth>geometry.width,false,JSON.stringify(geometry));await page.shot('practice-pilot-phone');
 },{mobile:true});
 
 
 test('practice pilot: replacing a source during stem loading aborts it without hidden starts',{skip:!executablePath},async()=>{
   const page=await open('desktop',privatePath('&t=.75%2C1.5'),{referenceAudio:true,practice:true,delayStems:true});
   try{
-    await waitLive(page,'audio',false);await expandPractice(page);
-    const requested=page.waitForRequest('**/reference-audio/stems/*.wav');await stemsButton(page).click();await requested;
+    await page.waitForFunction(()=>window.__stemContexts.length>0);await expandPractice(page);
     await collapsePractice(page);await nav(page,'Our takes');await playTake(page,'SYN_0002.MOV');await waitLive(page,'audio',true);
     page.releaseStems();await page.waitForFunction(()=>window.__stemContexts.every(context=>context.state==='closed'));
     assert.equal((await stemState(page)).starts.length,0);assert.equal(await heading(page),'Bravo full take');assert.equal((await playing(page)).length,1);noErrors(page);
@@ -1568,7 +1524,7 @@ test('practice pilot: API retry resolves a pending section but cannot override n
   for(const replace of ['retry','range','repeat']){
     const page=await open('desktop',privatePath('&section='+section.id+'&repeat=1'),{referenceAudio:true,practice:true,practiceFailFirst:true});
     try{
-      await waitLive(page,'audio',false);await expandPractice(page);await page.getByText('Synthetic sections unavailable.',{exact:true}).waitFor();
+      await waitLive(page,'audio',false);await expandPractice(page);await page.locator('.source-sections').getByText('Synthetic sections unavailable.',{exact:true}).waitFor();
       if(replace==='range')await setDraftRange(page,.8,1.4);
       if(replace==='repeat')await page.getByRole('button',{name:'Repeat selected excerpt',exact:true}).click();
       await page.getByRole('button',{name:'Reload sections',exact:true}).click();
@@ -1580,4 +1536,73 @@ test('practice pilot: API retry resolves a pending section but cannot override n
       noErrors(page);
     }finally{await page.context().close();}
   }
+});
+
+test('full practice: lossless FLAC chunks auto-prepare one synchronized instrument clock and retain full timeline',{skip:!executablePath},async()=>{
+  const page=await open('desktop',privatePath(),{referenceAudio:true,practice:true,chunked:true});
+  try{
+    await page.locator('.practice-workspace').waitFor();await waitStatus(page,'Paused');assert.equal((await playing(page)).length,0);
+    assert.equal(await page.locator('.instrument-lane').count(),6);assert.equal(await page.locator('.waveform-lane svg path').count(),7);
+    assert.equal(await page.getByRole('slider',{name:'Seek song timeline',exact:true}).getAttribute('max'),'2.5');
+    assert.equal(await page.getByRole('button',{name:'Stems',exact:true}).count(),0);assert.equal(await page.getByRole('group',{name:'Playback options'}).getByRole('button',{name:'Audio',exact:true}).getAttribute('aria-pressed'),'true');
+    await page.click('.play-button');await waitStatus(page,'Playing');await page.waitForFunction(()=>window.__stemStarts.length>=6);
+    const first=await stemState(page);assert.equal(first.contexts.filter(context=>context.state!=='closed').length,1);assert.equal(new Set(first.starts.slice(0,6).map(start=>start.when)).size,1);
+    assert.equal((await playing(page)).length,0,'the original HTML audio is not audible under instruments');
+    await page.getByRole('button',{name:'Solo Vocals',exact:true}).click();await page.getByRole('button',{name:'Solo Bass',exact:true}).click();await page.getByRole('button',{name:'Mute Vocals',exact:true}).click();
+    assert.deepEqual((await stemState(page)).gains.slice(-6).map(gain=>gain.value),[0,0,1,0,0,0]);
+    await page.waitForFunction(()=>Number(document.querySelector('input[aria-label="Seek song timeline"]').value)>1.3);
+    const state=await stemState(page);assert.equal(state.contexts.filter(context=>context.state!=='closed').length,1);assert.ok(state.starts.length>=12,'second FLAC chunk continues the same source clock');
+    for(let i=0;i<state.starts.length;i+=6)assert.equal(new Set(state.starts.slice(i,i+6).map(start=>start.when)).size,1);
+    await page.click('.play-button');await waitStatus(page,'Paused');
+    await page.locator('.practice-workspace').getByRole('button',{name:'Original mix',exact:true}).click();await waitLive(page,'audio',false);
+    assert.ok((await live(page))[0].time>1.2);noErrors(page);
+  }finally{await page.context().close();}
+});
+
+test('full practice: source-bound chords and notes persist, seek and copy exact range links',{skip:!executablePath},async()=>{
+  const page=await open('desktop',privatePath(),{referenceAudio:true,practice:true,chunked:true,clipboard:'capture'});
+  try{
+    await waitStatus(page,'Paused');await page.locator('.practice-workspace').waitFor();
+    await page.getByRole('button',{name:'Add chord',exact:true}).click();await page.getByRole('textbox',{name:'Chord',exact:true}).fill('Cmaj7');
+    await page.getByRole('spinbutton',{name:'Annotation start (seconds)',exact:true}).fill('.5');await page.getByRole('spinbutton',{name:'Annotation end (seconds)',exact:true}).fill('.9');await page.getByRole('button',{name:'Save chord',exact:true}).click();
+    await page.locator('.chord-score-strip').getByRole('button',{name:'Cmaj7',exact:true}).waitFor();
+    await page.getByRole('button',{name:'Add note',exact:true}).click();await page.getByRole('textbox',{name:'Note',exact:true}).fill('Try quieter drums');
+    await page.getByRole('spinbutton',{name:'Annotation start (seconds)',exact:true}).fill('1.25');await page.getByRole('spinbutton',{name:'Annotation end (seconds)',exact:true}).fill('1.75');await page.getByRole('button',{name:'Save note',exact:true}).click();
+    await page.getByRole('button',{name:'Copy Try quieter drums link',exact:true}).click();const copied=new URL(await page.evaluate(()=>window.__copiedPractice));assert.equal(copied.searchParams.get('play'),'ref:alpha-original');assert.equal(copied.searchParams.get('t'),'1.25,1.75');assert.equal(copied.searchParams.has('repeat'),false);assert.equal(copied.searchParams.has('section'),false);
+    await page.reload();await waitStatus(page,'Paused');await page.locator('.annotation-text').filter({hasText:'Try quieter drums'}).waitFor();
+    await page.locator('.chord-score-strip').getByRole('button',{name:'Cmaj7',exact:true}).click();await page.waitForFunction(()=>Math.abs(Number(document.querySelector('input[aria-label="Seek song timeline"]').value)-.5)<.05);
+    assert.equal(await page.locator('.chord-score-strip .is-current').innerText(),'Cmaj7');noErrors(page);
+  }finally{await page.context().close();}
+});
+
+test('full practice: instrument mute icons, wheel gains and hover previews preserve the source clock',{skip:!executablePath},async()=>{
+  const page=await open('mobile',privatePath(),{referenceAudio:true,practice:true,chunked:true});
+  try{
+    await waitStatus(page,'Paused');const mute=page.getByRole('button',{name:'Mute Vocals',exact:true});await mute.scrollIntoViewIfNeeded();assert.equal(await mute.locator('.lucide-volume-2').count(),1);
+    await mute.click();const unmute=page.getByRole('button',{name:'Unmute Vocals',exact:true});assert.equal(await unmute.getAttribute('aria-pressed'),'true');assert.equal(await unmute.locator('.lucide-volume-x').count(),1);
+    const color=await unmute.evaluate(button=>getComputedStyle(button).color);const rgb=color.match(/\d+/g).map(Number);assert.ok(rgb[0]>rgb[1]&&rgb[0]>rgb[2],color);
+    const gain=page.getByRole('slider',{name:'Vocals volume',exact:true});await gain.hover();const mainScroll=await page.locator('.workspace-main').evaluate(main=>main.scrollTop);
+    await page.mouse.wheel(0,120);await page.waitForFunction(()=>document.querySelector('input[aria-label="Vocals volume"]').value==='98');assert.equal(await page.locator('.workspace-main').evaluate(main=>main.scrollTop),mainScroll);
+    await page.mouse.wheel(0,-120);await page.waitForFunction(()=>document.querySelector('input[aria-label="Vocals volume"]').value==='100');await page.mouse.wheel(0,-120);assert.equal(await gain.inputValue(),'100');
+    await gain.evaluate(input=>{Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,'0');input.dispatchEvent(new Event('input',{bubbles:true}));input.dispatchEvent(new Event('change',{bubbles:true}));});await page.mouse.wheel(0,120);assert.equal(await gain.inputValue(),'0');
+    const lane=page.locator('.instrument-lane').filter({has:page.getByRole('slider',{name:'Seek Vocals timeline',exact:true})}).locator('.waveform-lane');await lane.scrollIntoViewIfNeeded();const before=await page.getByRole('slider',{name:'Seek song timeline',exact:true}).inputValue();
+    await lane.hover({position:{x:Math.max(1,(await lane.boundingBox()).width*.7),y:20}});const preview=page.getByLabel('Preview time for Vocals timeline',{exact:true});await preview.waitFor();assert.match(await preview.textContent(),/^\d+:\d{2}\.\d$/);assert.equal(await page.getByRole('slider',{name:'Seek song timeline',exact:true}).inputValue(),before,'hover previews without seeking');
+    await page.mouse.move(1,1);await page.waitForFunction(()=>!document.querySelector('.waveform-hover-cursor'));
+    await page.getByRole('button',{name:'Unmute Vocals',exact:true}).click();await page.locator('.instrument-lane').filter({has:gain}).getByRole('button',{name:'Mute Vocals',exact:true}).focus();await page.keyboard.press('Space');await waitStatus(page,'Playing');
+    assert.equal(await page.getByRole('button',{name:'Mute Vocals',exact:true}).getAttribute('aria-pressed'),'false','Space starts playback without invoking mute');await page.keyboard.press('Space');await waitStatus(page,'Paused');
+    noErrors(page);
+  }finally{await page.context().close();}
+});
+
+test('full practice: global transport keys work after buttons and gains, clamp source bounds and protect text/video',{skip:!executablePath},async()=>{
+  const page=await open('desktop',privatePath(),{referenceAudio:true,practice:true,long:true});
+  try{
+    await waitStatus(page,'Paused');const mute=page.getByRole('button',{name:'Mute Vocals',exact:true});await mute.focus();await page.keyboard.press('ArrowRight');await page.waitForFunction(()=>Number(document.querySelector('input[aria-label="Seek song timeline"]').value)===5);
+    await page.keyboard.press('ArrowRight');await page.waitForFunction(()=>Number(document.querySelector('input[aria-label="Seek song timeline"]').value)===8);await page.keyboard.press('ArrowRight');assert.equal(await page.getByRole('slider',{name:'Seek song timeline',exact:true}).inputValue(),'8');assert.equal(await page.locator('.playback-error').count(),0);
+    await page.keyboard.press('ArrowLeft');await page.waitForFunction(()=>Number(document.querySelector('input[aria-label="Seek song timeline"]').value)===3);await page.keyboard.press('ArrowLeft');await page.waitForFunction(()=>Number(document.querySelector('input[aria-label="Seek song timeline"]').value)===0);await page.keyboard.press('ArrowLeft');assert.equal(await page.locator('.playback-error').count(),0);
+    const gain=page.getByRole('slider',{name:'Vocals volume',exact:true});await gain.focus();await page.keyboard.press('Space');await waitStatus(page,'Playing');await page.keyboard.press('Space');await waitStatus(page,'Paused');
+    await page.getByRole('button',{name:'Add note',exact:true}).click();const note=page.getByRole('textbox',{name:'Note',exact:true});await note.fill('Typing');await note.focus();const time=await page.getByRole('slider',{name:'Seek song timeline',exact:true}).inputValue();await page.keyboard.press('Space');await page.keyboard.press('ArrowRight');assert.equal(await status(page),'Paused');assert.equal(await page.getByRole('slider',{name:'Seek song timeline',exact:true}).inputValue(),time);assert.match(await note.inputValue(),/ /);
+    await page.getByRole('group',{name:'Playback options'}).getByRole('button',{name:'Video',exact:true}).click();await waitLive(page,'youtube',false);
+    await page.evaluate(()=>{const video=window.__media.find(media=>media.dataset.kind==='youtube'&&media.getAttribute('src'));video.tabIndex=0;video.focus();});await page.keyboard.press('Space');await page.keyboard.press('ArrowRight');assert.equal(await status(page),'Paused','native video keys bypass the global document transport');assert.equal((await playing(page)).length,0);noErrors(page);
+  }finally{await page.context().close();}
 });

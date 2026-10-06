@@ -45,6 +45,7 @@ export function App() {
   const search = useRef<HTMLInputElement>(null);
   const main = useRef<HTMLElement>(null);
   const [videoOpen, setVideoOpen] = useState(false);
+  const [practiceHost, setPracticeHost] = useState<HTMLDivElement | null>(null);
   const origin = useRef(
     history.state?.searchOrigin &&
       route(history.state.searchOrigin).view !== "search"
@@ -55,8 +56,8 @@ export function App() {
   );
   const scrolls = useRef(new Map<string, number>());
   const hydrated = useRef(false);
-  const routeKey = `${browse.view}:${browse.song}:${browse.session}`;
-  const dock = new URL(location.href).searchParams.get("layout") === "dock";
+  const routeKey = `${browse.view}:${browse.song}:${browse.session}:${browse.songTab}`;
+  const dock = true;
 
   useEffect(() => {
     const controller = new AbortController();
@@ -243,6 +244,8 @@ export function App() {
     play: (row: Recording) => select(row.file),
     playReference: (reference: SongReference) => select(`ref:${reference.id}`),
     active: selected,
+    prepare: (row: Recording) => select(row.file, false),
+    prepareReference: (reference: SongReference) => select(`ref:${reference.id}`, false),
   };
   const nav = [
     ["songs", "Songs", FileMusic],
@@ -253,7 +256,7 @@ export function App() {
   const currentNav = browse.view === "search" ? "" : browse.view;
   return (
     <div
-      className={`app-shell ${dock ? "layout-dock" : "layout-rail"} ${videoOpen ? "media-open" : ""}`}
+      className={`app-shell full-practice-shell ${dock ? "layout-dock" : "layout-rail"} ${videoOpen ? "media-open" : ""}`}
     >
       <a className="skip-link" href="#main-content">
         Skip to library
@@ -351,7 +354,12 @@ export function App() {
         {browse.view === "songs" &&
           catalog &&
           (browse.song ? (
-            <SongPage {...props} songId={browse.song} />
+            <SongPage {...props} songId={browse.song} songTab={browse.songTab}
+              practiceActive={Boolean(active && activeSong?.id === browse.song)} practiceHostRef={setPracticeHost}
+              onTab={tab => {
+                const url = new URL(location.href); url.searchParams.set("tab", tab);
+                history.pushState(null, "", url); setBrowse(route(url.toString()));
+              }} />
           ) : (
             <SongsPage {...props} />
           ))}
@@ -377,9 +385,9 @@ export function App() {
           <Player
             key={selected}
             row={active}
+            practiceHost={browse.view === "songs" && browse.songTab === "practice" && activeSong?.id === browse.song ? practiceHost : null}
             autoPlay={autoPlay}
             playRequest={playRequest}
-            onFilter={searchFor}
             identity={{
               title: activeSong?.title,
               kind: refItem ? refItem.kind : "our take",
@@ -409,7 +417,7 @@ export function App() {
             onSong={() => activeSong && navigate("songs", activeSong.id)}
           />
         ) : (
-          <aside className="player player-idle" aria-label="Music player">
+          <aside className="player player-idle compact-idle" aria-label="Music player">
             <div className="player-heading">
               <span className="player-status">NOW PLAYING</span>
               <h2>A little room to listen</h2>

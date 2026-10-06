@@ -12,6 +12,7 @@ export interface PracticeControlsProps {
   available: boolean;
   error?: string;
   unavailableReason?: string;
+  showActions?: boolean;
   onChange(range: LoopRange): void;
   onRepeat(value: boolean): void;
   onCopy(): void;
@@ -26,6 +27,7 @@ export function PracticeControls({
   available,
   error = "",
   unavailableReason,
+  showActions = true,
   onChange,
   onRepeat,
   onCopy,
@@ -141,7 +143,7 @@ export function PracticeControls({
           </button>
         </div>
       </form>
-      <div className="practice-actions">
+      {showActions && <div className="practice-actions">
         <button
           className="practice-repeat"
           type="button"
@@ -154,7 +156,7 @@ export function PracticeControls({
         <button type="button" disabled={!rangeValid} onClick={onCopy}>
           <Copy size={14} /> Copy practice link
         </button>
-      </div>
+      </div>}
       {message && (
         <p className="practice-error" role="alert">
           {message}

@@ -44,6 +44,7 @@ export interface Route {
   song: string;
   session: string;
   q: string;
+  songTab: "practice" | "overview";
 }
 export function route(href: string): Route {
   const url = new URL(href),
@@ -67,6 +68,7 @@ export function route(href: string): Route {
     song: url.searchParams.get("song") || "",
     session: session === "all" ? "" : session,
     q: view === "search" ? url.searchParams.get("q") || "" : "",
+    songTab: url.searchParams.get("tab") === "overview" ? "overview" : "practice",
   };
 }
 export function catalogHref(
@@ -78,6 +80,7 @@ export function catalogHref(
 ) {
   const url = new URL(href);
   url.searchParams.set("view", view);
+  url.searchParams.delete("tab");
   for (const [key, value] of [
     ["song", song],
     ["session", session],

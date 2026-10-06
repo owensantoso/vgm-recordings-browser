@@ -60,8 +60,13 @@ if (privateCatalog) {
     );
   if (stemSets.length) {
     await mkdir(`${output}/reference-audio/stems`, {recursive:true});
-    for (const set of stemSets) for (const track of set.tracks)
-      await symlink(resolve("reference-audio/stems",track.file),`${output}/reference-audio/stems/${track.file}`);
+    const stemFiles = new Set(stemSets.flatMap(set => [
+      ...set.tracks.map(track => track.file),
+      ...(set.chunks || []).flatMap(chunk => chunk.files.map(file => file.file)),
+      ...(set.waveforms ? [set.waveforms.file] : []),
+    ]));
+    for (const file of stemFiles)
+      await symlink(resolve("reference-audio/stems",file),`${output}/reference-audio/stems/${file}`);
     console.log(`Private stem sets: ${stemSets.length} verified.`);
   }
   console.log(

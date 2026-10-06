@@ -161,6 +161,8 @@ export interface LibraryProps {
   playReference: (reference: SongReference) => void;
   active: string;
   query?: string;
+  prepare?: (row: Recording) => void;
+  prepareReference?: (reference: SongReference) => void;
 }
 function SongRow({
   song,
@@ -191,9 +193,7 @@ function SongRow({
   const game = song.game || song.franchise || "";
   return (
     <li className="song-row">
-      <span className="song-monogram" aria-hidden="true">
-        <FileMusic size={21} />
-      </span>
+      <SongThumbnail videoId={original ? original.youtube_id || youtubeId(original.url) : null} />
       <div className="song-row-copy">
         <EntityLink view="songs" song={song.id} navigate={navigate}>
           <Highlight value={song.title} query={query} />
@@ -424,9 +424,9 @@ export function TakeList({
   );
 }
 export function SongPage({
-  songId,
+  songId, songTab = "practice", practiceActive = false, practiceHostRef, onTab,
   ...props
-}: LibraryProps & { songId: string }) {
+}: LibraryProps & { songId: string; songTab?: "practice" | "overview"; practiceActive?: boolean; practiceHostRef?: (element: HTMLDivElement | null) => void; onTab?: (tab: "practice" | "overview") => void }) {
   const { catalog, rows, navigate, playReference, active } = props,
     song = catalog?.songs.find((song) => song.id === songId);
   if (!song)
@@ -453,7 +453,7 @@ export function SongPage({
     );
   const youtubeSearch = `https://www.youtube.com/results?search_query=${encodeURIComponent(`${song.title} ${song.game || ""} original soundtrack`)}`;
   return (
-    <section className="song-content" id="songbook">
+    <section className={`song-content${songTab === "practice" ? " song-practice-page" : ""}`} id="songbook">
       <EntityLink view="songs" navigate={navigate} className="back-link">
         <ArrowLeft size={16} /> All songs
       </EntityLink>
@@ -461,16 +461,16 @@ export function SongPage({
         title={song.title}
         meta={[song.game, song.composer].filter(Boolean).join(" · ")}
       >
-        <a
+        {songTab === "overview" && <a
           className="quiet-button"
           href={youtubeSearch}
           target="_blank"
           rel="noopener noreferrer"
         >
           <Headphones size={16} /> Find on YouTube <ArrowUpRight size={14} />
-        </a>
+        </a>}
       </PageHeader>
-      <div className="song-summary">
+      {songTab === "overview" && <div className="song-summary">
         <span>
           {records.length} {records.length === 1 ? "take" : "takes"} ·{" "}
           {new Set(records.map((row) => row.session_id)).size}{" "}
@@ -489,6 +489,15 @@ export function SongPage({
           </span>
         )}
       </div>
+      }<nav className="song-tabs" aria-label="Song views">
+        <button aria-current={songTab === "practice" ? "page" : undefined} onClick={() => onTab?.("practice")}>Practice</button>
+        <button aria-current={songTab === "overview" ? "page" : undefined} onClick={() => onTab?.("overview")}>Overview</button>
+      </nav>
+      {songTab === "practice" ? practiceActive ? <div className="practice-main-host" ref={practiceHostRef} /> : <div className="practice-prepare">
+        <SongThumbnail videoId={originals[0] ? originals[0].youtube_id || youtubeId(originals[0].url) : null} />
+        <div><h2>Practice {song.title}</h2><p>Open a recording to work with its timeline, sections and instruments.</p>
+        {refs[0] ? <button onClick={() => props.prepareReference?.(originals[0] || refs[0])}><Headphones size={16} /> {originals.length ? "Prepare original" : "Prepare reference"}</button> : records[0] ? <button onClick={() => props.prepare?.(records[0])}><Headphones size={16} /> Prepare latest take</button> : <p>No recording is available yet.</p>}</div>
+      </div> : <>
       {originals.length > 0 && (
         <section className="library-section">
           <h2>
@@ -554,6 +563,7 @@ export function SongPage({
           <dd>{song.composer || "Not recorded"}</dd>
         </dl>
       </details>
+      </>}
     </section>
   );
 }
@@ -974,4 +984,9 @@ export function SearchPage({ ...props }: LibraryProps) {
       )}
     </section>
   );
+}
+
+function SongThumbnail({ videoId }: { videoId?: string | null }) {
+  const [failedId, setFailedId] = useState<string | null>(null);
+  return <span className="song-monogram song-thumbnail" aria-hidden="true">{videoId && videoId !== failedId ? <img src={`https://i.ytimg.com/vi/${encodeURIComponent(videoId)}/hqdefault.jpg`} alt="" loading="lazy" onError={() => setFailedId(videoId)} /> : <FileMusic size={21} />}</span>;
 }

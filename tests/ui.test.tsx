@@ -39,6 +39,8 @@ test("one provider survives browsing and empty search, separate sources replace 
     duration = 470;
     paused = true;
     removed = false;
+    deferPlay = false;
+    pendingPlay: { resolve(): void; reject(reason: Error): void }[] = [];
     onloadedmetadata;
     onplay;
     onpause;
@@ -50,6 +52,14 @@ test("one provider survives browsing and empty search, separate sources replace 
     }
     async play() {
       this.paused = false;
+      if (this.deferPlay) {
+        return new Promise<void>((resolve, reject) => {
+          this.pendingPlay.push({
+            resolve: () => { this.onplay?.(); resolve(); },
+            reject,
+          });
+        });
+      }
       this.onplay?.();
     }
     pause() {
@@ -125,10 +135,33 @@ test("one provider survives browsing and empty search, separate sources replace 
     assert.equal(audios[0].paused, true);
     assert.equal(audios[0].currentTime, 158);
     assert.equal(location.hash, "");
+    audios[0].deferPlay = true;
+    await click(".play-button");
+    await click(".play-button");
+    assert.equal(audios[0].paused, true, "Pause cancels intent before the native play event arrives");
+    await act(async () => {
+      audios[0].pendingPlay[0].reject(new dom.window.DOMException("Paused pending playback", "AbortError"));
+      await settle();
+    });
+    assert.equal(document.querySelector(".mode-status")!.textContent, "Paused");
+    assert.equal(document.querySelector(".playback-error"), null);
+    await click(".play-button");
+    await click(".play-button");
+    await click(".play-button");
+    await act(async () => {
+      audios[0].pendingPlay[1].reject(new dom.window.DOMException("Older interrupted request", "AbortError"));
+      await settle();
+    });
+    assert.equal(document.querySelector(".playback-error"), null, "An older play rejection cannot fail newer active intent");
+    await act(async () => { audios[0].pendingPlay[2].resolve(); await settle(); });
+    assert.equal(document.querySelector(".mode-status")!.textContent, "Playing");
+    await click(".play-button");
+    audios[0].deferPlay = false;
     await click(".play-button");
     assert.equal(audios[0].paused, false);
     await click('.workspace-nav a[href*="view=songs"]');
     await click('.song-list a[href*="song=vgm-yoshi-circuit-double-dash"]');
+    await click('.song-tabs button:nth-child(2)');
     assert.equal(document.querySelectorAll(".recording-row").length, 2);
     assert.equal(audios.length, 1);
     assert.equal(audios[0].paused, false);
@@ -157,6 +190,16 @@ test("one provider survives browsing and empty search, separate sources replace 
     assert.equal(players.length, 1);
     assert.equal(players[0].state, 1);
     assert.equal(players[0].time, 158);
+    await click('.media-switch button[aria-pressed="false"]');
+    await click(".play-button");
+    audios[1].deferPlay = true;
+    await click(".play-button");
+    await act(async () => {
+      audios[1].pendingPlay[0].reject(new dom.window.DOMException("Active playback denied", "NotAllowedError"));
+      await settle();
+    });
+    assert.equal(document.querySelector(".mode-status")!.textContent, "Unavailable");
+    assert.match(document.querySelector(".playback-error")!.textContent!, /Playback could not start/);
     await act(async () => root.unmount());
     assert.equal(players[0].destroyed, true);
   } finally {

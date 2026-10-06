@@ -14,6 +14,9 @@ The browser suite needs Chrome/Chromium (or a compatible Edge executable) and
 FFmpeg. Set `CHROME_PATH` to the browser executable when it is not discovered
 automatically, especially on Windows. Without a discovered browser the suite
 skips; check the test totals before treating a run as browser validation.
+On macOS with Chrome installed as an app, run
+`CHROME_PATH='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' npm run check`.
+The app binary is not normally a shell command on PATH.
 
 - `src/App.tsx`: shared shell, global search, browsing history/scroll, independently
   loaded catalog/archive and active playable identity.
@@ -22,6 +25,8 @@ skips; check the test totals before treating a run as browser validation.
 - `src/Player.tsx`: one persistent transport for original/reference sources and
   our takes, with disposable YouTube/audio and synchronized stem backends.
 - `src/practice.ts` and `src/PracticeControls.tsx`: source-bound A/B ranges, Repeat and paused-on-open practice links.
+- `src/PracticeWorkspace.tsx` and `src/WaveformLane.tsx`: main-page timeline, real stem envelopes, source sections and timed chords/notes.
+- `src/ChunkedStemPlaybackEngine.ts`: synchronized frame groups, bounded audio buffers, loops and asynchronous preparation.
 - `src/recordings.ts`: typed CSV boundary, search/sort, section bounds, and URLs.
 - `src/styles.css`: fixed shell, rail/dock comparison and reserved media regions.
 - `src/Catalog.tsx`: catalog types and stable song/session/search routes.
@@ -44,8 +49,8 @@ All asset URLs are relative, so repository subpaths continue to work. The
 identifies an independent take filename or `ref:reference-id`; normal browser
 history restores browsing without replacing the currently playing source.
 Reload cues that source without autoplay. Sorting/media choices are local to
-the take page. `?layout=dock` selects the comparison composition; the wide
-default uses a fixed rail and compact screens use a bottom transport.
+the take page. `?layout=dock` retains the comparison route. The default is a persistent bottom
+transport; each song opens its main-page Practice tab, with Overview available.
 
 A text-only checkout can build with a warning about missing media; it cannot
 prove playback. The full-checkout CI additionally verifies every referenced
@@ -56,7 +61,7 @@ restart it after changing the HTML or CSV.
 
 DOM lifecycle tests use fake media backends. They verify teardown, offset and
 play-state transfer, independent navigation, selection, and deep links. The browser suite uses
-generated WAV/WebM and a fake YouTube API to exercise media decoding, controls,
+generated WAV/FLAC/WebM and a fake YouTube API to exercise media decoding, controls,
 scrolling, responsive resizing, heading sorting, keyboard handling, and the
 player lifecycle. Neither suite proves real YouTube availability, native IME
 input, iOS behavior, production autoplay policy, or visual acceptance. See the
@@ -73,6 +78,15 @@ its local files, then stages `private-dist/` with audio symlinks and a private
 catalog overlay. Normal builds retain null reference audio fields and do not
 include originals. See [practice ownership and next model](docs/PRACTICE.md).
 
-In the player, use Repeat for the selected excerpt, or expand and Apply an A/B
-range. Copy practice link includes the exact source and range and opens paused.
-Original Audio repeats with native media seeking. Private source-owned named sections persist in SQLite with stable links; the first Logic six-stem pilot covers Beneath the Mask original seconds 30–120. Stems share one Web Audio clock and support volume, mute and solo. Bars/chords and automatic musical analysis remain deferred. The private runtime must mount `createPracticeHandler` from `scripts/practice-store.mjs`; static hosting alone cannot edit sections. No downloaded originals, stems, receipts or practice database are committed.
+Open a song's Practice tab to follow real waveforms, seek, Apply an A/B range,
+Repeat and copy a paused deep link. Named source sections and timed chords/notes
+persist in private SQLite. Beneath the Mask has full-song Logic-separated stems,
+losslessly encoded as FLAC and loaded in short synchronized chunks within a
+300 MiB audio-buffer budget. Audio selects the instrument mix automatically;
+use the speaker/headphone icons for mute/solo, or Original mix to compare.
+Space toggles playback and arrows seek five seconds across button focus, while preserving text entry. Bars, staff notation,
+automatic musical analysis and friend accounts remain deferred. The private
+runtime must mount `createPracticeHandler` from `scripts/practice-store.mjs`;
+static hosting alone cannot edit sections or notes. Downloaded originals,
+stems, receipts and the practice database are ignored and excluded from public
+builds.

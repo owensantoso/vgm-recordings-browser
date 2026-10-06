@@ -1,3 +1,25 @@
+export interface PracticeAnnotation {
+  id: string;
+  type: 'chord' | 'note';
+  text: string;
+  start: number;
+  end: number;
+  revision: number;
+}
+export interface PracticeAnnotationInput {
+  sourceId: string;
+  sourceHash: string;
+  type: 'chord' | 'note';
+  text: string;
+  start: number;
+  end: number;
+}
+export interface PracticeWaveforms {
+  sourceId: string;
+  sourceHash: string;
+  tracks: { id: string; peaks: [number, number][] }[];
+}
+
 export interface PracticeSection {
   id: string;
   label: string;
@@ -14,6 +36,18 @@ export interface StemTrack {
   sha256: string;
 }
 
+export interface StemChunkFile {
+  trackId: string;
+  file: string;
+  bytes: number;
+  sha256: string;
+}
+export interface StemChunk {
+  startFrame: number;
+  frameCount: number;
+  files: StemChunkFile[];
+}
+
 export interface StemSet {
   id: string;
   sourceId: string;
@@ -25,6 +59,8 @@ export interface StemSet {
   channels: number;
   frames: number;
   tracks: StemTrack[];
+  chunks?: StemChunk[];
+  waveforms?: { file: string; bytes: number; sha256: string; bins: number };
 }
 
 export interface PracticeSource {
@@ -32,6 +68,8 @@ export interface PracticeSource {
   sourceHash: string;
   duration: number;
   sections: PracticeSection[];
+  annotations: PracticeAnnotation[];
+  waveforms: PracticeWaveforms | null;
   stemSet: StemSet | null;
 }
 
@@ -80,4 +118,18 @@ export async function updatePracticeSection(id: string, input: PracticeSectionIn
     method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input),
   });
   return result.section;
+}
+
+
+export async function createPracticeAnnotation(input: PracticeAnnotationInput): Promise<PracticeAnnotation> {
+  const result = await request<{ annotation: PracticeAnnotation }>('api/practice/annotations', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input),
+  });
+  return result.annotation;
+}
+export async function updatePracticeAnnotation(id: string, input: PracticeAnnotationInput & { revision: number }): Promise<PracticeAnnotation> {
+  const result = await request<{ annotation: PracticeAnnotation }>(`api/practice/annotations/${encodeURIComponent(id)}`, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input),
+  });
+  return result.annotation;
 }
