@@ -116,7 +116,7 @@ test('levels, mute and simultaneous solos alter gain without restarting sources'
   assert.equal(context.sources.length, 6);
   assert.ok(context.sources.every(source => source.stopped === 0));
   assert.throws(() => player.setMix('absent', { level: 1, muted: false, solo: false }));
-  assert.throws(() => player.setMix('drums', { level: 1.01, muted: false, solo: false }));
+  assert.throws(() => player.setMix('drums', { level: 2.01, muted: false, solo: false }));
   await player.destroy();
 });
 
@@ -365,4 +365,15 @@ test('current excerpt speed reset failure rejects and clears playback intent', a
   await assert.rejects(player.setRate(0.8), /current processor failure/);
   const count = context.sources.length; await player.seek(95); assert.equal(context.sources.length, count);
   await assert.rejects(player.play(), /current processor failure/); await player.destroy();
+});
+
+test('excerpt gain accepts 200% with unity default and boosted mute/solo without restarting', async () => {
+  const { player, context } = engine(); await player.play(); const nodes = context.sources.length;
+  assert.ok(context.gains.slice(1).every(gain => gain.gain.value === 1));
+  player.setMix('bass', { level: 2, muted: false, solo: true }); assert.equal(gains(context)[1], 2);
+  player.setMix('bass', { level: 2, muted: true, solo: true }); assert.equal(gains(context)[1], 0);
+  player.setMix('bass', { level: 2, muted: false, solo: false }); assert.equal(gains(context)[1], 2);
+  player.setMix('bass', { level: 0, muted: false, solo: false }); assert.equal(gains(context)[1], 0);
+  for (const level of [-0.01, 2.01, NaN, Infinity]) assert.throws(() => player.setMix('bass', { level, muted: false, solo: false }));
+  assert.equal(context.sources.length, nodes); await player.destroy();
 });

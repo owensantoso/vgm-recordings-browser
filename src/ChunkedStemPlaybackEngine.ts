@@ -82,6 +82,7 @@ export class ChunkedStemPlaybackEngine {
   private destroyed = false;
   private closing: Promise<void> | null = null;
   private preparation: Promise<void> = Promise.resolve();
+  private loadRetirement: Promise<void> = Promise.resolve();
   private detachAbort = () => {};
 
   constructor(set: StemSet, context: AudioContext, dependencies: ChunkedStemDependencies = {}) {
@@ -140,7 +141,7 @@ export class ChunkedStemPlaybackEngine {
       if (this.destroyed || request !== this.intent || !this.wantedPlay) return;
       if (this.loop && (this.position < this.loop.start || this.position >= this.loop.end)) this.position = this.loop.start;
       else if (this.position >= this.set.end) this.position = this.set.start;
-      this.notify('buffering'); await this.warm(this.position);
+      if (!this.cache.has(this.indexAt(this.position))) { this.notify('buffering'); await this.warm(this.position); }
       if (this.destroyed || request !== this.intent || !this.wantedPlay) return;
       await this.output?.reset(this.rate);
       if (this.destroyed || request !== this.intent || !this.wantedPlay) return;
@@ -176,11 +177,11 @@ export class ChunkedStemPlaybackEngine {
     const preparing = this.guardOperation((async () => {
       await previous;
       if (this.destroyed || request !== this.intent) return;
-      await this.warm(this.position);
+      if (!this.cache.has(this.indexAt(this.position))) await this.warm(this.position);
       if (this.destroyed || request !== this.intent) return;
       await this.output?.reset(rate);
     })(), operation);
-    this.preparation = preparing; this.notify(resume ? 'buffering' : 'paused');
+    this.preparation = preparing; this.notify(this.cache.has(this.indexAt(this.position)) ? 'paused' : 'buffering');
     try {
       await preparing;
       if (!this.destroyed && request === this.intent && resume && this.wantedPlay) this.startTimeline();
@@ -202,7 +203,7 @@ export class ChunkedStemPlaybackEngine {
   setMix(trackId: string, mix: StemMix): void {
     this.assertAlive();
     const index = this.set.tracks.findIndex(track => track.id === trackId);
-    if (index < 0 || !Number.isFinite(mix.level) || mix.level < 0 || mix.level > 1 || typeof mix.muted !== 'boolean' || typeof mix.solo !== 'boolean') throw new Error('The stem mix setting is invalid.');
+    if (index < 0 || !Number.isFinite(mix.level) || mix.level < 0 || mix.level > 2 || typeof mix.muted !== 'boolean' || typeof mix.solo !== 'boolean') throw new Error('The stem mix setting is invalid.');
     this.mixes[index] = { ...mix }; const solo = this.mixes.some(value => value.solo);
     this.mixes.forEach((value, i) => { const parameter = this.gains[i].gain; parameter.cancelScheduledValues(this.context.currentTime);
       parameter.setTargetAtTime(value.muted || (solo && !value.solo) ? 0 : value.level, this.context.currentTime, 0.005); });
@@ -251,14 +252,33 @@ export class ChunkedStemPlaybackEngine {
   private async prepare(position: number, request: number): Promise<void> {
     const generation = ++this.loadGeneration;
     this.controller.abort(); const pending = [...this.pending.values()].map(entry => entry.promise);
-    this.cache.clear(); this.error = ''; this.notify('buffering');
-    await Promise.allSettled(pending);
-    if (this.destroyed || generation !== this.loadGeneration) return;
-    this.controller = new AbortController();
-    try { await this.warm(position); if (!this.destroyed && request === this.intent) this.notify('paused'); }
-    catch (error) { if (!this.destroyed && generation === this.loadGeneration) { if (this.state !== 'error') this.fail(error); throw error; } }
+    this.trim(this.needed(position)); this.error = '';
+    const cached = this.cache.has(this.indexAt(position)); this.notify(cached ? 'paused' : 'buffering');
+    // Old decoder reservations retire before any replacement allocation. Cached
+    // playback can start immediately without waiting for speculative prefetch.
+    const retirement = Promise.allSettled(pending).then(() => {
+      if (!this.destroyed && generation === this.loadGeneration) this.controller = new AbortController();
+    });
+    this.loadRetirement = retirement;
+    const load = async () => {
+      await retirement;
+      if (this.destroyed || generation !== this.loadGeneration) return;
+      try {
+        await this.warm(position, generation);
+        if (!this.destroyed && generation === this.loadGeneration) {
+          if (!this.playing && request === this.intent) this.notify('paused');
+          this.tick();
+        }
+      } catch (error) {
+        if (!this.destroyed && generation === this.loadGeneration) { if (this.state !== 'error') this.fail(error); throw error; }
+      }
+    };
+    if (cached) { void load().catch(() => {}); return; }
+    await load();
   }
-  private async warm(position: number): Promise<void> {
+  private async warm(position: number, generation = this.loadGeneration): Promise<void> {
+    await this.loadRetirement;
+    if (generation !== this.loadGeneration) return;
     this.assertAlive(); const needed = this.needed(position); this.trim(needed); await Promise.all([...needed].map(index => this.group(index)));
   }
   private group(index: number): Promise<Group> {
@@ -362,7 +382,7 @@ export class ChunkedStemPlaybackEngine {
       const inputElapsed = Math.max(0, this.context.currentTime - this.anchorTime) * this.rate;
       const inputPosition = this.loop ? this.loop.start + ((this.anchorPosition - this.loop.start + inputElapsed) % (this.loop.end - this.loop.start)) : Math.min(this.set.end, this.anchorPosition + inputElapsed);
       const needed = this.needed(inputPosition); this.trim(needed);
-      for (const index of needed) if (!this.cache.has(index) && !this.pending.has(index)) {
+      for (const index of needed) if (!this.controller.signal.aborted && !this.cache.has(index) && !this.pending.has(index)) {
         const generation = this.loadGeneration;
         void this.group(index).then(() => { if (generation === this.loadGeneration) this.tick(); }).catch(error => {
           if (!this.destroyed && generation === this.loadGeneration) this.fail(error);

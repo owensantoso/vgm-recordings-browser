@@ -131,3 +131,28 @@ retired processor errors/timeouts have focused positive/negative regressions;
 current failures remain visible. The CI duration assertion now checks the
 measured provider duration within tolerance, allowing the encoded container's
 small tail instead of demanding a literal six-second string.
+
+## Seek and feedback correction
+
+The live old preview reproduced a 25.56-pixel downward score shift on a cached
+seek (score top 285.60 → 311.15). The updated private preview kept score top
+285.60 while seeking within decoded audio, loading original seconds 160 from
+a new group, and seeking back to 155 during playback. No redundant buffering
+notice appeared for cached seeks. Pause retained its intent and the console
+reported no warnings/errors. The original-audio download answered an actual
+range request with HTTP 206 and audio/mp4. Copy showed a checkmark and “Copied!”
+next to the button, then returned to its normal label; Bass displayed 175%.
+
+`npm run check` with the installed Chrome binary now passes strict TypeScript,
+93 domain/store/engine/helper tests, one React lifecycle test, 71 Chrome cases
+and the production build, with zero failures/skips. New regressions verify
+cached seeks skip fetch/decode and buffering, cancelled decoder reservations
+retire before replacements, uncached loading remains visible without moving
+the score at desktop/375-pixel widths, repeat copy acknowledgements and denied
+clipboard fallback, 200% gain bounds and independent solo/mute behavior, and
+source download actions while browsing. Existing short-height video and
+independent musical-metadata checks also pass. Public asset-path checks verify
+22 takes; private build verifies 14 references and one full-song stem set.
+
+Human listening/visual judgment and physical-phone behavior remain separate
+from these agent checks; the branch remains a draft private preview.

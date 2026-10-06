@@ -185,8 +185,8 @@ export class StemPlaybackEngine {
     this.assertAlive();
     const index = this.set.tracks.findIndex(track => track.id === trackId);
     if (index < 0) throw new Error('This stem track is unavailable.');
-    if (!Number.isFinite(mix.level) || mix.level < 0 || mix.level > 1 || typeof mix.muted !== 'boolean' || typeof mix.solo !== 'boolean') {
-      throw new Error('Stem mix levels must be between zero and one.');
+    if (!Number.isFinite(mix.level) || mix.level < 0 || mix.level > 2 || typeof mix.muted !== 'boolean' || typeof mix.solo !== 'boolean') {
+      throw new Error('Stem mix levels must be between zero and two.');
     }
     this.mixes[index] = { ...mix };
     const hasSolo = this.mixes.some(value => value.solo);

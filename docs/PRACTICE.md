@@ -44,6 +44,27 @@ practice convenience, not sample-accurate or gapless playback. Video does not
 promise repeat timing. Full-recording seeking disables Repeat. Pausing stays
 paused at a boundary; a stale source callback cannot restart a different source.
 
+## Seek, copy and download feedback — October 7
+
+Confirmed correction: a seek must retain already decoded instrument chunks;
+only an uncached current group requires buffering. The next group remains a
+bounded background prefetch. Cancellation still releases old reservations before
+new allocations, and the three-group / 300 MiB limits remain in place. Loading
+feedback occupies the existing mix label so score and instrument positions do
+not change while seeking.
+
+Copy practice link acknowledges success beside the clicked button with a
+checkmark and “Copied!”, then returns to its normal label. Clipboard denial
+shows “Copy failed” and retains the manual-link fallback. Instrument gain is
+0–200%, with 100% as the original level at the slider midpoint; mute and solo
+retain each track's gain. Boost is ordinary linear gain and can make a dense
+mix clip; it is not automatic loudness normalization.
+
+Download files is available beside Audio/Video in the persistent player.
+It exposes the source's actual audio and video files, including private local
+reference audio. A YouTube source link alone does not imply a downloadable
+video file. Recording metadata retains its lower-page disclosure.
+
 ## Priority clarification: original-first practice
 
 Confirmed by Owen: the primary job is practicing the original recording, selecting

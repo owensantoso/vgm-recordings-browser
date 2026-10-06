@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef } from "react";
-import { AudioLines, Copy, Drum, Guitar, MicVocal, Music2, Piano, Repeat2, Volume2, VolumeX, Headphones } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { AudioLines, Check, Copy, Drum, Guitar, MicVocal, Music2, Piano, Repeat2, Volume2, VolumeX, Headphones } from "lucide-react";
 import type { PracticeAnnotation, PracticeSection, PracticeSource } from "./practiceData";
 import type { StemMixValue } from "./StemMixer";
 import type { LoopRange } from "./practice";
@@ -27,7 +27,7 @@ export interface PracticeWorkspaceProps {
   onSeek(seconds: number): void;
   onRange(range: LoopRange): void;
   onRepeat(enabled: boolean): void;
-  onCopy(): void;
+  onCopy(): Promise<boolean>;
   onSection(section: PracticeSection): void;
   onCopySection(section: PracticeSection): void;
   onSavedSection(section: PracticeSection): void;
@@ -53,15 +53,25 @@ function InstrumentGain({ label, value, disabled, onChange }: { label: string; v
     function wheel(event: WheelEvent) {
       if (disabled || event.ctrlKey || !event.deltaY) return;
       event.preventDefault();
-      onChange(Math.max(0, Math.min(1, value - Math.sign(event.deltaY) * .02)));
+      onChange(Math.max(0, Math.min(2, value - Math.sign(event.deltaY) * .02)));
     }
     element.addEventListener("wheel", wheel, { passive: false });
     return () => element.removeEventListener("wheel", wheel);
   }, [value, disabled, onChange]);
-  return <input ref={input} className="instrument-gain" aria-label={`${label} volume`} title="Scroll to adjust volume" type="range" min="0" max="100" step="1" value={Math.round(value * 100)} disabled={disabled} onChange={event => onChange(Number(event.target.value) / 100)} />;
+  return <input ref={input} className="instrument-gain" aria-label={`${label} volume`} aria-valuetext={`${Math.round(value * 100)} percent`} title="Scroll to adjust volume · 100% is the original level" type="range" min="0" max="200" step="1" value={Math.round(value * 100)} disabled={disabled} onChange={event => onChange(Number(event.target.value) / 100)} />;
 }
 
 export function PracticeWorkspace(props: PracticeWorkspaceProps) {
+  const [copyState, setCopyState] = useState<"idle" | "copying" | "copied" | "failed">("idle");
+  useEffect(() => {
+    if (copyState !== "copied" && copyState !== "failed") return;
+    const timer = setTimeout(() => setCopyState("idle"), 2500);
+    return () => clearTimeout(timer);
+  }, [copyState]);
+  async function copyPracticeLink() {
+    setCopyState("copying");
+    setCopyState(await props.onCopy() ? "copied" : "failed");
+  }
   const { data, time, duration, range, repeat, available, mix, onSeek } = props;
   const tracks = data?.stemSet?.tracks || [];
   const anySolo = Object.values(mix).some(value => value.solo);
@@ -74,8 +84,7 @@ export function PracticeWorkspace(props: PracticeWorkspaceProps) {
   const position = (seconds: number) => `${Math.max(0, Math.min(100, duration ? seconds / duration * 100 : 0))}%`;
   const ticks = Array.from({ length: 6 }, (_, i) => duration * i / 5);
   return <section className="practice-workspace" aria-label="Song practice">
-    <div className="practice-source-line"><span><AudioLines size={16} /> {props.stemsActive ? "Instrument mix" : "Original mix"}</span><span>{formatTime(time)} <span className="dim">/ {formatTime(duration)}</span></span><div className="practice-toolbar-actions"><button aria-label="Repeat selected excerpt" aria-pressed={repeat} disabled={!available} onClick={() => props.onRepeat(!repeat)}><Repeat2 size={15} /> Repeat</button><button onClick={props.onCopy} disabled={!available}><Copy size={15} /> Copy practice link</button></div></div>
-    {props.notice && <p className="practice-status" role="status">{props.notice}</p>}
+    <div className="practice-source-line"><span className="practice-mix-status" role="status" title={props.notice || undefined}><AudioLines size={16} /><span>{props.notice || (props.stemsActive ? "Instrument mix" : "Original mix")}</span></span><span>{formatTime(time)} <span className="dim">/ {formatTime(duration)}</span></span><div className="practice-toolbar-actions"><button aria-label="Repeat selected excerpt" aria-pressed={repeat} disabled={!available} onClick={() => props.onRepeat(!repeat)}><Repeat2 size={15} /> Repeat</button><button className="practice-copy-button" aria-label="Copy practice link" onClick={() => void copyPracticeLink()} disabled={!available || copyState === "copying"}>{copyState === "copied" ? <Check size={15} /> : <Copy size={15} />}<span role="status">{copyState === "copied" ? "Copied!" : copyState === "copying" ? "Copying…" : copyState === "failed" ? "Copy failed" : "Copy practice link"}</span></button></div></div>
     <div className="practice-score">
       <div className="score-row ruler-row"><span className="score-label">Original time</span><div className="time-ruler">{ticks.map((tick, i) => <span key={i} style={{ left: position(tick) }}>{formatTime(tick)}</span>)}</div></div>
       <div className="score-row overview-row"><span className="score-label">Song</span><WaveformLane peaks={overview} duration={duration} time={time} range={range} repeat={repeat} label="song timeline" onSeek={onSeek} disabled={!available} /></div>
@@ -91,6 +100,6 @@ export function PracticeWorkspace(props: PracticeWorkspaceProps) {
       })}
     </div>
     {tracks.length > 0 && <div className="mix-provenance"><p>Instrument separation can introduce artifacts.</p>{props.stemsActive ? <button onClick={props.onOriginal}>Original mix</button> : <button onClick={props.onInstrumentMix}>Instrument mix</button>}</div>}
-    <div className="practice-editors"><div><PracticeControls showActions={false} duration={duration} currentTime={time} defaultRange={props.defaultRange} range={range} repeat={repeat} available={available} error={props.practiceError} unavailableReason={props.loading ? "Preparing audio…" : "Press Audio to prepare this recording."} onChange={props.onRange} onRepeat={props.onRepeat} onCopy={props.onCopy} /><SourceSections data={data} loading={props.loading} error={props.error} range={range} currentTime={time} activeId={props.activeSectionId} onSelect={props.onSection} onCopy={props.onCopySection} onSaved={props.onSavedSection} onReload={props.onReload} /></div><PracticeAnnotations data={data} loading={props.loading} error={props.error} currentTime={time} onSeek={onSeek} onSaved={props.onSavedAnnotation} onCopy={props.onCopyAnnotation} onReload={props.onReload} /></div>
+    <div className="practice-editors"><div><PracticeControls showActions={false} duration={duration} currentTime={time} defaultRange={props.defaultRange} range={range} repeat={repeat} available={available} error={props.practiceError} unavailableReason={props.loading ? "Preparing audio…" : "Press Audio to prepare this recording."} onChange={props.onRange} onRepeat={props.onRepeat} onCopy={() => void copyPracticeLink()} /><SourceSections data={data} loading={props.loading} error={props.error} range={range} currentTime={time} activeId={props.activeSectionId} onSelect={props.onSection} onCopy={props.onCopySection} onSaved={props.onSavedSection} onReload={props.onReload} /></div><PracticeAnnotations data={data} loading={props.loading} error={props.error} currentTime={time} onSeek={onSeek} onSaved={props.onSavedAnnotation} onCopy={props.onCopyAnnotation} onReload={props.onReload} /></div>
   </section>;
 }

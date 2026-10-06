@@ -1226,7 +1226,7 @@ test(
     );
     const expand = async () => {
       await expandPractice(page);
-      await page.getByText('Recording details & downloads',{exact:true}).click();
+      await page.getByText('Recording details',{exact:true}).click();
     };
     try {
       await playReference(page, 'Play original of Alpha Song');
@@ -1370,7 +1370,7 @@ test('private practice invalid direct ranges stay with the exact source and deni
     await waitLive(page,'audio',false);assert.equal(await heading(page),'Alpha Song');assert.match(await page.locator('.practice-error').innerText(),/B must come after A/);assert.equal(await page.getByRole('button',{name:'Repeat selected excerpt',exact:true}).getAttribute('aria-pressed'),'false');
     await expandPractice(page);await page.getByRole('spinbutton',{name:'A (seconds)',exact:true}).fill('.25');await page.getByRole('spinbutton',{name:'B (seconds)',exact:true}).fill('1');await page.getByRole('button',{name:'Apply range',exact:true}).click();
     await nav(page,'Songs');await page.getByRole('link',{name:'Unrecorded Song',exact:true}).click();await expandPractice(page);await page.getByRole('button',{name:'Copy practice link',exact:true}).click();
-    await page.getByText('Practice link',{exact:true}).click();const link=page.getByRole('textbox',{name:'Practice link',exact:true});await link.waitFor();const href=new URL(await link.inputValue());
+    assert.equal(await page.getByRole('button',{name:'Copy practice link',exact:true}).innerText(),'Copy failed');await page.getByText('Practice link',{exact:true}).click();const link=page.getByRole('textbox',{name:'Practice link',exact:true});await link.waitFor();const href=new URL(await link.inputValue());
     assert.equal(href.searchParams.get('play'),'ref:alpha-original');assert.equal(href.searchParams.get('song'),'synthetic-alpha');assert.equal(href.searchParams.get('t'),'0.25,1');assert.equal(href.searchParams.has('repeat'),false);noErrors(page);
   }finally{await page.context().close();}
 });
@@ -1600,7 +1600,8 @@ test('full practice: instrument mute icons, wheel gains and hover previews prese
     const color=await unmute.evaluate(button=>getComputedStyle(button).color);const rgb=color.match(/\d+/g).map(Number);assert.ok(rgb[0]>rgb[1]&&rgb[0]>rgb[2],color);
     const gain=page.getByRole('slider',{name:'Vocals volume',exact:true});await gain.hover();const mainScroll=await page.locator('.workspace-main').evaluate(main=>main.scrollTop);
     await page.mouse.wheel(0,120);await page.waitForFunction(()=>document.querySelector('input[aria-label="Vocals volume"]').value==='98');assert.equal(await page.locator('.workspace-main').evaluate(main=>main.scrollTop),mainScroll);
-    await page.mouse.wheel(0,-120);await page.waitForFunction(()=>document.querySelector('input[aria-label="Vocals volume"]').value==='100');await page.mouse.wheel(0,-120);assert.equal(await gain.inputValue(),'100');
+    await page.mouse.wheel(0,-120);await page.waitForFunction(()=>document.querySelector('input[aria-label="Vocals volume"]').value==='100');await page.mouse.wheel(0,-120);await page.waitForFunction(()=>document.querySelector('input[aria-label="Vocals volume"]').value==='102');assert.equal(await gain.getAttribute('max'),'200');
+    await gain.evaluate(input=>{Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,'200');input.dispatchEvent(new Event('input',{bubbles:true}));input.dispatchEvent(new Event('change',{bubbles:true}));});await page.mouse.wheel(0,-120);assert.equal(await gain.inputValue(),'200');
     await gain.evaluate(input=>{Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,'0');input.dispatchEvent(new Event('input',{bubbles:true}));input.dispatchEvent(new Event('change',{bubbles:true}));});await page.mouse.wheel(0,120);assert.equal(await gain.inputValue(),'0');
     const lane=page.locator('.instrument-lane').filter({has:page.getByRole('slider',{name:'Seek Vocals timeline',exact:true})}).locator('.waveform-lane');await lane.scrollIntoViewIfNeeded();const before=await page.getByRole('slider',{name:'Seek song timeline',exact:true}).inputValue();
     await lane.hover({position:{x:Math.max(1,(await lane.boundingBox()).width*.7),y:20}});const preview=page.getByLabel('Preview time for Vocals timeline',{exact:true});await preview.waitFor();assert.match(await preview.textContent(),/^\d+:\d{2}\.\d$/);assert.equal(await page.getByRole('slider',{name:'Seek song timeline',exact:true}).inputValue(),before,'hover previews without seeking');
@@ -1693,5 +1694,47 @@ test('playback speed: FLAC instrument loops retain source time, mix, rate and pa
     // The source pauses synchronously; its displayed clock refreshes at10Hz.
     await page.waitForTimeout(150);const paused=Number(await timeline.inputValue());await page.waitForTimeout(300);const after=Number(await timeline.inputValue());assert.ok(Math.abs(after-paused)<.03,JSON.stringify({paused,after}));
     await nav(page,'Sessions');await speedIs(page,.8);await page.click('.player-song');await timeline.waitFor();assert.equal(await page.getByRole('button',{name:'Unmute Vocals',exact:true}).getAttribute('aria-pressed'),'true');assert.equal(await status(page),'Paused');noErrors(page);
+  }finally{await page.context().close();}
+});
+
+for (const viewport of ['desktop','mobile']) test(`full practice: ${viewport} cached seeks avoid reloading and real buffering keeps the timeline stable`,{skip:!executablePath},async()=>{
+  const page=await open(viewport,privatePath(),{referenceAudio:true,practice:true,long:true,clipboard:'capture'});
+  let release;
+  try{
+    await waitStatus(page,'Paused');const score=page.locator('.practice-score');const top=await score.evaluate(element=>element.offsetTop);
+    const loaded=[];page.on('request',request=>{if(request.url().includes('/reference-audio/stems/'))loaded.push(request.url());});
+    await page.evaluate(()=>{window.__bufferingNotices=[];new MutationObserver(()=>{const text=document.querySelector('.practice-mix-status')?.textContent;if(text?.includes('Buffering'))window.__bufferingNotices.push(text);}).observe(document.querySelector('.practice-mix-status'),{subtree:true,childList:true,characterData:true});});
+    const timeline=page.getByRole('slider',{name:'Seek song timeline',exact:true});
+    await timeline.click({position:{x:(await timeline.boundingBox()).width*.1,y:12}});await waitStatus(page,'Paused');
+    await page.waitForFunction(()=>Number(document.querySelector('input[aria-label="Seek song timeline"]').value)>.5);
+    assert.equal(loaded.length,0,'seeking within decoded chunks never fetches stems again');assert.deepEqual(await page.evaluate(()=>window.__bufferingNotices),[]);
+    assert.equal(await score.evaluate(element=>element.offsetTop),top);
+    const pending=new Promise(resolve=>{release=resolve;});
+    await page.route('**/reference-audio/stems/*.flac',async route=>{await pending;await route.continue();});
+    await timeline.click({position:{x:(await timeline.boundingBox()).width*.73,y:12}});
+    await waitStatus(page,'Buffering…');assert.match(await page.locator('.practice-mix-status').innerText(),/Buffering instruments/);
+    assert.equal(await score.evaluate(element=>element.offsetTop),top,'genuine loading feedback does not push score/instruments down');
+    release();await waitStatus(page,'Paused');assert.equal(await score.evaluate(element=>element.offsetTop),top);
+    const copy=page.getByRole('button',{name:'Copy practice link',exact:true});await copy.scrollIntoViewIfNeeded();const bounds=await copy.boundingBox();await copy.click();
+    assert.equal(await copy.innerText(),'Copied!');assert.equal(await copy.locator('.lucide-check').count(),1);assert.equal((await copy.boundingBox()).width,bounds.width);assert.equal(await score.evaluate(element=>element.offsetTop),top);
+    await page.waitForFunction(()=>document.querySelector('.practice-copy-button')?.textContent==='Copy practice link');await copy.click();assert.equal(await copy.innerText(),'Copied!','a second click provides a fresh acknowledgement');
+    const gain=page.getByRole('slider',{name:'Bass volume',exact:true});assert.equal(await gain.inputValue(),'100');assert.equal(await gain.getAttribute('max'),'200');
+    await gain.evaluate(input=>{Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,'175');input.dispatchEvent(new Event('input',{bubbles:true}));input.dispatchEvent(new Event('change',{bubbles:true}));});
+    assert.equal(await gain.getAttribute('aria-valuetext'),'175 percent');assert.equal((await stemState(page)).gains.slice(-6)[2].value,1.75);
+    await page.locator('summary[aria-label="Download files"]').click();const audio=page.getByRole('link',{name:'Download audio',exact:true});assert.equal(await audio.isVisible(),true);assert.match(await audio.getAttribute('href'),/^reference-audio\//);assert.equal(await page.getByRole('link',{name:'Download video',exact:true}).count(),0);
+    await noOverflow(page);await page.shot('practice-seek-feedback');noErrors(page);
+  }finally{release?.();await page.context().close();}
+});
+
+test('take download actions remain visible from the persistent player while browsing',{skip:!executablePath},async()=>{
+  const page=await open('mobile','/?view=recordings');
+  try{
+    await playTake(page,'SYN_0002.MOV');await waitLive(page,'audio',true);await nav(page,'Songs');
+    await page.locator('summary[aria-label="Download files"]').click();
+    const audio=page.getByRole('link',{name:'Download audio',exact:true}),video=page.getByRole('link',{name:'Download video',exact:true});
+    assert.equal(await audio.isVisible(),true);assert.equal(await video.isVisible(),true);
+    assert.match(await audio.getAttribute('href'),/drive.google.com/);assert.match(await video.getAttribute('href'),/drive.google.com/);
+    const viewport=page.viewportSize(),bounds=await page.locator('.player-download-links').boundingBox();assert.ok(bounds.x>=0&&bounds.y>=0&&bounds.x+bounds.width<=viewport.width&&bounds.y+bounds.height<=viewport.height,JSON.stringify(bounds));
+    await noOverflow(page);noErrors(page);
   }finally{await page.context().close();}
 });

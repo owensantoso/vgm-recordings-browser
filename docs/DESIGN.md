@@ -203,6 +203,19 @@ art beside take identity, linked to the song page. Sticky session bands include
 source-backed name/location as well as date/count. Do not invent context or add
 filler panels to consume width.
 
+## Transport feedback correction — October 7
+
+User feedback identifies two execution defects: seeking discarded the decoded
+cache, and a conditional buffering paragraph moved the score below it. Preserve
+cached audio and show genuine loading in the fixed-width mix label, with the
+same toolbar geometry at desktop and phone widths. Copy success belongs beside
+the button that caused it, with a stable button width. Gain extends to 200%,
+100% at a marked midpoint. Downloads belong in the persistent transport rather
+than buried inside recording metadata; a native disclosure exposes only
+available source files. Engine and browser regressions exercise cache reuse,
+actual delayed loading, stable score bounds, copy success/denial, boosted gain,
+and download availability while browsing.
+
 ## Review scenarios and acceptance
 
 Play a take → search → another song → session → Back: same provider node,

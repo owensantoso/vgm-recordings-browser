@@ -24,12 +24,12 @@ export function StemMixer({ stemSet, mix, enabled, onChange }: StemMixerProps) {
       </header>
       {stemSet.tracks.map((track, index) => {
         const value = mix[track.id] || { level: 1, muted: false, solo: false };
-        const percent = Math.round(Math.max(0, Math.min(1, Number.isFinite(value.level) ? value.level : 0)) * 100);
+        const percent = Math.round(Math.max(0, Math.min(2, Number.isFinite(value.level) ? value.level : 0)) * 100);
         return (
           <div className="stem-row" key={track.id}>
             <label htmlFor={`${id}-${index}`}>{track.label}</label>
             <div className="stem-gain">
-              <input id={`${id}-${index}`} type="range" min="0" max="100" step="1" aria-label={`${track.label} volume`} value={percent} disabled={!enabled} onChange={event => onChange(track.id, { ...value, level: Number(event.target.value) / 100 })} />
+              <input id={`${id}-${index}`} type="range" min="0" max="200" step="1" aria-label={`${track.label} volume`} value={percent} disabled={!enabled} onChange={event => onChange(track.id, { ...value, level: Number(event.target.value) / 100 })} />
               <output htmlFor={`${id}-${index}`}>{percent}%</output>
             </div>
             <div className="stem-actions">

@@ -46,12 +46,13 @@ class Source {
 }
 class Context {
   currentTime = 5; state = 'suspended'; destination = {}; closed = 0; resumed = 0;
-  sources: Source[] = []; gains: Gain[] = []; mismatch = '';
+  sources: Source[] = []; gains: Gain[] = []; mismatch = ''; decoded = 0;
   createGain() { const gain = new Gain(); this.gains.push(gain); return gain; }
   createBufferSource() { const source = new Source(); this.sources.push(source); return source; }
   async resume() { ++this.resumed; this.state = 'running'; }
   async close() { ++this.closed; this.state = 'closed'; }
   async decodeAudioData(data: ArrayBuffer) {
+    ++this.decoded;
     return { group: new Uint8Array(data)[0], length: this.mismatch === 'frames' ? frames - 1 : frames,
       sampleRate: this.mismatch === 'rate' ? 48000 : rate, numberOfChannels: this.mismatch === 'channels' ? 1 : 2 };
   }
@@ -191,7 +192,7 @@ test('missing successor freezes at the committed horizon and pauses every stem w
 test('delayed scheduler never starts an overdue cohort in the past', async () => {
   const h = await ready(); await h.player.play(); const anchor = h.context.sources[0].started![0];
   h.context.currentTime = anchor + 35; h.tick();
-  assert.equal(h.player.time(), 30); assert.equal(h.player.getStatus().state, 'buffering');
+  assert.equal(h.player.time(), 30); assert.equal(h.player.getStatus().state, 'paused', 'cached horizon re-prepares without network buffering');
   await until(() => h.player.getStatus().playing);
   assert.equal(h.player.time(), 30);
   assert.ok(h.context.sources.slice(-count).every(node => node.started![0] > h.context.currentTime && node.started![1] === 0));
@@ -358,4 +359,75 @@ test('current speed reset failure remains visible and rejects instead of being m
   await assert.rejects(h.player.setRate(0.8), /current processor failure/);
   assert.equal(h.player.getStatus().state, 'error'); assert.equal(h.player.getStatus().playing, false);
   assert.match(h.player.getStatus().error, /current processor failure/); await h.player.destroy();
+});
+
+test('cached playing and paused seeks reuse decoded groups without fetch, decode or buffering', async () => {
+  const h = await ready(); await h.player.play();
+  const paths = h.paths.length, decoded = h.context.decoded;
+  h.statuses.length = 0;
+  const old = h.context.sources.slice(); await h.player.seek(12); await h.player.seek(25);
+  assert.equal(h.player.time(), 25); assert.ok(h.player.getStatus().playing);
+  assert.ok(old.every(node => node.stopped && node.buffer === null));
+  h.player.pause(); await h.player.seek(18); assert.equal(h.player.time(), 18);
+  assert.equal(h.player.getStatus().playing, false); await h.player.play();
+  await until(() => h.player.getStatus().reservedBytes === 0);
+  assert.equal(h.paths.length, paths); assert.equal(h.context.decoded, decoded);
+  assert.ok(h.statuses.every(status => !status.buffering));
+  await h.player.destroy();
+});
+
+test('cached target resumes while uncached next group prefetches; an uncached target genuinely buffers', async () => {
+  const h = await ready(); await h.player.play(); let releaseNext!: () => void;
+  h.holds.set(2, new Promise(resolve => { releaseNext = resolve; })); h.statuses.length = 0;
+  await h.player.seek(35);
+  assert.equal(h.player.time(), 35); assert.ok(h.player.getStatus().playing);
+  await until(() => h.paths.some(path => path.includes('c2_')));
+  assert.ok(h.statuses.every(status => !status.buffering));
+  assert.equal(h.paths.filter(path => /c[01]_/.test(path)).length, 12, 'cached chunks were not fetched again');
+  let releaseTarget!: () => void; h.holds.set(3, new Promise(resolve => { releaseTarget = resolve; }));
+  const seek = h.player.seek(95);
+  await until(() => h.paths.some(path => path.includes('c3_')));
+  assert.equal(h.player.getStatus().state, 'buffering'); assert.equal(h.player.getStatus().playing, false);
+  assert.equal(h.player.time(), 95); releaseNext(); releaseTarget(); await seek;
+  assert.ok(h.player.getStatus().playing); assert.equal(h.player.time(), 95);
+  assert.ok(h.statuses.every(status => status.decodedBytes + status.reservedBytes <= frames * 2 * 4 * count * 3));
+  await h.player.destroy();
+});
+
+test('instrument gain accepts 0–200%, defaults to unity, and boosted mute/solo retains level without restart', async () => {
+  const h = await ready(); await h.player.play(); const nodes = h.context.sources.length;
+  assert.ok(h.context.gains.slice(1).every(gain => gain.gain.value === 1));
+  h.player.setMix('bass', { level: 2, muted: false, solo: true });
+  assert.equal(h.context.gains[2].targets.at(-1), 2);
+  h.player.setMix('bass', { level: 2, muted: true, solo: true });
+  assert.equal(h.context.gains[2].targets.at(-1), 0);
+  h.player.setMix('bass', { level: 2, muted: false, solo: false });
+  assert.equal(h.context.gains[2].targets.at(-1), 2);
+  h.player.setMix('bass', { level: 0, muted: false, solo: false });
+  assert.equal(h.context.gains[2].targets.at(-1), 0);
+  for (const level of [-0.01, 2.01, NaN, Infinity]) assert.throws(() => h.player.setMix('bass', { level, muted: false, solo: false }));
+  assert.equal(h.context.sources.length, nodes); await h.player.destroy();
+});
+
+test('cached seek need not wait for an old decoder, but replacement allocations wait for its reservation', async () => {
+  const h = await ready(); let release!: () => void, started = 0;
+  const gate = new Promise<void>(resolve => { release = resolve; }), decode = h.context.decodeAudioData.bind(h.context);
+  h.context.decodeAudioData = async data => {
+    if (new Uint8Array(data)[0] === 2) { ++started; await gate; }
+    return decode(data);
+  };
+  await h.player.play(); const anchor = h.context.sources[0].started![0];
+  h.context.currentTime = anchor + 29.6; h.tick(); h.context.currentTime = anchor + 30.1; h.tick();
+  await until(() => started === count);
+  h.statuses.length = 0; await h.player.seek(35);
+  assert.equal(h.player.time(), 35); assert.ok(h.player.getStatus().playing);
+  assert.ok(h.statuses.every(status => !status.buffering));
+  const uncached = h.player.seek(95);
+  await new Promise<void>(resolve => setImmediate(resolve));
+  assert.equal(h.player.getStatus().state, 'buffering');
+  assert.ok(!h.paths.some(path => path.includes('c3_')), 'replacement must not allocate before old decode settles');
+  release(); await uncached;
+  assert.equal(h.player.time(), 95); assert.ok(h.player.getStatus().playing);
+  assert.ok(h.statuses.every(status => status.decodedBytes + status.reservedBytes <= frames * 2 * 4 * count * 3));
+  await h.player.destroy();
 });

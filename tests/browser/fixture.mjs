@@ -113,6 +113,8 @@ export const rows = [
     recorded_create_date: "2026-05-31 16:00:02",
     has_video: "yes",
     youtube_video_id: "synthetic-bravo",
+    video_file_id: "synthetic-bravo-video-file",
+    audio_file_id: "synthetic-bravo-audio-file",
     audio_file: "SYN_0002.wav",
     franchise: "Bravo Racer",
     game_title: "Bravo Racer",
