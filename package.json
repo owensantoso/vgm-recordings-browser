@@ -13,7 +13,8 @@
     "test": "node --experimental-strip-types --test tests/*.test.ts tests/catalog.test.mjs && node scripts/test-ui.mjs && npm run test:browser",
     "test:browser": "node --test tests/browser.test.mjs",
     "check": "npm run typecheck && npm test && npm run build",
-    "catalog": "node --experimental-strip-types scripts/catalog.mjs"
+    "catalog": "node --experimental-strip-types scripts/catalog.mjs",
+    "build:private": "npm run catalog && node scripts/build.mjs --private-audio"
   },
   "dependencies": {
     "lucide-react": "1.52.0",

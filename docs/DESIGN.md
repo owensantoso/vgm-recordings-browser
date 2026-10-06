@@ -64,10 +64,12 @@ zero-take songs. References are sourced; uploader is not automatically artist.
 
 Fixed shell tokens define navigation, search and playing regions independently
 of headings/filter rows. The media element is never reparented across routes or
-breakpoints. In compact/dock modes, takes default to local audio. Showing video
+breakpoints. All sources with private/local audio default to Audio. Showing video
 opens a stable visible player region; collapsing switches a take to audio or
 pauses a YouTube-only reference. This preserves the provider's visible-player
 requirement without pretending a collapsed YouTube frame is audio playback.
+
+Practice controls and source-bound range ownership are documented in [PRACTICE.md](PRACTICE.md). The persistent player owns Apply/Repeat; browsing owns no playback clock.
 
 ## Review scenarios and acceptance
 

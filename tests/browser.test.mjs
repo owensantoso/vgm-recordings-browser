@@ -68,6 +68,29 @@ async function open(name, path, options = {}) {
     reducedMotion: options.reducedMotion,
   });
   await context.addInitScript(initScript);
+  let releaseArchive;
+  if(options.delayArchive) {
+    const pending=new Promise(resolve=>{releaseArchive=resolve;});
+    await context.route('**/data/recordings.csv',async route=>{await pending;await route.continue();});
+  }
+  if(options.nativeEnd) await context.addInitScript(()=>{
+    // Let the real audio end once before progress polling can intercept B.
+    // This isolates the native ended handler; other tests exercise normal polling.
+    const interval=window.setInterval.bind(window);
+    window.setInterval=(callback,delay,...args)=>interval(()=>{
+      if(delay!==25 || window.__audioEvents?.some(event=>event.type==='ended'&&event.src.includes('reference-audio/')))callback(...args);
+    },delay);
+  });
+  if(options.referenceAudio) {
+    await context.route('**/data/catalog.json', async route=>{
+      const response=await route.fetch(), catalog=await response.json();
+      catalog.references=catalog.references.map(ref=>ref.id==='alpha-original'?{...ref,...fixture.referenceAudio,audio_file:options.referenceAudio==='missing'?'missing-reference.m4a':fixture.referenceAudio.audio_file}:ref);
+      await route.fulfill({json:catalog});
+    });
+  }
+  if(options.clipboard) await context.addInitScript(({denied})=>{
+    Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async text=>{window.__copiedPractice=text;if(denied)throw new Error('Clipboard denied');}}});
+  },{denied:options.clipboard==='denied'});
   await context.route("https://www.youtube.com/iframe_api", (route) =>
     route.fulfill({
       contentType: "text/javascript",
@@ -75,6 +98,7 @@ async function open(name, path, options = {}) {
     }),
   );
   const page = await context.newPage();
+  page.releaseArchive=releaseArchive;
   page.setDefaultTimeout(6000);
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));
@@ -362,7 +386,7 @@ for (const name of Object.keys(viewports)) {
       await waitLive(page, "audio", false);
       assert.equal(await playLabel(page), "Play selected recording");
       await page
-        .getByRole("group", { name: "Playback mode" })
+        .getByRole("group", { name: "Playback options" })
         .getByRole("button", { name: "Video", exact: true })
         .click();
       await waitLive(page, "youtube", false);
@@ -400,7 +424,7 @@ for (const name of Object.keys(viewports)) {
       );
       const before = (await live(page))[0].time;
       await page
-        .getByRole("group", { name: "Playback mode" })
+        .getByRole("group", { name: "Playback options" })
         .getByRole("button", { name: "Video", exact: true })
         .click();
       await waitLive(page, "youtube", true);
@@ -415,7 +439,7 @@ for (const name of Object.keys(viewports)) {
       );
       assert.equal(await transportTime(page), "0:01");
       await page
-        .getByRole("group", { name: "Playback mode" })
+        .getByRole("group", { name: "Playback options" })
         .getByRole("button", { name: "Audio", exact: true })
         .click();
       await waitLive(page, "audio", false);
@@ -456,13 +480,13 @@ for (const name of Object.keys(viewports)) {
       await playTake(page, "SYN_0005.MOV");
       await waitLive(page, "audio", true);
       await page
-        .getByRole("group", { name: "Playback mode" })
+        .getByRole("group", { name: "Playback options" })
         .getByRole("button", { name: "Video", exact: true })
         .click();
       await page.waitForSelector(".playback-error");
       await assertOnlyLive(page, "youtube", "missing.webm");
       await page
-        .getByRole("group", { name: "Playback mode" })
+        .getByRole("group", { name: "Playback options" })
         .getByRole("button", { name: "Audio", exact: true })
         .click();
       await waitLive(page, "audio", false);
@@ -848,7 +872,7 @@ for (const name of Object.keys(viewports)) {
       await page.click(".play-button");
       await waitLive(page, "audio", true);
       await page
-        .getByRole("group", { name: "Playback mode" })
+        .getByRole("group", { name: "Playback options" })
         .getByRole("button", { name: "Video", exact: true })
         .click();
       await waitLive(page, "youtube", true);
@@ -1241,3 +1265,173 @@ test(
     }
   },
 );
+
+const privatePath = (extra='') => `/?view=songs&song=synthetic-alpha&play=ref%3Aalpha-original${extra}`;
+const audioEvents = page => page.evaluate(()=>window.__audioEvents);
+const refWrapCount = async (page,start) => (await audioEvents(page)).filter(event=>event.type==='seeking'&&event.src.includes('reference-audio/')&&Math.abs(event.time-start)<.05).length;
+const waitRefWraps = (page,start,count) => page.waitForFunction(({start,count})=>window.__audioEvents.filter(event=>event.type==='seeking'&&event.src.includes('reference-audio/')&&Math.abs(event.time-start)<.05).length>=count,{start,count});
+const expandPractice = async page => {
+  if(await page.locator('.practice-controls').isVisible()) return;
+  await page.getByRole('button',{name:'Expand player',exact:true}).click();
+};
+const collapsePractice = async page => {
+  const control=page.getByRole('button',{name:'Collapse player',exact:true});
+  if(await control.isVisible())await control.click();
+};
+
+for(const name of Object.keys(viewports)) {
+  const privateScenario = (label,fn,options={}) => test(`${name}: private audio ${label}`,{skip:!executablePath},async()=>{
+    const page=await open(name,privatePath(options.query||''),{referenceAudio:options.missing?'missing':true,clipboard:options.clipboard,nativeEnd:options.nativeEnd});
+    try{await fn(page);noErrors(page);}catch(error){await page.shot('private-failure-'+label.replaceAll(/[^a-z0-9]+/gi,'-'));console.log(JSON.stringify({label,status:await status(page),media:await media(page),events:(await audioEvents(page)).slice(-8)}));throw error;}finally{await page.context().close();}
+  });
+  privateScenario('decodes local original and hands video back to audio paused or playing',async page=>{
+    await waitLive(page,'audio',false);await assertOnlyLive(page,'audio','reference-audio/'+fixture.referenceAudio.audio_file);
+    assert.equal(await heading(page),'Alpha Song');assert.match(await page.locator('.player-source').innerText(),/Original soundtrack/);
+    assert.equal(await page.getByRole('group',{name:'Playback options'}).getByRole('button',{name:'Audio',exact:true}).getAttribute('aria-pressed'),'true');
+    await page.click('.play-button');await waitLive(page,'audio',true);
+    await page.waitForFunction(()=>window.__mediaState().some(m=>m.src&&m.kind==='audio'&&m.time>.35));
+    const first=(await live(page))[0].time;
+    await page.getByRole('group',{name:'Playback options'}).getByRole('button',{name:'Video',exact:true}).click();await waitLive(page,'youtube',true);
+    assert.ok(Math.abs((await live(page))[0].time-first)<.8);
+    await page.click('.play-button');await waitLive(page,'youtube',false);const paused=(await live(page))[0].time;
+    await page.getByRole('group',{name:'Playback options'}).getByRole('button',{name:'Audio',exact:true}).click();await waitLive(page,'audio',false);
+    assert.ok(Math.abs((await live(page))[0].time-paused)<.2);
+    await page.click('.play-button');await waitLive(page,'audio',true);
+    await page.getByRole('group',{name:'Playback options'}).getByRole('button',{name:'Video',exact:true}).click();await waitLive(page,'youtube',true);
+    const running=(await live(page))[0].time;
+    await page.getByRole('group',{name:'Playback options'}).getByRole('button',{name:'Audio',exact:true}).click();await waitLive(page,'audio',true);
+    assert.ok(Math.abs((await live(page))[0].time-running)<.8);assert.equal((await playing(page)).length,1);
+  });
+  privateScenario('practice link is paused, repeats through browsing, and source changes clear the target',async page=>{
+    await waitLive(page,'audio',false);assert.ok(Math.abs((await live(page))[0].time-.5)<.05);
+    const quick=page.getByRole('button',{name:'Repeat selected excerpt',exact:true});assert.equal(await quick.getAttribute('aria-pressed'),'true');
+    await waitRefWraps(page,.5,1);const baseline=await refWrapCount(page,.5);
+    await page.click('.play-button');await waitLive(page,'audio',true);await waitRefWraps(page,.5,baseline+2);
+    const providers=(await media(page)).length;
+    await collapsePractice(page);await page.getByRole('button',{name:'Play original of Alpha Song',exact:true}).click();await waitLive(page,'audio',true);
+    assert.equal((await media(page)).length,providers,'explicit Play of the same source retains its provider');assert.equal(new URL(page.url()).searchParams.get('t'),'0.5,1.25');
+    await nav(page,'Repertoire');await filterBySong(page,'nothing-matches-fixture');
+    assert.equal(await page.locator('.recording-row').count(),0);assert.equal(await quick.getAttribute('aria-pressed'),'true');
+    await page.getByRole('button',{name:'Clear search',exact:true}).click();await nav(page,'Our takes');
+    assert.equal((await media(page)).length,providers);assert.equal(new URL(page.url()).searchParams.get('t'),'0.5,1.25');
+    await filterBySong(page,'Bravo');await playTake(page,'SYN_0002.MOV');await waitLive(page,'audio',true);
+    assert.equal(new URL(page.url()).searchParams.has('t'),false);assert.equal(new URL(page.url()).searchParams.has('repeat'),false);
+    await page.getByRole('button',{name:'Clear search',exact:true}).click();await page.goBack();
+    await page.waitForFunction(()=>new URL(location.href).searchParams.get('play')==='SYN_0002.MOV');
+    assert.equal(new URL(page.url()).searchParams.get('play'),'SYN_0002.MOV');assert.equal(new URL(page.url()).searchParams.has('t'),false);assert.equal(new URL(page.url()).searchParams.has('repeat'),false);
+    assert.equal(await quick.getAttribute('aria-pressed'),'false');
+  },{query:'&t=0.5%2C1.25&repeat=1'});
+  privateScenario('full-source native end repeats and disabling Repeat restores ordinary stop',async page=>{
+    await waitLive(page,'audio',false);await page.waitForSelector('button[aria-label="Play take SYN_0001.MOV"]');await collapsePractice(page);const baseline=(await media(page)).length;await page.click('.play-button');await waitLive(page,'audio',true);
+    await page.waitForFunction(()=>window.__audioEvents.some(event=>event.type==='ended'&&event.src.includes('reference-audio/')));
+    await waitLive(page,'audio',true);assert.equal((await media(page)).length,baseline,'native end reuses its existing audio element');
+    await page.getByRole('button',{name:'Repeat selected excerpt',exact:true}).click();
+    assert.equal(new URL(page.url()).searchParams.has('repeat'),false);
+    await waitLive(page,'audio',false);assert.ok((await live(page))[0].time>=2.35);
+    assert.equal(await playLabel(page),'Play selected recording');
+  },{query:'&t=0%2C2.5&repeat=1',nativeEnd:true});
+  privateScenario('range controls validate drafts and copy the playing song target',async page=>{
+    await waitLive(page,'audio',false);await expandPractice(page);
+    const a=page.getByRole('spinbutton',{name:'A (seconds)',exact:true}),b=page.getByRole('spinbutton',{name:'B (seconds)',exact:true});
+    await page.getByRole('button',{name:'Set A here',exact:true}).click();assert.equal(new URL(page.url()).searchParams.get('t'),'0.5,1.25');
+    await a.fill('1.5');await b.fill('1');await page.getByRole('button',{name:'Apply range',exact:true}).click();
+    assert.match(await page.locator('.practice-error').innerText(),/B must come after A/);assert.equal(new URL(page.url()).searchParams.get('t'),'0.5,1.25');
+    await a.fill('.75');await b.fill('1.5');await page.getByRole('button',{name:'Apply range',exact:true}).click();
+    assert.equal(new URL(page.url()).searchParams.get('t'),'0.75,1.5');
+    await page.getByRole('button',{name:'Use selected excerpt',exact:true}).click();assert.equal(new URL(page.url()).searchParams.get('t'),'0,2.5');
+    await a.fill('.5');await b.fill('1');await page.getByRole('button',{name:'Apply range',exact:true}).click();
+    await collapsePractice(page);await nav(page,'Songs');await page.getByRole('link',{name:'Unrecorded Song',exact:true}).click();
+    await expandPractice(page);await page.getByRole('button',{name:'Copy practice link',exact:true}).click();
+    const copied=new URL(await page.evaluate(()=>window.__copiedPractice));assert.equal(copied.searchParams.get('play'),'ref:alpha-original');assert.equal(copied.searchParams.get('song'),'synthetic-alpha');assert.equal(copied.searchParams.get('t'),'0.5,1');assert.equal(copied.searchParams.get('repeat'),'1');
+  },{query:'&t=0.5%2C1.25&repeat=1',clipboard:'capture'});
+  privateScenario('missing asset is unavailable and video remains an explicit fallback',async page=>{
+    await page.waitForSelector('.playback-error');assert.equal(await status(page),'Unavailable');assert.equal((await playing(page)).length,0);
+    assert.equal(await page.getByRole('button',{name:'Repeat selected excerpt',exact:true}).isDisabled(),true,'failed local audio is not available for practice');
+    await page.getByRole('group',{name:'Playback options'}).getByRole('button',{name:'Video',exact:true}).click();await waitLive(page,'youtube',false);assert.equal(await heading(page),'Alpha Song');
+    assert.equal(await page.locator('.playback-error').count(),0);assert.equal(await page.getByRole('button',{name:'Repeat selected excerpt',exact:true}).isDisabled(),true,'video does not promise audio looping');
+  },{missing:true});
+}
+
+test('private practice quarter-second loop restarts without a stale seek grace interval and stays paused at B',{skip:!executablePath},async()=>{
+  const page=await open('desktop',privatePath('&t=1%2C1.25&repeat=1'),{referenceAudio:true});
+  try{
+    await waitLive(page,'audio',false);await waitRefWraps(page,1,1);
+    await page.evaluate(()=>{window.__rangeSamples=[];window.__rangeTimer=setInterval(()=>{for(const m of window.__mediaState())if(m.src.includes('reference-audio/')&&!m.paused)window.__rangeSamples.push(m.time);},5);});
+    const baseline=await refWrapCount(page,1);await page.click('.play-button');await waitLive(page,'audio',true);await waitRefWraps(page,1,baseline+3);
+    await page.click('.play-button');await waitLive(page,'audio',false);await seek(page,.25);
+    await page.waitForTimeout(500);assert.equal(await playLabel(page),'Play selected recording');assert.ok(Math.abs((await live(page))[0].time-1.25)<.03,JSON.stringify({media:await media(page),slider:await page.locator('input[aria-label="Seek within selected section"]').inputValue()}));
+    await page.click('.play-button');await waitLive(page,'audio',true);const restarted=await refWrapCount(page,1);await waitRefWraps(page,1,restarted+2);
+    const max=await page.evaluate(()=>Math.max(...window.__rangeSamples));assert.ok(max<1.35,`quarter-second range overshot to ${max}`);
+    assert.equal((await media(page)).length,1);noErrors(page);
+  }finally{await page.context().close();}
+});
+
+test('private practice invalid direct ranges stay with the exact source and denied clipboard shows the attempted semantic link',{skip:!executablePath},async()=>{
+  const page=await open('desktop',privatePath('&t=2%2C1&repeat=1'),{referenceAudio:true,clipboard:'denied'});
+  try{
+    await waitLive(page,'audio',false);assert.equal(await heading(page),'Alpha Song');assert.match(await page.locator('.practice-link-error').innerText(),/B must come after A/);assert.equal(await page.getByRole('button',{name:'Repeat selected excerpt',exact:true}).getAttribute('aria-pressed'),'false');
+    await expandPractice(page);await page.getByRole('spinbutton',{name:'A (seconds)',exact:true}).fill('.25');await page.getByRole('spinbutton',{name:'B (seconds)',exact:true}).fill('1');await page.getByRole('button',{name:'Apply range',exact:true}).click();
+    await nav(page,'Songs');await page.getByRole('link',{name:'Unrecorded Song',exact:true}).click();await page.getByRole('button',{name:'Copy practice link',exact:true}).click();
+    const link=page.locator('.manual-copy-link');await link.waitFor();const href=new URL(await link.getAttribute('href'));
+    assert.equal(href.searchParams.get('play'),'ref:alpha-original');assert.equal(href.searchParams.get('song'),'synthetic-alpha');assert.equal(href.searchParams.get('t'),'0.25,1');assert.equal(href.searchParams.has('repeat'),false);noErrors(page);
+  }finally{await page.context().close();}
+});
+
+test('private practice repeats only local audio and video plays the selected excerpt once',{skip:!executablePath},async()=>{
+  const page=await open('desktop',privatePath('&t=0.5%2C1.25&repeat=1'),{referenceAudio:true});
+  try{
+    await waitLive(page,'audio',false);
+    await page.getByRole('group',{name:'Playback options'}).getByRole('button',{name:'Video',exact:true}).click();await waitLive(page,'youtube',false);
+    const quick=page.getByRole('button',{name:'Repeat selected excerpt',exact:true});assert.equal(await quick.isDisabled(),true);assert.equal(await quick.getAttribute('aria-pressed'),'false');
+    await page.click('.play-button');await waitLive(page,'youtube',true);await waitLive(page,'youtube',false);
+    assert.ok(Math.abs((await live(page))[0].time-1.25)<.1);
+    await page.waitForTimeout(350);assert.equal(await playLabel(page),'Play selected recording');assert.equal((await playing(page)).length,0);
+    await page.getByRole('group',{name:'Playback options'}).getByRole('button',{name:'Audio',exact:true}).click();await waitLive(page,'audio',false);
+    assert.equal(await quick.getAttribute('aria-pressed'),'true');const baseline=await refWrapCount(page,.5);
+    await page.click('.play-button');await waitLive(page,'audio',true);await waitRefWraps(page,.5,baseline+2);assert.equal((await live(page)).length,1);noErrors(page);
+  }finally{await page.context().close();}
+});
+
+test('private practice quick Repeat and transport remain genuinely reachable in short-height layouts',{skip:!executablePath},async()=>{
+  const page=await open('mobile',privatePath(),{referenceAudio:true});
+  try{
+    await waitLive(page,'audio',false);
+    for(const width of [375,767]){
+      await page.setViewportSize({width,height:375});
+      const quick=page.getByRole('button',{name:'Repeat selected excerpt',exact:true}), rect=await quick.boundingBox();
+      assert.ok(rect&&rect.x>=0&&rect.y>=0&&rect.x+rect.width<=width&&rect.y+rect.height<=375,JSON.stringify(rect));
+      const buttons=[quick,page.getByRole('group',{name:'Playback options'}).getByRole('button',{name:'Audio',exact:true}),page.getByRole('group',{name:'Playback options'}).getByRole('button',{name:'Video',exact:true}),page.locator('.play-button')];
+      const boxes=await Promise.all(buttons.map(button=>button.boundingBox()));
+      for(let i=0;i<boxes.length;i++)for(let j=i+1;j<boxes.length;j++){const a=boxes[i],b=boxes[j];assert.ok(a&&b);assert.ok(Math.min(a.x+a.width,b.x+b.width)<=Math.max(a.x,b.x)||Math.min(a.y+a.height,b.y+b.height)<=Math.max(a.y,b.y),`controls overlap at ${width}: ${JSON.stringify(boxes)}`);}
+      await quick.click();assert.equal(await quick.getAttribute('aria-pressed'),'true');await page.click('.play-button');await waitLive(page,'audio',true);
+      await page.click('.play-button');await waitLive(page,'audio',false);await quick.click();assert.equal(await quick.getAttribute('aria-pressed'),'false');
+      await noOverflow(page);await page.shot(`practice-short-${width}`);
+    }
+    noErrors(page);
+  }finally{await page.context().close();}
+});
+
+test('private practice original survives delayed archive hydration with the same playing backend',{skip:!executablePath},async()=>{
+  const page=await open('desktop',privatePath('&t=.5%2C1.25&repeat=1'),{referenceAudio:true,delayArchive:true});
+  try{
+    await waitLive(page,'audio',false);await page.click('.play-button');await waitLive(page,'audio',true);
+    const count=(await media(page)).length;assert.equal(count,1);
+    page.releaseArchive();await page.waitForSelector('button[aria-label="Play take SYN_0001.MOV"]');await waitLive(page,'audio',true);
+    assert.equal((await media(page)).length,count,'archive data cannot reconstruct a reference backend');
+    const baseline=await refWrapCount(page,.5);await waitRefWraps(page,.5,baseline+2);assert.equal(await heading(page),'Alpha Song');noErrors(page);
+  }finally{page.releaseArchive();await page.context().close();}
+});
+
+test('private practice fast full-source repetitions survive native end and timer ordering',{skip:!executablePath},async()=>{
+  const page=await open('desktop',privatePath('&t=0%2C2.5&repeat=1'),{referenceAudio:true});
+  try{
+    await waitLive(page,'audio',false);await page.waitForSelector('button[aria-label="Play take SYN_0001.MOV"]');
+    await page.evaluate(()=>{window.__media.find(element=>element.dataset.kind==='audio'&&element.getAttribute('src')) .playbackRate=16;});
+    const initial=await refWrapCount(page,0), count=(await media(page)).length;
+    await page.click('.play-button');await waitLive(page,'audio',true);
+    await waitRefWraps(page,0,initial+10);
+    await waitLive(page,'audio',true);assert.equal((await media(page)).length,count);assert.equal((await playing(page)).length,1);
+    await page.click('.play-button');await waitLive(page,'audio',false);await page.waitForTimeout(250);assert.equal((await playing(page)).length,0,'explicit Pause wins over pending native or polling wraps');noErrors(page);
+  }catch(error){console.log(JSON.stringify({status:await status(page),media:await media(page),events:(await audioEvents(page)).slice(-15)}));throw error;}
+  finally{await page.context().close();}
+});

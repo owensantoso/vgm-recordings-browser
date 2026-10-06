@@ -21,6 +21,9 @@ export interface SongReference {
   url: string;
   artist: string | null;
   youtube_id?: string | null;
+  audio_file?: string | null;
+  duration_seconds?: number | null;
+  audio_format?: string | null;
 }
 export interface CatalogData {
   version: number;

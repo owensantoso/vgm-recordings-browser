@@ -3,7 +3,9 @@
 Confirmed request (October 6): retain the rehearsal archive, add a linked
 song/repertoire list and stable identities in a real relational database.
 The later redesign request adds per-song YouTube listening references and optional
-musical metadata. Separation, chord analysis and deeper practice tools are deferred.
+musical metadata. Local listening audio and source-bound A/B practice now extend this catalog;
+named original sections, chord charts and stem processing are documented in
+[PRACTICE.md](PRACTICE.md).
 This public band archive and the existing private Song Practice
 Workbench have separate ownership; a future explicit ID mapping may connect them.
 No private Workbench records or source media are imported.
@@ -38,11 +40,67 @@ separately. Fan uploaders are not credited as performing artists. The Yoshi
 Circuit reference is the Mario Kart World arrangement, not the original Double
 Dash recording. Source provenance and that edition caveat live in
 [REFERENCE_SOURCES.md](REFERENCE_SOURCES.md). A linked listening reference does
-not establish which arrangement the band played. The generated version-2 JSON
+not establish which arrangement the band played. The generated version-3 JSON
 adds `youtube_id` derived only from recognized YouTube hostnames and exact video
 IDs; malformed video URLs fail generation. Other HTTP(S) chart links remain
 valid with a null video ID. Link metadata checks do not prove playback or embed
 availability in every region.
+
+## Private reference audio
+
+Public SQL remains the identity/relationship authority. Local listening files
+are optional private assets owned by an ignored `reference-audio/manifest.json`
+receipt, keyed by existing reference IDs. No asset table or private filename is
+added to the reviewed SQL. Public `data/catalog.json` always projects
+`audio_file`, `duration_seconds` and `audio_format` as null on each reference;
+finding an audio directory does not activate those files in a public build.
+
+The private receipt has this shape:
+
+```json
+{
+  "version": 1,
+  "checked_at": "2026-10-06T12:00:00Z",
+  "assets": [{
+    "reference_id": "gourmet-race-soundtrack",
+    "youtube_id": "Se1uh3PS78Y",
+    "audio_file": "gourmet-race-soundtrack.m4a",
+    "duration_seconds": 42.5,
+    "audio_format": "m4a",
+    "bytes": 1234,
+    "sha256": "<64 hexadecimal characters from the measured file>"
+  }]
+}
+```
+
+These numbers are illustrative, not evidence of a real download. The downloader
+owns measuring duration/format with its media probe and recording source identity,
+byte count and SHA-256 hash. The materializer independently checks reference and
+YouTube IDs, a safe audio basename, matching extension/format, positive finite
+duration, a positive integer byte count, a contained regular file (no symlinks),
+and exact size/hash. It does not run the media probe again. Supported extensions
+are m4a, mp3, wav, flac, opus, ogg, webm and aac. Source URLs and classifications
+remain attached to their reference IDs.
+
+`buildPrivateCatalog(catalog, receipt, audioRoot, { warn })` returns a new
+projection without mutating the public catalog. Only verified present files
+receive local audio values. Missing files produce a warning and retain null
+fields plus the online listening source; malformed or tampered receipts fail.
+Receipt availability alone never proves a missing file can play.
+
+From the repository root, materialize the optional private projection with:
+
+```sh
+npm run catalog -- --audio-receipt reference-audio/manifest.json --audio-root reference-audio
+```
+
+This writes only ignored `.catalog-build/catalog.private.json`; it never replaces
+committed `data/catalog.json`. Normal `npm run catalog` continues to generate the
+public snapshot and rebuildable SQLite database. A private build must explicitly
+select the private projection and link its verified audio assets. A public build
+must use the public projection and omit private audio. Downloading audio does not
+authorize publishing those files. Keys and tempos remain independently unknown;
+audio duration is measured playback length, not musical tempo.
 
 Authoring: edit the reviewed SQL, run `npm run catalog`, then `npm run check`.
 Build checks source IDs, relations and archive/session coverage. The deployed

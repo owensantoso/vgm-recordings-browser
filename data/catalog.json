@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "songs": [
     {
       "id": "vgm-beneath-the-mask",
@@ -295,7 +295,10 @@
       "label": "Persona 5 original soundtrack · Lyn",
       "url": "https://www.youtube.com/watch?v=woz5qvDdMRM",
       "artist": "Lyn",
-      "youtube_id": "woz5qvDdMRM"
+      "youtube_id": "woz5qvDdMRM",
+      "audio_file": null,
+      "duration_seconds": null,
+      "audio_format": null
     },
     {
       "id": "bob-omb-8-bit-big-band",
@@ -304,7 +307,10 @@
       "label": "The 8-Bit Big Band cover",
       "url": "https://www.youtube.com/watch?v=tMVl0WZH3GY",
       "artist": "The 8-Bit Big Band",
-      "youtube_id": "tMVl0WZH3GY"
+      "youtube_id": "tMVl0WZH3GY",
+      "audio_file": null,
+      "duration_seconds": null,
+      "audio_format": null
     },
     {
       "id": "coconut-mall-soundtrack",
@@ -313,7 +319,10 @@
       "label": "Mario Kart Wii soundtrack · fan upload",
       "url": "https://www.youtube.com/watch?v=LGxfNbhfx9g",
       "artist": null,
-      "youtube_id": "LGxfNbhfx9g"
+      "youtube_id": "LGxfNbhfx9g",
+      "audio_file": null,
+      "duration_seconds": null,
+      "audio_format": null
     },
     {
       "id": "dire-dire-docks-soundtrack",
@@ -322,7 +331,10 @@
       "label": "Super Mario 64 soundtrack · fan upload",
       "url": "https://www.youtube.com/watch?v=Zqa2mgjbOIM",
       "artist": null,
-      "youtube_id": "Zqa2mgjbOIM"
+      "youtube_id": "Zqa2mgjbOIM",
+      "audio_file": null,
+      "duration_seconds": null,
+      "audio_format": null
     },
     {
       "id": "dragon-roost-taylor-davis",
@@ -331,7 +343,10 @@
       "label": "Taylor Davis violin cover",
       "url": "https://www.youtube.com/watch?v=xeUciMWJYDM",
       "artist": "Taylor Davis",
-      "youtube_id": "xeUciMWJYDM"
+      "youtube_id": "xeUciMWJYDM",
+      "audio_file": null,
+      "duration_seconds": null,
+      "audio_format": null
     },
     {
       "id": "gourmet-race-soundtrack",
@@ -340,7 +355,10 @@
       "label": "Kirby Super Star soundtrack · fan upload",
       "url": "https://www.youtube.com/watch?v=Se1uh3PS78Y",
       "artist": null,
-      "youtube_id": "Se1uh3PS78Y"
+      "youtube_id": "Se1uh3PS78Y",
+      "audio_file": null,
+      "duration_seconds": null,
+      "audio_format": null
     },
     {
       "id": "know-our-names-soundtrack",
@@ -349,7 +367,10 @@
       "label": "Xenoblade Chronicles soundtrack · fan upload",
       "url": "https://www.youtube.com/watch?v=g7yNyhLOIa4",
       "artist": null,
-      "youtube_id": "g7yNyhLOIa4"
+      "youtube_id": "g7yNyhLOIa4",
+      "audio_file": null,
+      "duration_seconds": null,
+      "audio_format": null
     },
     {
       "id": "life-will-change-lyn",
@@ -358,7 +379,10 @@
       "label": "Persona 5 original soundtrack · Lyn",
       "url": "https://www.youtube.com/watch?v=dsuJZx24V_A",
       "artist": "Lyn",
-      "youtube_id": "dsuJZx24V_A"
+      "youtube_id": "dsuJZx24V_A",
+      "audio_file": null,
+      "duration_seconds": null,
+      "audio_format": null
     },
     {
       "id": "megalovania-toby-fox",
@@ -367,7 +391,10 @@
       "label": "Undertale soundtrack · Toby Fox",
       "url": "https://www.youtube.com/watch?v=KK3KXAECte4",
       "artist": "Toby Fox",
-      "youtube_id": "KK3KXAECte4"
+      "youtube_id": "KK3KXAECte4",
+      "audio_file": null,
+      "duration_seconds": null,
+      "audio_format": null
     },
     {
       "id": "meta-knight-super-soul-bros",
@@ -376,7 +403,10 @@
       "label": "Super Soul Bros cover",
       "url": "https://www.youtube.com/watch?v=_91Um2pW5Sk",
       "artist": "Super Soul Bros",
-      "youtube_id": "_91Um2pW5Sk"
+      "youtube_id": "_91Um2pW5Sk",
+      "audio_file": null,
+      "duration_seconds": null,
+      "audio_format": null
     },
     {
       "id": "underground-mario-kart-world",
@@ -385,7 +415,10 @@
       "label": "Mario Kart World arrangement · fan upload",
       "url": "https://www.youtube.com/watch?v=vkySJ91FXhs",
       "artist": null,
-      "youtube_id": "vkySJ91FXhs"
+      "youtube_id": "vkySJ91FXhs",
+      "audio_file": null,
+      "duration_seconds": null,
+      "audio_format": null
     },
     {
       "id": "when-mother-consouls",
@@ -394,7 +427,10 @@
       "label": "The Consouls cover",
       "url": "https://www.youtube.com/watch?v=d_L7diRQRR8",
       "artist": "The Consouls",
-      "youtube_id": "d_L7diRQRR8"
+      "youtube_id": "d_L7diRQRR8",
+      "audio_file": null,
+      "duration_seconds": null,
+      "audio_format": null
     },
     {
       "id": "when-mother-soundtrack",
@@ -403,7 +439,10 @@
       "label": "Persona 5 soundtrack · fan upload",
       "url": "https://www.youtube.com/watch?v=z5ghb_14j5Y",
       "artist": null,
-      "youtube_id": "z5ghb_14j5Y"
+      "youtube_id": "z5ghb_14j5Y",
+      "audio_file": null,
+      "duration_seconds": null,
+      "audio_format": null
     },
     {
       "id": "yoshi-circuit-mario-kart-world",
@@ -412,7 +451,10 @@
       "label": "Mario Kart World arrangement · fan upload",
       "url": "https://www.youtube.com/watch?v=pfzeDfe0Hrs",
       "artist": null,
-      "youtube_id": "pfzeDfe0Hrs"
+      "youtube_id": "pfzeDfe0Hrs",
+      "audio_file": null,
+      "duration_seconds": null,
+      "audio_format": null
     }
   ],
   "repertoire": []

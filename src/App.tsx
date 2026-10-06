@@ -35,6 +35,10 @@ export function App() {
     () => new URL(location.href).searchParams.get("play") || "",
   );
   const selectedRef = useRef(selected);
+  const practiceTarget = useRef({
+    t: new URL(location.href).searchParams.get("t"),
+    repeat: new URL(location.href).searchParams.get("repeat"),
+  });
   const [autoPlay, setAutoPlay] = useState(false);
   const [playRequest, setPlayRequest] = useState(0);
   const search = useRef<HTMLInputElement>(null);
@@ -115,6 +119,8 @@ export function App() {
         url.searchParams.set("view", route(url.toString()).view);
         url.hash = "";
       }
+      for (const [key, value] of Object.entries(practiceTarget.current))
+        value ? url.searchParams.set(key, value) : url.searchParams.delete(key);
       history.replaceState(history.state, "", url);
       setBrowse(route(url.toString()));
       if (history.state?.searchOrigin)
@@ -162,17 +168,25 @@ export function App() {
     selectedRef.current
       ? url.searchParams.set("play", selectedRef.current)
       : url.searchParams.delete("play");
+    for (const [key, value] of Object.entries(practiceTarget.current))
+      value ? url.searchParams.set(key, value) : url.searchParams.delete(key);
     history.replaceState(null, "", url);
     setBrowse(route(url.toString()));
     search.current?.focus();
   }
   function select(id: string, play = true) {
+    const different = selectedRef.current !== id;
     selectedRef.current = id;
+    if (different) practiceTarget.current = { t: null, repeat: null };
     setSelected(id);
     setAutoPlay(play);
     setPlayRequest((current) => current + 1);
     const url = new URL(location.href);
     url.searchParams.set("play", id);
+    if (different) {
+      url.searchParams.delete("t");
+      url.searchParams.delete("repeat");
+    }
     url.hash = "";
     history.replaceState(history.state, "", url);
   }
@@ -212,13 +226,11 @@ export function App() {
     (ref) => `ref:${ref.id}` === selected,
   );
   const refSong = catalog?.songs.find((song) => song.id === refItem?.song_id);
-  const active = useMemo(
-    () =>
-      refItem && refSong
-        ? referenceRow(refItem, refSong)
-        : rows.find((row) => row.file === selected),
-    [rows, selected, refItem, refSong],
+  const referenceMedia = useMemo(
+    () => (refItem && refSong ? referenceRow(refItem, refSong) : undefined),
+    [refItem, refSong],
   );
+  const active = referenceMedia || rows.find((row) => row.file === selected);
   const takeLink = catalog?.recordings.find((row) => row.file === selected);
   const activeSong =
     refSong || catalog?.songs.find((song) => song.id === takeLink?.song_id);
@@ -318,6 +330,12 @@ export function App() {
         className="workspace-main"
         tabIndex={-1}
       >
+        {selected && !active && !loading && catalog && (
+          <p className="load-error" role="alert">
+            The linked recording or listening source is unavailable. Choose a
+            source from the library.
+          </p>
+        )}
         {catalogError && <p role="alert">{catalogError}</p>}
         {archiveError && (
           <div className="load-error" role="alert">
@@ -359,7 +377,6 @@ export function App() {
             row={active}
             autoPlay={autoPlay}
             playRequest={playRequest}
-            pageLink={location.href}
             onFilter={searchFor}
             identity={{
               title: activeSong?.title,
@@ -376,6 +393,14 @@ export function App() {
                   ? activeSong?.reference_bpm
                   : null
                 : takeLink?.played_bpm,
+            }}
+            onPracticeTargetChange={(href) => {
+              const url = new URL(href);
+              practiceTarget.current = {
+                t: url.searchParams.get("t"),
+                repeat: url.searchParams.get("repeat"),
+              };
+              setBrowse((current) => ({ ...current }));
             }}
             onVideoVisibility={setVideoOpen}
             onSong={() => activeSong && navigate("songs", activeSong.id)}

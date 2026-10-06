@@ -28,8 +28,16 @@ export function referenceRow(ref: SongReference, song: Song): Recording {
     youtube_video_id: ref.youtube_id || youtubeId(ref.url) || "",
     youtube_url: ref.url,
     has_video: "yes",
-    has_audio: "no",
-    duration_seconds: "0",
+    has_audio: ref.audio_file ? "yes" : "no",
+    audio_file: ref.audio_file || "",
+    audio_path: ref.audio_file
+      ? `reference-audio/${encodeURIComponent(ref.audio_file)}`
+      : undefined,
+    audio_url: ref.audio_file
+      ? `reference-audio/${encodeURIComponent(ref.audio_file)}`
+      : "",
+    audio_format: ref.audio_format || "",
+    duration_seconds: String(ref.duration_seconds || 0),
     thumbnail: "",
     section_start: "",
     section_end: "",

@@ -152,7 +152,7 @@ test("one provider survives browsing and empty search, separate sources replace 
     });
     assert.equal(audios.length, 1);
     assert.equal(audios[0].removed, false);
-    await click('.media-switch button[aria-pressed="false"]');
+    await click('.media-switch button:not(.repeat-quick)[aria-pressed="false"]');
     assert.equal(audios[0].removed, true);
     assert.equal(players.length, 1);
     assert.equal(players[0].state, 1);

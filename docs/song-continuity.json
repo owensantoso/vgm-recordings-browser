@@ -54,7 +54,11 @@
     },
     {
       "key": "player:take",
-      "label": "Selected take, mode and playback position"
+      "label": "Selected original/take, mode, position and source-bound A/B Repeat"
+    },
+    {
+      "key": "player:practice",
+      "label": "Active A/B range and Repeat while browsing"
     }
   ],
   "controls": [
@@ -187,12 +191,24 @@
       "target": [
         "player:controls"
       ]
+    },
+    {
+      "key": "player:practice",
+      "kind": "state",
+      "role": "persistent",
+      "owner": "Player",
+      "source": [
+        "player:range-repeat"
+      ],
+      "target": [
+        "player:range-repeat"
+      ]
     }
   ],
   "paths": {
     "forward": "Push a song-ID URL; title/game map to detail and counts disclose their exact recording links. Player remains mounted.",
     "reverse": "Browser Back restores global query and the main scrollport; All songs returns to the songbook. Neither changes the active source.",
-    "interruption": "Latest browsing route wins; only explicit media activation replaces the player. Audio defaults are unchanged by resize.",
+    "interruption": "Latest browsing route wins; only explicit media activation replaces the player and clears its old practice target. Audio defaults are unchanged by resize.",
     "fallback": "Unknown ID shows Song not found and a list return. Missing data shows an error without changing archive playback.",
     "reducedMotion": "Navigation is atomic; existing reduced-motion transport rules remain."
   },
@@ -211,7 +227,7 @@
     },
     "state": {
       "mode": "preserve",
-      "commitment": "Global query/return state belongs to App; Player keeps a typed reference ID or take filename independently of the main scrollport."
+      "commitment": "Global query/return state belongs to App; Player keeps a typed reference ID or take filename independently of the main scrollport. Source-bound range and Repeat survive browsing; practice links open paused."
     },
     "control": {
       "mode": "change",

@@ -12,6 +12,7 @@ export interface Recording {
   video_file_id: string;
   video_url: string;
   audio_file: string;
+  audio_path?: string;
   audio_format: string;
   audio_size_mb: string;
   audio_file_id: string;

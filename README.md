@@ -21,6 +21,7 @@ skips; check the test totals before treating a run as browser validation.
 - `src/musicLibrary.ts`: literal cross-library search and reference provider adapters.
 - `src/Player.tsx`: one persistent transport for original/reference sources and
   our takes, with disposable YouTube/audio backends.
+- `src/practice.ts` and `src/PracticeControls.tsx`: source-bound A/B ranges, Repeat and paused-on-open practice links.
 - `src/recordings.ts`: typed CSV boundary, search/sort, section bounds, and URLs.
 - `src/styles.css`: fixed shell, rail/dock comparison and reserved media regions.
 - `src/Catalog.tsx`: catalog types and stable song/session/search routes.
@@ -64,3 +65,16 @@ remaining browser/device checks in `docs/DESIGN.md` before merging the combined 
 Reference/played key and BPM are independent nullable catalog fields, with no
 automatic analysis or metadata editor. All actual musical values remain unknown.
 Listening links have bounded provenance in `docs/REFERENCE_SOURCES.md`.
+
+## Private reference audio and practice
+
+`npm run build:private` validates ignored `reference-audio/manifest.json` and
+its local files, then stages `private-dist/` with audio symlinks and a private
+catalog overlay. Normal builds retain null reference audio fields and do not
+include originals. See [practice ownership and next model](docs/PRACTICE.md).
+
+In the player, use Repeat for the selected excerpt, or expand and Apply an A/B
+range. Copy practice link includes the exact source and range and opens paused.
+Repeat is local-audio only and uses native media seeking; no gapless timing is
+claimed. Named musical sections, bars, chords and stems are the next reviewed
+model, not fabricated catalog content.

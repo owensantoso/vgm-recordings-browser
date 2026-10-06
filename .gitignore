@@ -4,3 +4,9 @@ dist/
 .test-build/
 .test-artifacts/
 .catalog-build/
+
+# Local listening-source downloads; private preview only.
+reference-audio/
+private-dist/
+private-dist.next/
+private-dist.previous/

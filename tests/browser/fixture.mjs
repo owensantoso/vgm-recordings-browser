@@ -296,11 +296,13 @@ function youtubeApi(videoSource) {
 // tests can prove which elements still hold a source and which are playing.
 export const initScript = `(() => {
   const media = (window.__media ||= []);
+  const events = (window.__audioEvents ||= []);
   const Original = window.Audio;
   function Audio(src) {
     const element = src === undefined ? new Original() : new Original(src);
     element.dataset.kind = "audio";
     media.push(element);
+    for (const type of ["seeking", "ended"]) element.addEventListener(type, () => events.push({type,src:element.getAttribute("src") || "",time:element.currentTime}));
     return element;
   }
   Audio.prototype = Original.prototype;
@@ -325,12 +327,14 @@ const types = {
   ".png": "image/png",
   ".wav": "audio/wav",
   ".webm": "video/webm",
+  ".m4a": "audio/mp4",
 };
 
 export async function createFixture(directory) {
   await mkdir(join(directory, "data"), { recursive: true });
   await mkdir(join(directory, "audio"), { recursive: true });
   await mkdir(join(directory, "thumbs"), { recursive: true });
+  await mkdir(join(directory, "reference-audio"), { recursive: true });
   await writeFile(join(directory, "data", "recordings.csv"), csv());
   await writeFile(
     join(directory, "data", "catalog.json"),
@@ -419,6 +423,9 @@ export async function createFixture(directory) {
   await writeFile(join(directory, "audio", "SYN_0002.wav"), wav(6, 550));
   await writeFile(join(directory, "audio", "SYN_0003.wav"), wav(3, 660));
   await writeFile(join(directory, "audio", "SYN_0005.wav"), wav(6, 770));
+  const referenceResult = spawnSync('ffmpeg', ['-hide_banner','-loglevel','error','-f','lavfi','-i','sine=frequency=880:sample_rate=44100','-t','2.5','-c:a','aac','-b:a','96k','-y',join(directory,'reference-audio','Fixture0001.m4a')],{stdio:'ignore'});
+  const referenceAudio = referenceResult.status === 0 ? {audio_file:'Fixture0001.m4a',duration_seconds:2.5,audio_format:'m4a'} : {audio_file:'Fixture0001.wav',duration_seconds:2.5,audio_format:'wav'};
+  if(referenceResult.status !== 0) await writeFile(join(directory,'reference-audio',referenceAudio.audio_file),wav(2.5,880));
   const videoSource = await video(join(directory, "video.webm"));
   await cp("index.html", join(directory, "index.html"));
   await build({
@@ -468,6 +475,7 @@ export async function createFixture(directory) {
   const { port } = server.address();
   return {
     origin: `http://127.0.0.1:${port}`,
+    referenceAudio,
     youtubeApi: youtubeApi(videoSource),
     close: () => new Promise((resolve) => server.close(resolve)),
   };

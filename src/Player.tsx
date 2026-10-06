@@ -19,7 +19,16 @@ import {
   Play,
   Video,
   X,
+  Repeat2,
 } from "lucide-react";
+import { PracticeControls } from "./PracticeControls";
+import {
+  makePracticeLink,
+  parsePracticeTarget,
+  validateLoopRange,
+} from "./practice";
+import type { LoopRange } from "./practice";
+import { catalogHref } from "./Catalog";
 
 type YoutubePlayer = {
   playVideo(): void;
@@ -86,16 +95,15 @@ export function Player({
   row,
   autoPlay,
   playRequest,
-  pageLink,
   onFilter,
   identity,
   onSong,
   onVideoVisibility,
+  onPracticeTargetChange,
 }: {
   row: Recording;
   autoPlay: boolean;
   playRequest: number;
-  pageLink: string;
   onFilter(value: string): void;
   identity: {
     title?: string;
@@ -107,17 +115,47 @@ export function Player({
   };
   onSong(): void;
   onVideoVisibility(value: boolean): void;
+  onPracticeTargetChange(href: string): void;
 }) {
   const [sourceDuration, setSourceDuration] = useState(
     Number(row.duration_seconds) || 0,
   );
-  const range = bounds({ ...row, duration_seconds: String(sourceDuration) });
+  const baseRange = bounds({
+    ...row,
+    duration_seconds: String(sourceDuration),
+  });
+  const initialHref = useRef(location.href);
+  const initialTarget = useRef(
+    baseRange.full > 0
+      ? parsePracticeTarget(initialHref.current, row.file, baseRange.full)
+      : { range: null, repeat: false, error: "" },
+  );
+  const [loopRange, setLoopRange] = useState<LoopRange | null>(
+    initialTarget.current.range,
+  );
+  const [repeat, setRepeat] = useState(initialTarget.current.repeat);
+  const [practiceError, setPracticeError] = useState(
+    initialTarget.current.error,
+  );
+  const targetHandled = useRef(baseRange.full > 0);
+  const range = loopRange
+    ? {
+        ...baseRange,
+        start: loopRange.start,
+        end: loopRange.end,
+        duration: loopRange.end - loopRange.start,
+      }
+    : baseRange;
   const rangeRef = useRef(range);
   rangeRef.current = range;
   const [mode, setMode] = useState<"video" | "audio">(
     row.has_audio === "yes" ? "audio" : "video",
   );
-  const [expanded, setExpanded] = useState(false);
+  const [expanded, setExpanded] = useState(
+    Boolean(initialTarget.current.range),
+  );
+  const repeatRef = useRef(repeat);
+  repeatRef.current = repeat && mode === "audio";
   const [videoVisible, setVideoVisible] = useState(row.has_audio !== "yes");
   useEffect(() => {
     onVideoVisibility(mode === "video" && videoVisible);
@@ -128,6 +166,7 @@ export function Player({
   const [time, setTime] = useState(range.start);
   const [error, setError] = useState("");
   const [copied, setCopied] = useState("");
+  const [manualLink, setManualLink] = useState("");
   const container = useRef<HTMLDivElement>(null);
   const expandButton = useRef<HTMLButtonElement>(null);
   const surface = useRef<HTMLElement>(null);
@@ -174,7 +213,9 @@ export function Player({
       if (wantsPlay.current) backend.current?.play();
     }
     if (mode === "audio" && row.audio_file) {
-      const audio = new Audio(`audio/${encodeURIComponent(row.audio_file)}`);
+      const audio = new Audio(
+        row.audio_path || `audio/${encodeURIComponent(row.audio_file)}`,
+      );
       audio.preload = "metadata";
       backend.current = {
         play: () => {
@@ -193,13 +234,24 @@ export function Player({
       };
       audio.onloadedmetadata = loaded;
       audio.onplay = () => {
-        if (!disposed) updatePlaying(true);
+        if (!disposed && !audio.paused) updatePlaying(true);
       };
       audio.onpause = () => {
-        if (!disposed) updatePlaying(false);
+        if (!disposed && audio.paused && !audio.ended) updatePlaying(false);
       };
       audio.onended = () => {
-        if (!disposed) updatePlaying(false);
+        if (disposed) return;
+        if (repeatRef.current && wantsPlay.current && !fullMode.current) {
+          const start = rangeRef.current.start;
+          position.current = start;
+          setTime(start);
+          audio.currentTime = start;
+          void audio
+            .play()
+            .catch(() =>
+              fail("Playback could not repeat. Press Play to try again."),
+            );
+        } else updatePlaying(false);
       };
       audio.onerror = () =>
         fail("The audio could not load. Open the source audio below.");
@@ -277,6 +329,7 @@ export function Player({
         container.current?.replaceChildren();
       };
     }
+    let lastPaint = 0;
     const timer = window.setInterval(() => {
       if (
         disposed ||
@@ -289,7 +342,8 @@ export function Player({
       if (
         Number.isFinite(duration) &&
         duration > 0 &&
-        !Number(row.duration_seconds)
+        !Number(row.duration_seconds) &&
+        duration !== rangeRef.current.full
       )
         setSourceDuration((previous) =>
           previous === duration ? previous : duration,
@@ -302,15 +356,30 @@ export function Player({
           : backend.current.time(),
       );
       const stop = fullMode.current ? current.full : current.end;
-      if (stop > 0 && playingRef.current && next >= stop - 0.1) {
-        next = stop;
-        updatePlaying(false);
-        backend.current.pause();
-        backend.current.seek(stop);
+      const boundary =
+        stop > 0 &&
+        playingRef.current &&
+        next >= (repeatRef.current && !fullMode.current ? stop : stop - 0.1);
+      if (boundary) {
+        if (repeatRef.current && !fullMode.current) {
+          next = current.start;
+          backend.current.seek(next);
+          // The native source can end before the polling tick; seeking alone
+          // does not resume an ended audio element.
+          if (wantsPlay.current) backend.current.play();
+        } else {
+          next = stop;
+          updatePlaying(false);
+          backend.current.pause();
+          backend.current.seek(stop);
+        }
       }
       position.current = next;
-      setTime(next);
-    }, 100);
+      if (boundary || Date.now() - lastPaint >= 100) {
+        setTime(next);
+        lastPaint = Date.now();
+      }
+    }, 25);
     return () => {
       disposed = true;
       window.clearInterval(timer);
@@ -326,23 +395,97 @@ export function Player({
     if (readyRef.current) backend.current?.play();
   }, [playRequest, autoPlay]);
 
+  useEffect(() => {
+    if (targetHandled.current || !baseRange.full) return;
+    targetHandled.current = true;
+    const target = parsePracticeTarget(
+      initialHref.current,
+      row.file,
+      baseRange.full,
+    );
+    setPracticeError(target.error);
+    setLoopRange(target.range);
+    setRepeat(target.repeat);
+    if (target.range) {
+      position.current = target.range.start;
+      setTime(target.range.start);
+      backend.current?.seek(target.range.start);
+    }
+  }, [baseRange.full, row.file]);
+  function writePractice(next: LoopRange, enabled: boolean) {
+    const href = makePracticeLink(location.href, row.file, next, enabled);
+    history.replaceState(history.state, "", href);
+    onPracticeTargetChange(href);
+  }
+  function changeRange(next: LoopRange) {
+    const message = validateLoopRange(next, baseRange.full);
+    setPracticeError(message);
+    if (message) return;
+    setLoopRange(next);
+    fullMode.current = false;
+    const current = position.current;
+    if (current < next.start || current >= next.end) {
+      position.current = next.start;
+      setTime(next.start);
+      backend.current?.seek(next.start);
+    }
+    writePractice(next, repeat);
+  }
+  function changeRepeat(enabled: boolean) {
+    if (mode !== "audio" || !row.audio_file || !readyRef.current || error)
+      return;
+    const next = { start: range.start, end: range.end };
+    const message = validateLoopRange(next, baseRange.full);
+    setPracticeError(message);
+    if (message) return;
+    setRepeat(enabled);
+    repeatRef.current = enabled;
+    fullMode.current = false;
+    writePractice(next, enabled);
+    if (
+      enabled &&
+      (position.current < next.start || position.current >= next.end)
+    ) {
+      position.current = next.start;
+      setTime(next.start);
+      backend.current?.seek(next.start);
+    }
+  }
+  async function copyPractice() {
+    const href = makePracticeLink(
+      identity.songId
+        ? catalogHref(location.href, "songs", identity.songId)
+        : location.href,
+      row.file,
+      { start: range.start, end: range.end },
+      repeat,
+    );
+    await copy(href, "Practice link");
+  }
   function seek(value: number, full = false) {
     if (!readyRef.current) return;
     fullMode.current = full;
+    if (full && repeat) {
+      setRepeat(false);
+      repeatRef.current = false;
+      writePractice({ start: range.start, end: range.end }, false);
+    }
     const next = Math.max(
       full ? 0 : range.start,
       Math.min(full ? range.full : range.end, value),
     );
     position.current = next;
     setTime(next);
-    seekUntil.current = Date.now() + 400;
+    seekUntil.current = mode === "video" ? Date.now() + 400 : 0;
     backend.current?.seek(next);
   }
   function toggle() {
     if (!readyRef.current) return;
     if (mode === "video" && !playingRef.current) setVideoVisible(true);
-    if (playingRef.current) backend.current?.pause();
-    else {
+    if (playingRef.current) {
+      updatePlaying(false);
+      backend.current?.pause();
+    } else {
       if (
         position.current >=
         (fullMode.current ? range.full : range.end) - 0.15
@@ -417,6 +560,7 @@ export function Player({
     return () => document.removeEventListener("keydown", keydown);
   });
   async function copy(value: string, label: string) {
+    setManualLink(value);
     try {
       await navigator.clipboard.writeText(value);
       setCopied(`${label} copied`);
@@ -512,7 +656,7 @@ export function Player({
           type="range"
           min="0"
           max={range.duration}
-          step="0.1"
+          step="any"
           value={offset}
           disabled={!ready || !controllable || !range.duration}
           onChange={(e) => seek(range.start + Number(e.target.value))}
@@ -521,7 +665,24 @@ export function Player({
           {range.duration ? formatTime(range.duration) : "—:—"}
         </span>
       </div>
-      <div className="media-switch" role="group" aria-label="Playback mode">
+      <div className="media-switch" role="group" aria-label="Playback options">
+        <button
+          className="repeat-quick icon-button"
+          aria-label="Repeat selected excerpt"
+          aria-pressed={repeat && mode === "audio"}
+          title="Repeat selected excerpt"
+          disabled={
+            mode !== "audio" ||
+            !row.audio_file ||
+            !ready ||
+            Boolean(error) ||
+            range.duration < 0.25
+          }
+          onClick={() => changeRepeat(!repeat)}
+        >
+          <Repeat2 size={17} />
+        </button>
+
         <button
           aria-pressed={mode === "audio"}
           disabled={row.has_audio !== "yes"}
@@ -551,6 +712,11 @@ export function Player({
       {error && (
         <p className="playback-error" role="alert">
           {error}
+        </p>
+      )}
+      {practiceError && !expanded && (
+        <p className="practice-link-error" role="alert">
+          {practiceError}
         </p>
       )}
       <div id="player-details" className="player-details">
@@ -596,6 +762,30 @@ export function Player({
           )}
         </div>
         <div className="player-extra">
+          <PracticeControls
+            duration={baseRange.full}
+            currentTime={time}
+            defaultRange={{ start: baseRange.start, end: baseRange.end }}
+            range={{ start: range.start, end: range.end }}
+            repeat={repeat && mode === "audio"}
+            available={
+              mode === "audio" && Boolean(row.audio_file) && ready && !error
+            }
+            error={practiceError}
+            unavailableReason={
+              error
+                ? "Audio is unavailable. Open the source or choose another recording."
+                : mode !== "audio" && row.audio_file
+                  ? "Choose Audio to set a practice range."
+                  : !ready && row.audio_file
+                    ? "Waiting for audio to load."
+                    : undefined
+            }
+            onChange={changeRange}
+            onRepeat={changeRepeat}
+            onCopy={() => void copyPractice()}
+          />
+
           {(range.start > 0 || range.end < range.full) && (
             <div className="full-timeline">
               <div>
@@ -609,7 +799,7 @@ export function Player({
                 type="range"
                 min="0"
                 max={range.full}
-                step="0.1"
+                step="any"
                 value={time}
                 disabled={!ready || !controllable}
                 onChange={(e) => seek(Number(e.target.value), true)}
@@ -679,7 +869,7 @@ export function Player({
                 <Download size={15} /> Audio
               </a>
             )}
-            <button onClick={() => void copy(pageLink, "Page link")}>
+            <button onClick={() => void copy(location.href, "Page link")}>
               <Copy size={14} /> Page link
             </button>
           </div>
@@ -687,7 +877,9 @@ export function Player({
             {copied}
           </p>
           {copied.startsWith("Could not") && (
-            <a href={pageLink}>Recording page link</a>
+            <a className="manual-copy-link" href={manualLink}>
+              Open or copy this link
+            </a>
           )}
           {isTake && (
             <details className="metadata">
