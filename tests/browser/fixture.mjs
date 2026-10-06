@@ -455,7 +455,7 @@ export async function createFixture(directory, {flac=false,seconds=2.5}={}) {
       const input=join(directory,'reference-audio/stems',file+'.input.wav'),target=join(directory,'reference-audio/stems',file);
       await writeFile(input,bytes);
       const result=spawnSync('ffmpeg',['-hide_banner','-loglevel','error','-y','-i',input,'-c:a','flac',target],{stdio:'pipe'});
-      if(result.status!==0)throw new Error('Synthetic FLAC encoding failed: '+result.stderr.toString());
+      if(result.status!==0)throw new Error('Synthetic FLAC encoding failed: '+(result.error?.message || result.stderr?.toString() || 'unknown encoder error'));
       audio=await readFile(target);await (await import('node:fs/promises')).unlink(input);
     } else await writeFile(join(directory,'reference-audio/stems',file),audio);
     return{file,bytes:audio.length,sha256:sha256(audio)};

@@ -83,4 +83,7 @@ Owen must judge full-song instrument bleed/artifacts, loop sound and UI feel.
 Physical phone audio/memory/keyboard behavior remains unverified. User-entered
 source-time chords/notes ship; bars/staff notation, automatic musical analysis,
 friend accounts/permissions and annotation alignment onto cover takes do not.
-The feature branch and draft PR remain separate from public main.
+The feature branch and draft PR remain separate from public main. The initial
+GitHub run exposed a missing FFmpeg dependency on the Ubuntu runner; the check
+workflow now installs the synthetic-media encoder before running the suite,
+and the fixture reports spawn errors without masking them with a TypeError.
