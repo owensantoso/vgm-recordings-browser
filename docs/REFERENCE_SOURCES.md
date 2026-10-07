@@ -36,3 +36,14 @@ in web search but returned HTTP 404 from YouTube oEmbed during this check. It is
 excluded in favor of the original-version link above. The Life Will Change link
 was discovered through a public page and verified against YouTube's own metadata;
 the public page's text is not used as the catalog's authority.
+
+## Confirmed repertoire additions — 7 October 2026
+
+Owen confirmed **Splattack!** and supplied the exact Pokémon video below. Stable song IDs preserve the earlier provisional records; titles and repertoire notes now reflect confirmation.
+
+| Song / stable ID | Exact recording | Provenance boundary |
+|---|---|---|
+| Splattack! / `vgm-splatoon-unconfirmed` | [Splatoon soundtrack](https://www.youtube.com/watch?v=LBQmvJyIKTg) | Soundtrack-labelled 91Yugo fan upload; uploader is not credited as the artist. |
+| Champion & Red Battle / `vgm-pokemon-silver-gym-theme` | [Owen-selected Pokémon recording](https://youtube.com/watch?v=SYTS2sJWcIs) | Pokeli upload identifies HeartGold & SoulSilver Champion/Red battle music and discloses EQ enhancement. Retain the user-selected recording and label that processing honestly. |
+
+No key, tempo or section boundaries were inferred. Local measured source identity and Logic output coverage are private manifest/packaging evidence.

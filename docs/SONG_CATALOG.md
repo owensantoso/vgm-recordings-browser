@@ -10,6 +10,11 @@ This public band archive and the existing private Song Practice
 Workbench have separate ownership; a future explicit ID mapping may connect them.
 No private Workbench records or source media are imported.
 
+The proposed distinction between musical work, recording, group take and
+workspace reference role, plus the shared-code/corpus boundary, is recorded in
+[Shared practice capabilities](SHARED_PRACTICE_CORE.md). Existing IDs and storage
+remain unchanged; a take becoming a reference is a future contextual association.
+
 `data/catalog.sql` owns reviewed song identities, recording associations,
 references and repertoire membership. The existing CSV still owns take metadata
 and media URLs. `scripts/catalog.mjs` materializes an actual SQLite database,
@@ -34,11 +39,11 @@ text (for example, `D minor`); beats per minute (BPM) are positive finite number
 No real keys or tempos have been inferred or filled in. A reference version's
 metadata is not asserted to describe every linked cover or arrangement.
 
-Fourteen YouTube listening references cover all thirteen identified songs;
+The initial fourteen YouTube listening references covered all thirteen identified songs;
 original soundtrack uploads, covers and other game arrangements are labeled
-separately. Fan uploaders are not credited as performing artists. The Yoshi
-Circuit reference is the Mario Kart World arrangement, not the original Double
-Dash recording. Source provenance and that edition caveat live in
+separately. Fan uploaders are not credited as performing artists. The initial Yoshi
+Circuit reference was the Mario Kart World arrangement; the October 7 batch also
+adds the original Double Dash source. Source provenance and that edition caveat live in
 [REFERENCE_SOURCES.md](REFERENCE_SOURCES.md). A linked listening reference does
 not establish which arrangement the band played. The generated version-3 JSON
 adds `youtube_id` derived only from recognized YouTube hostnames and exact video
@@ -112,3 +117,10 @@ Success scenarios: Yoshi Circuit joins two sessions by ID; You Will Know Our
 Names distinguishes two takes on one date; unassigned takes remain visible;
 empty repertoire and unknown metadata are honest; an unrecorded song can be
 added without creating a fake take; old URLs retain the selected player.
+
+## Current repertoire — 7 October 2026
+Confirmed: Owen requested the exact song list from [Video Game Music Links](https://chatgpt.com/c/6ac4b078-be30-83e8-bb0b-2782493463ed) as the current repertoire. The selected conversation mirror has all four messages and matches its native updated timestamp (6 October 2026, 08:30:21 UTC); discovery of all other history remains partial.
+
+Order: Dire, Dire Docks; When Mother Was There; You Will Know Our Names; Beneath the Mask; Splattack!; Champion & Red Battle; BOX 16. On October 7 Owen confirmed Splattack! and supplied `youtube.com/watch?v=SYTS2sJWcIs`. That exact upload identifies Pokémon HeartGold & SoulSilver — Champion & Red Battle and discloses uploader EQ enhancement. Both previously provisional song IDs remain unchanged to preserve links and repertoire membership. The visible title/game now reflect the verified recording. The Splattack! original soundtrack source is `LBQmvJyIKTg`; fan uploaders remain provenance, not performing-artist credits.
+
+The catalogue now contains 16 identified song entries, 22 listening references, seven repertoire entries and the original 22 archive associations. Existing IDs, references, sessions and archive associations are preserved. New original references supplement existing covers. Meta Knight's Theme and Halberd ~ Nightmare Warship are explicitly labeled individual original source cues, without claiming either equals the entire jam arrangement. Private download/separation availability is governed by the media manifests, not by the presence of a public link.

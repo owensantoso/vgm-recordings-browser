@@ -20,6 +20,24 @@
       "reference_bpm": null
     },
     {
+      "id": "vgm-box-16",
+      "title": "BOX 16",
+      "game": "Danganronpa: Trigger Happy Havoc",
+      "franchise": "Danganronpa",
+      "composer": null,
+      "reference_key": null,
+      "reference_bpm": null
+    },
+    {
+      "id": "vgm-pokemon-silver-gym-theme",
+      "title": "Champion & Red Battle",
+      "game": "Pokémon HeartGold & SoulSilver",
+      "franchise": "Pokémon",
+      "composer": null,
+      "reference_key": null,
+      "reference_bpm": null
+    },
+    {
       "id": "vgm-coconut-mall",
       "title": "Coconut Mall",
       "game": "Mario Kart Wii",
@@ -78,6 +96,15 @@
       "title": "Meta Knight's Revenge",
       "game": "Kirby Super Star",
       "franchise": "Kirby",
+      "composer": null,
+      "reference_key": null,
+      "reference_bpm": null
+    },
+    {
+      "id": "vgm-splatoon-unconfirmed",
+      "title": "Splattack!",
+      "game": "Splatoon",
+      "franchise": "Splatoon",
       "composer": null,
       "reference_key": null,
       "reference_bpm": null
@@ -313,6 +340,30 @@
       "audio_format": null
     },
     {
+      "id": "bob-omb-soundtrack",
+      "song_id": "vgm-bob-omb-battlefield",
+      "kind": "original",
+      "label": "Super Mario 64 soundtrack · fan upload",
+      "url": "https://www.youtube.com/watch?v=bmP3UHXYi28",
+      "artist": null,
+      "youtube_id": "bmP3UHXYi28",
+      "audio_file": null,
+      "duration_seconds": null,
+      "audio_format": null
+    },
+    {
+      "id": "box16-masafumi-takada",
+      "song_id": "vgm-box-16",
+      "kind": "original",
+      "label": "Danganronpa original soundtrack · Masafumi Takada",
+      "url": "https://www.youtube.com/watch?v=7CwvrVNlacw",
+      "artist": "Masafumi Takada",
+      "youtube_id": "7CwvrVNlacw",
+      "audio_file": null,
+      "duration_seconds": null,
+      "audio_format": null
+    },
+    {
       "id": "coconut-mall-soundtrack",
       "song_id": "vgm-coconut-mall",
       "kind": "original",
@@ -332,6 +383,18 @@
       "url": "https://www.youtube.com/watch?v=Zqa2mgjbOIM",
       "artist": null,
       "youtube_id": "Zqa2mgjbOIM",
+      "audio_file": null,
+      "duration_seconds": null,
+      "audio_format": null
+    },
+    {
+      "id": "dragon-roost-soundtrack",
+      "song_id": "vgm-dragon-roost-island",
+      "kind": "original",
+      "label": "The Wind Waker original soundtrack · fan upload",
+      "url": "https://www.youtube.com/watch?v=SfaNKs2KZ1o",
+      "artist": null,
+      "youtube_id": "SfaNKs2KZ1o",
       "audio_file": null,
       "duration_seconds": null,
       "audio_format": null
@@ -397,6 +460,18 @@
       "audio_format": null
     },
     {
+      "id": "meta-knight-halberd-soundtrack",
+      "song_id": "vgm-meta-knights-revenge",
+      "kind": "original",
+      "label": "Kirby Super Star original source cue · Halberd ~ Nightmare Warship · fan upload",
+      "url": "https://www.youtube.com/watch?v=c_-huuSqn3w",
+      "artist": null,
+      "youtube_id": "c_-huuSqn3w",
+      "audio_file": null,
+      "duration_seconds": null,
+      "audio_format": null
+    },
+    {
       "id": "meta-knight-super-soul-bros",
       "song_id": "vgm-meta-knights-revenge",
       "kind": "cover",
@@ -404,6 +479,42 @@
       "url": "https://www.youtube.com/watch?v=_91Um2pW5Sk",
       "artist": "Super Soul Bros",
       "youtube_id": "_91Um2pW5Sk",
+      "audio_file": null,
+      "duration_seconds": null,
+      "audio_format": null
+    },
+    {
+      "id": "meta-knight-theme-soundtrack",
+      "song_id": "vgm-meta-knights-revenge",
+      "kind": "original",
+      "label": "Kirby Super Star original source cue · Meta Knight's Theme · fan upload",
+      "url": "https://www.youtube.com/watch?v=aD1R0romZ2s",
+      "artist": null,
+      "youtube_id": "aD1R0romZ2s",
+      "audio_file": null,
+      "duration_seconds": null,
+      "audio_format": null
+    },
+    {
+      "id": "pokemon-champion-red-pokeli",
+      "song_id": "vgm-pokemon-silver-gym-theme",
+      "kind": "original",
+      "label": "HeartGold & SoulSilver soundtrack recording · Pokeli · EQ-enhanced upload",
+      "url": "https://youtube.com/watch?v=SYTS2sJWcIs",
+      "artist": null,
+      "youtube_id": "SYTS2sJWcIs",
+      "audio_file": null,
+      "duration_seconds": null,
+      "audio_format": null
+    },
+    {
+      "id": "splattack-splatoon-soundtrack",
+      "song_id": "vgm-splatoon-unconfirmed",
+      "kind": "original",
+      "label": "Splatoon original soundtrack · 91Yugo fan upload",
+      "url": "https://www.youtube.com/watch?v=LBQmvJyIKTg",
+      "artist": null,
+      "youtube_id": "LBQmvJyIKTg",
       "audio_file": null,
       "duration_seconds": null,
       "audio_format": null
@@ -445,6 +556,18 @@
       "audio_format": null
     },
     {
+      "id": "yoshi-circuit-double-dash-soundtrack",
+      "song_id": "vgm-yoshi-circuit-double-dash",
+      "kind": "original",
+      "label": "Mario Kart: Double Dash!! original circuit theme · fan upload",
+      "url": "https://www.youtube.com/watch?v=gynpCNZcL_o",
+      "artist": null,
+      "youtube_id": "gynpCNZcL_o",
+      "audio_file": null,
+      "duration_seconds": null,
+      "audio_format": null
+    },
+    {
       "id": "yoshi-circuit-mario-kart-world",
       "song_id": "vgm-yoshi-circuit-double-dash",
       "kind": "arrangement",
@@ -457,5 +580,41 @@
       "audio_format": null
     }
   ],
-  "repertoire": []
+  "repertoire": [
+    {
+      "song_id": "vgm-dire-dire-docks",
+      "note": "Jam group focus list · 6 October 2026",
+      "position": 1
+    },
+    {
+      "song_id": "vgm-when-mother-was-there",
+      "note": "Jam group focus list · Futaba's Palace",
+      "position": 2
+    },
+    {
+      "song_id": "vgm-you-will-know-our-names",
+      "note": "Jam group focus list · 6 October 2026",
+      "position": 3
+    },
+    {
+      "song_id": "vgm-beneath-the-mask",
+      "note": "Jam group focus list · 6 October 2026",
+      "position": 4
+    },
+    {
+      "song_id": "vgm-splatoon-unconfirmed",
+      "note": "Owen confirmed Splattack! on 2026-10-07; original Splatoon soundtrack reference verified.",
+      "position": 5
+    },
+    {
+      "song_id": "vgm-pokemon-silver-gym-theme",
+      "note": "Owen supplied the exact recording on 2026-10-07; upload identifies Champion & Red Battle from HeartGold & SoulSilver.",
+      "position": 6
+    },
+    {
+      "song_id": "vgm-box-16",
+      "note": "Jam group focus list · exact listening link supplied by Owen",
+      "position": 7
+    }
+  ]
 }

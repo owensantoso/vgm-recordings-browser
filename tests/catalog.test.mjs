@@ -17,22 +17,80 @@ const sql = readFileSync("data/catalog.sql", "utf8");
 const csv = readFileSync("data/recordings.csv", "utf8");
 test('catalog joins cross-session takes by stable identity and keeps unknowns unassigned', () => {
   const data = buildCatalog(sql, csv);
-  assert.equal(data.songs.length, 13);
+  assert.equal(data.songs.length, 16);
   assert.equal(data.recordings.length, 22);
   const yoshi = data.recordings.filter(row => row.song_id === 'vgm-yoshi-circuit-double-dash');
   assert.equal(yoshi.length, 2);
   assert.equal(new Set(yoshi.map(row => row.session_id)).size, 2);
   assert.equal(data.recordings.filter(row => !row.song_id).length, 7);
-  assert.equal(data.repertoire.length, 0);
-  assert.equal(data.references.length, 14);
+  assert.equal(data.repertoire.length, 7);
+  assert.equal(data.references.length, 22);
   assert.equal(data.version, 3);
   assert.ok(data.references.every(ref => ref.audio_file === null && ref.duration_seconds === null && ref.audio_format === null), 'public catalog never claims private audio availability');
-  assert.equal(new Set(data.references.map(ref => ref.song_id)).size, 13);
+  assert.equal(new Set(data.references.map(ref => ref.song_id)).size, 16);
   assert.ok(data.references.every(ref => /^[A-Za-z0-9_-]{11}$/.test(ref.youtube_id)));
   assert.ok(data.songs.every(song => song.reference_key === null && song.reference_bpm === null));
   assert.ok(data.recordings.every(take => take.played_key === null && take.played_bpm === null));
   assert.deepEqual(data, buildCatalog(sql, csv), 'projection is deterministic');
   assert.equal(JSON.stringify(data, null, 2) + '\n', readFileSync('data/catalog.json', 'utf8'), 'checked-in static catalog must match the SQL and CSV');
+});
+
+test('current repertoire preserves the human focus-list order without adopting assistant guesses', () => {
+  const data = buildCatalog(sql, csv);
+  assert.deepEqual(data.repertoire.map(row => [row.position, row.song_id]), [
+    [1, 'vgm-dire-dire-docks'],
+    [2, 'vgm-when-mother-was-there'],
+    [3, 'vgm-you-will-know-our-names'],
+    [4, 'vgm-beneath-the-mask'],
+    [5, 'vgm-splatoon-unconfirmed'],
+    [6, 'vgm-pokemon-silver-gym-theme'],
+    [7, 'vgm-box-16'],
+  ]);
+  for (const [id, title, game, referenceId, youtubeId] of [
+    ['vgm-splatoon-unconfirmed', 'Splattack!', 'Splatoon', 'splattack-splatoon-soundtrack', 'LBQmvJyIKTg'],
+    ['vgm-pokemon-silver-gym-theme', 'Champion & Red Battle', 'Pokémon HeartGold & SoulSilver', 'pokemon-champion-red-pokeli', 'SYTS2sJWcIs'],
+  ]) {
+    const song = data.songs.find(song => song.id === id);
+    assert.equal(song.title, title);
+    assert.equal(song.game, game);
+    assert.equal(song.composer, null, 'upload descriptions do not establish authoritative composer credits');
+    const references = data.references.filter(ref => ref.song_id === id);
+    assert.equal(references.length, 1);
+    assert.equal(references[0].id, referenceId);
+    assert.equal(references[0].youtube_id, youtubeId);
+    assert.equal(references[0].kind, 'original');
+    assert.equal(references[0].artist, null, 'uploader is not a performing artist');
+    assert.equal(data.recordings.filter(take => take.song_id === id).length, 0, 'identifying a focus slot does not assign an unidentified archive take');
+  }
+  assert.equal(data.references.find(ref => ref.id === 'pokemon-champion-red-pokeli').url, 'https://youtube.com/watch?v=SYTS2sJWcIs', 'exact human-supplied recording URL is retained');
+  assert.match(data.references.find(ref => ref.id === 'pokemon-champion-red-pokeli').label, /EQ-enhanced/);
+  const box = data.references.find(ref => ref.id === 'box16-masafumi-takada');
+  assert.equal(box.song_id, 'vgm-box-16');
+  assert.equal(box.kind, 'original');
+  assert.equal(box.youtube_id, '7CwvrVNlacw', 'exact link supplied by Owen');
+  assert.equal(box.artist, 'Masafumi Takada');
+  for (const [songId, oldRef, originalRef] of [
+    ['vgm-bob-omb-battlefield', 'bob-omb-8-bit-big-band', 'bob-omb-soundtrack'],
+    ['vgm-dragon-roost-island', 'dragon-roost-taylor-davis', 'dragon-roost-soundtrack'],
+    ['vgm-yoshi-circuit-double-dash', 'yoshi-circuit-mario-kart-world', 'yoshi-circuit-double-dash-soundtrack'],
+  ]) {
+    assert.equal(data.references.find(ref => ref.id === oldRef).song_id, songId, 'existing variant identity survives');
+    const original = data.references.find(ref => ref.id === originalRef);
+    assert.equal(original.song_id, songId);
+    assert.equal(original.kind, 'original');
+    assert.equal(original.artist, null, 'fan uploader is not a performing artist');
+  }
+  assert.equal(data.references.find(ref => ref.id === 'meta-knight-super-soul-bros').kind, 'cover');
+  for (const [id, cue] of [
+    ['meta-knight-theme-soundtrack', "Meta Knight's Theme"],
+    ['meta-knight-halberd-soundtrack', 'Halberd ~ Nightmare Warship'],
+  ]) {
+    const ref = data.references.find(ref => ref.id === id);
+    assert.equal(ref.song_id, 'vgm-meta-knights-revenge');
+    assert.equal(ref.kind, 'original');
+    assert.match(ref.label, /original source cue/);
+    assert.ok(ref.label.includes(cue), 'individual source cue remains explicit rather than claiming a complete medley');
+  }
 });
 
 function privateFixture(t) {
@@ -235,11 +293,11 @@ test("private CLI writes only an ignored projection and preserves committed publ
   assert.equal(readFileSync("data/catalog.json", "utf8"), publicBefore);
 });
 test('unrecorded repertoire songs and independent reference artists are valid', () => {
-  const extra = "INSERT INTO songs (id, title) VALUES ('permanent-fixture-id', 'Unrecorded fixture'); INSERT INTO repertoire (song_id, note, position) VALUES ('permanent-fixture-id', 'Chosen explicitly', 1); INSERT INTO song_references (id, song_id, kind, label, url, artist) VALUES ('fixture-ref', 'permanent-fixture-id', 'cover', 'Synthetic cover', 'https://example.test/cover', 'Reference artist');";
+  const extra = "INSERT INTO songs (id, title) VALUES ('permanent-fixture-id', 'Unrecorded fixture'); INSERT INTO repertoire (song_id, note, position) VALUES ('permanent-fixture-id', 'Chosen explicitly', 8); INSERT INTO song_references (id, song_id, kind, label, url, artist) VALUES ('fixture-ref', 'permanent-fixture-id', 'cover', 'Synthetic cover', 'https://example.test/cover', 'Reference artist');";
   const data = buildCatalog(sql + extra, csv);
   assert.equal(data.songs.find(song => song.id === 'permanent-fixture-id').composer, null);
   assert.equal(data.recordings.filter(row => row.song_id === 'permanent-fixture-id').length, 0);
-  assert.equal(data.repertoire[0].song_id, 'permanent-fixture-id');
+  assert.equal(data.repertoire.find(row => row.position === 8).song_id, 'permanent-fixture-id');
   assert.equal(data.references.find(ref => ref.id === 'fixture-ref').artist, 'Reference artist');
 });
 test('catalog rejects dangling relationships, missing takes, and executable links', () => {
