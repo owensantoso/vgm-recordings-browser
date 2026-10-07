@@ -5,8 +5,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { chromium } from "playwright-core";
 import { createFixture, initScript } from "./browser/fixture.mjs";
+import { chromeExecutable } from './browser/chrome.mjs';
 
-const chrome = process.env.CHROME_PATH || "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+const chrome = chromeExecutable();
 // Targeted real-browser geometry/feedback check. Synthetic media, no mic access.
 test("practice artwork stays one owner through sticky contraction; effective gain only changes waveform graphics", async () => {
   const directory = await mkdtemp(join(tmpdir(), "vgm-practice-visuals-"));

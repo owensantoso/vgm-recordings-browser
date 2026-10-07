@@ -130,3 +130,16 @@ the full requested feature scope.
 Capture permission remains user-owned: do not select an OS privacy picker resource,
 record silently, or synthesize microphone approval. Existing backing assets remain
 private; no media belongs in Git or public deployment.
+
+## Verified interface checkpoint
+
+Committed source slice fbbc6e4 passed TypeScript, 94 domain/store checks, the
+React lifecycle check, all 76 Chrome archive/practice cases (zero skips), and
+the focused desktop/375px/reduced-motion identity/gain test. Public artifacts
+were rebuilt from that committed slice without the dirty shared-core experiment.
+The same private artifact was deployed: Bob-omb opens paused without a prepare
+gate on desktop/375px; browsing preserves live playback; both newly packaged
+Splattack! and Champion & Red Battle pass actual Play/Pause with six lanes.
+Receipt: parent workspace work/song-entry-preview-receipt.json. These checks
+prove controls, delivery and decode paths, not stem isolation or audible quality.
+Capture/store/comment implementation is subsequent unaccepted work.
