@@ -50,3 +50,11 @@ Public/private builds pass;22 references and22 stem sets verify. All tracked
 emitted assets are staged together. Archive path check verifies22 recordings.
 The generic browser suite now uses the existing cross-platform Chrome helper;
 missing a browser cannot silently skip the required suite on this Mac.
+
+Private deployed checks at1440/375 verify141→105.5px header contraction,
+monotonic gain, adjacent/attached composer, real archive hash/duration, matching
+served JS/CSS and no console errors. No application writes or mic requests.
+The Serve configuration fingerprint is unchanged:
+`fb9443106e955e5d86b802993dafa7981f917b0d0681ca256ecdf11846c6db28`.
+Rendered review also replaced the browser's default monospace textarea with the
+workspace's inherited type and form styling; phone fields retain16px text.
