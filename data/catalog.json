@@ -1,0 +1,620 @@
+{
+  "version": 3,
+  "songs": [
+    {
+      "id": "vgm-beneath-the-mask",
+      "title": "Beneath the Mask",
+      "game": "Persona 5",
+      "franchise": "Persona",
+      "composer": null,
+      "reference_key": null,
+      "reference_bpm": null
+    },
+    {
+      "id": "vgm-bob-omb-battlefield",
+      "title": "Bob-omb Battlefield",
+      "game": "Super Mario 64",
+      "franchise": "Super Mario",
+      "composer": null,
+      "reference_key": null,
+      "reference_bpm": null
+    },
+    {
+      "id": "vgm-box-16",
+      "title": "BOX 16",
+      "game": "Danganronpa: Trigger Happy Havoc",
+      "franchise": "Danganronpa",
+      "composer": null,
+      "reference_key": null,
+      "reference_bpm": null
+    },
+    {
+      "id": "vgm-pokemon-silver-gym-theme",
+      "title": "Champion & Red Battle",
+      "game": "Pokémon HeartGold & SoulSilver",
+      "franchise": "Pokémon",
+      "composer": null,
+      "reference_key": null,
+      "reference_bpm": null
+    },
+    {
+      "id": "vgm-coconut-mall",
+      "title": "Coconut Mall",
+      "game": "Mario Kart Wii",
+      "franchise": "Mario Kart",
+      "composer": null,
+      "reference_key": null,
+      "reference_bpm": null
+    },
+    {
+      "id": "vgm-dire-dire-docks",
+      "title": "Dire, Dire Docks",
+      "game": "Super Mario 64",
+      "franchise": "Super Mario",
+      "composer": null,
+      "reference_key": null,
+      "reference_bpm": null
+    },
+    {
+      "id": "vgm-dragon-roost-island",
+      "title": "Dragon Roost Island",
+      "game": "The Legend of Zelda: The Wind Waker",
+      "franchise": "The Legend of Zelda",
+      "composer": null,
+      "reference_key": null,
+      "reference_bpm": null
+    },
+    {
+      "id": "vgm-gourmet-race",
+      "title": "Gourmet Race",
+      "game": "Kirby Super Star",
+      "franchise": "Kirby",
+      "composer": null,
+      "reference_key": null,
+      "reference_bpm": null
+    },
+    {
+      "id": "vgm-life-will-change",
+      "title": "Life Will Change",
+      "game": "Persona 5",
+      "franchise": "Persona",
+      "composer": null,
+      "reference_key": null,
+      "reference_bpm": null
+    },
+    {
+      "id": "vgm-megalovania",
+      "title": "Megalovania",
+      "game": "Undertale",
+      "franchise": "Undertale",
+      "composer": null,
+      "reference_key": null,
+      "reference_bpm": null
+    },
+    {
+      "id": "vgm-meta-knights-revenge",
+      "title": "Meta Knight's Revenge",
+      "game": "Kirby Super Star",
+      "franchise": "Kirby",
+      "composer": null,
+      "reference_key": null,
+      "reference_bpm": null
+    },
+    {
+      "id": "vgm-splatoon-unconfirmed",
+      "title": "Splattack!",
+      "game": "Splatoon",
+      "franchise": "Splatoon",
+      "composer": null,
+      "reference_key": null,
+      "reference_bpm": null
+    },
+    {
+      "id": "vgm-underground-theme-mario-kart-world",
+      "title": "Underground Theme",
+      "game": "Mario Kart World",
+      "franchise": "Super Mario",
+      "composer": null,
+      "reference_key": null,
+      "reference_bpm": null
+    },
+    {
+      "id": "vgm-when-mother-was-there",
+      "title": "When Mother Was There",
+      "game": "Persona 5",
+      "franchise": "Persona",
+      "composer": null,
+      "reference_key": null,
+      "reference_bpm": null
+    },
+    {
+      "id": "vgm-yoshi-circuit-double-dash",
+      "title": "Yoshi Circuit",
+      "game": "Mario Kart: Double Dash!!",
+      "franchise": "Mario Kart",
+      "composer": null,
+      "reference_key": null,
+      "reference_bpm": null
+    },
+    {
+      "id": "vgm-you-will-know-our-names",
+      "title": "You Will Know Our Names",
+      "game": "Xenoblade Chronicles",
+      "franchise": "Xenoblade Chronicles",
+      "composer": null,
+      "reference_key": null,
+      "reference_bpm": null
+    }
+  ],
+  "sessions": [
+    {
+      "id": "2026-07-26-shimokitazawa-vgm-session",
+      "label": "2026-07-26 Shimokitazawa VGM Session",
+      "date": "2026-07-26"
+    },
+    {
+      "id": "2026-05-31-shimokitazawa-first-vgm-session",
+      "label": "2026-05-31 Shimokitazawa First VGM Session",
+      "date": "2026-05-31"
+    }
+  ],
+  "recordings": [
+    {
+      "file": "IMG_5934 Persona The Dya when my mother was there.MOV",
+      "session_id": "2026-07-26-shimokitazawa-vgm-session",
+      "song_id": "vgm-when-mother-was-there",
+      "played_key": null,
+      "played_bpm": null
+    },
+    {
+      "file": "IMG_5936 xenoblade You will know our names_1.MOV",
+      "session_id": "2026-07-26-shimokitazawa-vgm-session",
+      "song_id": "vgm-you-will-know-our-names",
+      "played_key": null,
+      "played_bpm": null
+    },
+    {
+      "file": "IMG_5937 xenoblade You will know our names_2.MOV",
+      "session_id": "2026-07-26-shimokitazawa-vgm-session",
+      "song_id": "vgm-you-will-know-our-names",
+      "played_key": null,
+      "played_bpm": null
+    },
+    {
+      "file": "IMG_5939 kirby metaknight.MOV",
+      "session_id": "2026-07-26-shimokitazawa-vgm-session",
+      "song_id": "vgm-meta-knights-revenge",
+      "played_key": null,
+      "played_bpm": null
+    },
+    {
+      "file": "IMG_5940 SM64 dire dire docks.MOV",
+      "session_id": "2026-07-26-shimokitazawa-vgm-session",
+      "song_id": "vgm-dire-dire-docks",
+      "played_key": null,
+      "played_bpm": null
+    },
+    {
+      "file": "IMG_5941 Persona 5 Life Will Change.MOV",
+      "session_id": "2026-07-26-shimokitazawa-vgm-session",
+      "song_id": "vgm-life-will-change",
+      "played_key": null,
+      "played_bpm": null
+    },
+    {
+      "file": "IMG_5942 MKWorld Underground Theme.MOV",
+      "session_id": "2026-07-26-shimokitazawa-vgm-session",
+      "song_id": "vgm-underground-theme-mario-kart-world",
+      "played_key": null,
+      "played_bpm": null
+    },
+    {
+      "file": "IMG_5943 Coconut Mall.MOV",
+      "session_id": "2026-07-26-shimokitazawa-vgm-session",
+      "song_id": "vgm-coconut-mall",
+      "played_key": null,
+      "played_bpm": null
+    },
+    {
+      "file": "IMG_5944 MKart Yoshi Circuit.MOV",
+      "session_id": "2026-07-26-shimokitazawa-vgm-session",
+      "song_id": "vgm-yoshi-circuit-double-dash",
+      "played_key": null,
+      "played_bpm": null
+    },
+    {
+      "file": "IMG_7787.MOV",
+      "session_id": "2026-05-31-shimokitazawa-first-vgm-session",
+      "song_id": null,
+      "played_key": null,
+      "played_bpm": null
+    },
+    {
+      "file": "IMG_7788.MOV",
+      "session_id": "2026-05-31-shimokitazawa-first-vgm-session",
+      "song_id": "vgm-yoshi-circuit-double-dash",
+      "played_key": null,
+      "played_bpm": null
+    },
+    {
+      "file": "IMG_7789.MOV",
+      "session_id": "2026-05-31-shimokitazawa-first-vgm-session",
+      "song_id": null,
+      "played_key": null,
+      "played_bpm": null
+    },
+    {
+      "file": "IMG_7790.MOV",
+      "session_id": "2026-05-31-shimokitazawa-first-vgm-session",
+      "song_id": null,
+      "played_key": null,
+      "played_bpm": null
+    },
+    {
+      "file": "IMG_7791.MOV",
+      "session_id": "2026-05-31-shimokitazawa-first-vgm-session",
+      "song_id": null,
+      "played_key": null,
+      "played_bpm": null
+    },
+    {
+      "file": "IMG_7792.MOV",
+      "session_id": "2026-05-31-shimokitazawa-first-vgm-session",
+      "song_id": null,
+      "played_key": null,
+      "played_bpm": null
+    },
+    {
+      "file": "IMG_7793.MOV",
+      "session_id": "2026-05-31-shimokitazawa-first-vgm-session",
+      "song_id": "vgm-dragon-roost-island",
+      "played_key": null,
+      "played_bpm": null
+    },
+    {
+      "file": "IMG_7794.MOV",
+      "session_id": "2026-05-31-shimokitazawa-first-vgm-session",
+      "song_id": "vgm-megalovania",
+      "played_key": null,
+      "played_bpm": null
+    },
+    {
+      "file": "IMG_7795.MOV",
+      "session_id": "2026-05-31-shimokitazawa-first-vgm-session",
+      "song_id": null,
+      "played_key": null,
+      "played_bpm": null
+    },
+    {
+      "file": "IMG_7796.MOV",
+      "session_id": "2026-05-31-shimokitazawa-first-vgm-session",
+      "song_id": "vgm-beneath-the-mask",
+      "played_key": null,
+      "played_bpm": null
+    },
+    {
+      "file": "IMG_7797.MOV",
+      "session_id": "2026-05-31-shimokitazawa-first-vgm-session",
+      "song_id": null,
+      "played_key": null,
+      "played_bpm": null
+    },
+    {
+      "file": "IMG_7798.MOV",
+      "session_id": "2026-05-31-shimokitazawa-first-vgm-session",
+      "song_id": "vgm-bob-omb-battlefield",
+      "played_key": null,
+      "played_bpm": null
+    },
+    {
+      "file": "IMG_7799.MOV",
+      "session_id": "2026-05-31-shimokitazawa-first-vgm-session",
+      "song_id": "vgm-gourmet-race",
+      "played_key": null,
+      "played_bpm": null
+    }
+  ],
+  "references": [
+    {
+      "id": "beneath-mask-lyn",
+      "song_id": "vgm-beneath-the-mask",
+      "kind": "original",
+      "label": "Persona 5 original soundtrack · Lyn",
+      "url": "https://www.youtube.com/watch?v=woz5qvDdMRM",
+      "artist": "Lyn",
+      "youtube_id": "woz5qvDdMRM",
+      "audio_file": null,
+      "duration_seconds": null,
+      "audio_format": null
+    },
+    {
+      "id": "bob-omb-8-bit-big-band",
+      "song_id": "vgm-bob-omb-battlefield",
+      "kind": "cover",
+      "label": "The 8-Bit Big Band cover",
+      "url": "https://www.youtube.com/watch?v=tMVl0WZH3GY",
+      "artist": "The 8-Bit Big Band",
+      "youtube_id": "tMVl0WZH3GY",
+      "audio_file": null,
+      "duration_seconds": null,
+      "audio_format": null
+    },
+    {
+      "id": "bob-omb-soundtrack",
+      "song_id": "vgm-bob-omb-battlefield",
+      "kind": "original",
+      "label": "Super Mario 64 soundtrack · fan upload",
+      "url": "https://www.youtube.com/watch?v=bmP3UHXYi28",
+      "artist": null,
+      "youtube_id": "bmP3UHXYi28",
+      "audio_file": null,
+      "duration_seconds": null,
+      "audio_format": null
+    },
+    {
+      "id": "box16-masafumi-takada",
+      "song_id": "vgm-box-16",
+      "kind": "original",
+      "label": "Danganronpa original soundtrack · Masafumi Takada",
+      "url": "https://www.youtube.com/watch?v=7CwvrVNlacw",
+      "artist": "Masafumi Takada",
+      "youtube_id": "7CwvrVNlacw",
+      "audio_file": null,
+      "duration_seconds": null,
+      "audio_format": null
+    },
+    {
+      "id": "coconut-mall-soundtrack",
+      "song_id": "vgm-coconut-mall",
+      "kind": "original",
+      "label": "Mario Kart Wii soundtrack · fan upload",
+      "url": "https://www.youtube.com/watch?v=LGxfNbhfx9g",
+      "artist": null,
+      "youtube_id": "LGxfNbhfx9g",
+      "audio_file": null,
+      "duration_seconds": null,
+      "audio_format": null
+    },
+    {
+      "id": "dire-dire-docks-soundtrack",
+      "song_id": "vgm-dire-dire-docks",
+      "kind": "original",
+      "label": "Super Mario 64 soundtrack · fan upload",
+      "url": "https://www.youtube.com/watch?v=Zqa2mgjbOIM",
+      "artist": null,
+      "youtube_id": "Zqa2mgjbOIM",
+      "audio_file": null,
+      "duration_seconds": null,
+      "audio_format": null
+    },
+    {
+      "id": "dragon-roost-soundtrack",
+      "song_id": "vgm-dragon-roost-island",
+      "kind": "original",
+      "label": "The Wind Waker original soundtrack · fan upload",
+      "url": "https://www.youtube.com/watch?v=SfaNKs2KZ1o",
+      "artist": null,
+      "youtube_id": "SfaNKs2KZ1o",
+      "audio_file": null,
+      "duration_seconds": null,
+      "audio_format": null
+    },
+    {
+      "id": "dragon-roost-taylor-davis",
+      "song_id": "vgm-dragon-roost-island",
+      "kind": "cover",
+      "label": "Taylor Davis violin cover",
+      "url": "https://www.youtube.com/watch?v=xeUciMWJYDM",
+      "artist": "Taylor Davis",
+      "youtube_id": "xeUciMWJYDM",
+      "audio_file": null,
+      "duration_seconds": null,
+      "audio_format": null
+    },
+    {
+      "id": "gourmet-race-soundtrack",
+      "song_id": "vgm-gourmet-race",
+      "kind": "original",
+      "label": "Kirby Super Star soundtrack · fan upload",
+      "url": "https://www.youtube.com/watch?v=Se1uh3PS78Y",
+      "artist": null,
+      "youtube_id": "Se1uh3PS78Y",
+      "audio_file": null,
+      "duration_seconds": null,
+      "audio_format": null
+    },
+    {
+      "id": "know-our-names-soundtrack",
+      "song_id": "vgm-you-will-know-our-names",
+      "kind": "original",
+      "label": "Xenoblade Chronicles soundtrack · fan upload",
+      "url": "https://www.youtube.com/watch?v=g7yNyhLOIa4",
+      "artist": null,
+      "youtube_id": "g7yNyhLOIa4",
+      "audio_file": null,
+      "duration_seconds": null,
+      "audio_format": null
+    },
+    {
+      "id": "life-will-change-lyn",
+      "song_id": "vgm-life-will-change",
+      "kind": "original",
+      "label": "Persona 5 original soundtrack · Lyn",
+      "url": "https://www.youtube.com/watch?v=dsuJZx24V_A",
+      "artist": "Lyn",
+      "youtube_id": "dsuJZx24V_A",
+      "audio_file": null,
+      "duration_seconds": null,
+      "audio_format": null
+    },
+    {
+      "id": "megalovania-toby-fox",
+      "song_id": "vgm-megalovania",
+      "kind": "original",
+      "label": "Undertale soundtrack · Toby Fox",
+      "url": "https://www.youtube.com/watch?v=KK3KXAECte4",
+      "artist": "Toby Fox",
+      "youtube_id": "KK3KXAECte4",
+      "audio_file": null,
+      "duration_seconds": null,
+      "audio_format": null
+    },
+    {
+      "id": "meta-knight-halberd-soundtrack",
+      "song_id": "vgm-meta-knights-revenge",
+      "kind": "original",
+      "label": "Kirby Super Star original source cue · Halberd ~ Nightmare Warship · fan upload",
+      "url": "https://www.youtube.com/watch?v=c_-huuSqn3w",
+      "artist": null,
+      "youtube_id": "c_-huuSqn3w",
+      "audio_file": null,
+      "duration_seconds": null,
+      "audio_format": null
+    },
+    {
+      "id": "meta-knight-super-soul-bros",
+      "song_id": "vgm-meta-knights-revenge",
+      "kind": "cover",
+      "label": "Super Soul Bros cover",
+      "url": "https://www.youtube.com/watch?v=_91Um2pW5Sk",
+      "artist": "Super Soul Bros",
+      "youtube_id": "_91Um2pW5Sk",
+      "audio_file": null,
+      "duration_seconds": null,
+      "audio_format": null
+    },
+    {
+      "id": "meta-knight-theme-soundtrack",
+      "song_id": "vgm-meta-knights-revenge",
+      "kind": "original",
+      "label": "Kirby Super Star original source cue · Meta Knight's Theme · fan upload",
+      "url": "https://www.youtube.com/watch?v=aD1R0romZ2s",
+      "artist": null,
+      "youtube_id": "aD1R0romZ2s",
+      "audio_file": null,
+      "duration_seconds": null,
+      "audio_format": null
+    },
+    {
+      "id": "pokemon-champion-red-pokeli",
+      "song_id": "vgm-pokemon-silver-gym-theme",
+      "kind": "original",
+      "label": "HeartGold & SoulSilver soundtrack recording · Pokeli · EQ-enhanced upload",
+      "url": "https://youtube.com/watch?v=SYTS2sJWcIs",
+      "artist": null,
+      "youtube_id": "SYTS2sJWcIs",
+      "audio_file": null,
+      "duration_seconds": null,
+      "audio_format": null
+    },
+    {
+      "id": "splattack-splatoon-soundtrack",
+      "song_id": "vgm-splatoon-unconfirmed",
+      "kind": "original",
+      "label": "Splatoon original soundtrack · 91Yugo fan upload",
+      "url": "https://www.youtube.com/watch?v=LBQmvJyIKTg",
+      "artist": null,
+      "youtube_id": "LBQmvJyIKTg",
+      "audio_file": null,
+      "duration_seconds": null,
+      "audio_format": null
+    },
+    {
+      "id": "underground-mario-kart-world",
+      "song_id": "vgm-underground-theme-mario-kart-world",
+      "kind": "arrangement",
+      "label": "Mario Kart World arrangement · fan upload",
+      "url": "https://www.youtube.com/watch?v=vkySJ91FXhs",
+      "artist": null,
+      "youtube_id": "vkySJ91FXhs",
+      "audio_file": null,
+      "duration_seconds": null,
+      "audio_format": null
+    },
+    {
+      "id": "when-mother-consouls",
+      "song_id": "vgm-when-mother-was-there",
+      "kind": "cover",
+      "label": "The Consouls cover",
+      "url": "https://www.youtube.com/watch?v=d_L7diRQRR8",
+      "artist": "The Consouls",
+      "youtube_id": "d_L7diRQRR8",
+      "audio_file": null,
+      "duration_seconds": null,
+      "audio_format": null
+    },
+    {
+      "id": "when-mother-soundtrack",
+      "song_id": "vgm-when-mother-was-there",
+      "kind": "original",
+      "label": "Persona 5 soundtrack · fan upload",
+      "url": "https://www.youtube.com/watch?v=z5ghb_14j5Y",
+      "artist": null,
+      "youtube_id": "z5ghb_14j5Y",
+      "audio_file": null,
+      "duration_seconds": null,
+      "audio_format": null
+    },
+    {
+      "id": "yoshi-circuit-double-dash-soundtrack",
+      "song_id": "vgm-yoshi-circuit-double-dash",
+      "kind": "original",
+      "label": "Mario Kart: Double Dash!! original circuit theme · fan upload",
+      "url": "https://www.youtube.com/watch?v=gynpCNZcL_o",
+      "artist": null,
+      "youtube_id": "gynpCNZcL_o",
+      "audio_file": null,
+      "duration_seconds": null,
+      "audio_format": null
+    },
+    {
+      "id": "yoshi-circuit-mario-kart-world",
+      "song_id": "vgm-yoshi-circuit-double-dash",
+      "kind": "arrangement",
+      "label": "Mario Kart World arrangement · fan upload",
+      "url": "https://www.youtube.com/watch?v=pfzeDfe0Hrs",
+      "artist": null,
+      "youtube_id": "pfzeDfe0Hrs",
+      "audio_file": null,
+      "duration_seconds": null,
+      "audio_format": null
+    }
+  ],
+  "repertoire": [
+    {
+      "song_id": "vgm-dire-dire-docks",
+      "note": "Jam group focus list · 6 October 2026",
+      "position": 1
+    },
+    {
+      "song_id": "vgm-when-mother-was-there",
+      "note": "Jam group focus list · Futaba's Palace",
+      "position": 2
+    },
+    {
+      "song_id": "vgm-you-will-know-our-names",
+      "note": "Jam group focus list · 6 October 2026",
+      "position": 3
+    },
+    {
+      "song_id": "vgm-beneath-the-mask",
+      "note": "Jam group focus list · 6 October 2026",
+      "position": 4
+    },
+    {
+      "song_id": "vgm-splatoon-unconfirmed",
+      "note": "Owen confirmed Splattack! on 2026-10-07; original Splatoon soundtrack reference verified.",
+      "position": 5
+    },
+    {
+      "song_id": "vgm-pokemon-silver-gym-theme",
+      "note": "Owen supplied the exact recording on 2026-10-07; upload identifies Champion & Red Battle from HeartGold & SoulSilver.",
+      "position": 6
+    },
+    {
+      "song_id": "vgm-box-16",
+      "note": "Jam group focus list · exact listening link supplied by Owen",
+      "position": 7
+    }
+  ]
+}

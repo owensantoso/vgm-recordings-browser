@@ -1,0 +1,213 @@
+{
+  "schemaVersion": 1,
+  "catalogRevision": 5,
+  "project": "VGM Recordings Browser",
+  "stage": "personal-mvp",
+  "surfaces": [
+    "web",
+    "mobile-web"
+  ],
+  "features": [
+    "search",
+    "navigable-state",
+    "multi-region-shell",
+    "locally-resolved-interactions",
+    "iconography"
+  ],
+  "classifications": [
+    {
+      "id": "multiple-appearances",
+      "status": "absent",
+      "reason": "Only the existing light ledger appearance ships."
+    },
+    {
+      "id": "mobile-web",
+      "status": "present",
+      "reason": "Recorded context includes surface mobile-web."
+    },
+    {
+      "id": "multi-pane",
+      "status": "present",
+      "reason": "Recorded context includes feature multi-pane or multi-region-shell or independent-panels."
+    },
+    {
+      "id": "iconography",
+      "status": "present",
+      "reason": "Named locally bundled Lucide React icons support navigation, source kinds, filters and transport; text/accessibility labels remain."
+    },
+    {
+      "id": "locally-resolved-interactions",
+      "status": "present",
+      "reason": "Filtering, sorting, and selection use the loaded CSV; media fetching is separate."
+    }
+  ],
+  "contracts": [
+    {
+      "id": "search.explainable",
+      "version": 2,
+      "applicable": true,
+      "disposition": "defer",
+      "reason": "Literal highlights and hidden-field snippets ship; full structured ranges and occurrence restoration contract is deferred.",
+      "decisionPath": "docs/DESIGN.md",
+      "implementationState": "not_started",
+      "implementationPaths": [],
+      "verificationEvidence": [],
+      "acceptanceEvidence": []
+    },
+    {
+      "id": "state.addressable",
+      "version": 1,
+      "applicable": true,
+      "disposition": "adapt",
+      "reason": "Rendered candidate and automated scenarios exercised; human design and physical iPhone acceptance remain pending.",
+      "decisionPath": "docs/DESIGN.md",
+      "implementationState": "implemented",
+      "implementationPaths": [
+        "src/App.tsx",
+        "src/Library.tsx",
+        "src/Player.tsx",
+        "src/styles.css"
+      ],
+      "verificationEvidence": [
+        "docs/VALIDATION-COHESION-2026-10-06.md"
+      ],
+      "acceptanceEvidence": []
+    },
+    {
+      "id": "appearance.theme-ready",
+      "version": 1,
+      "applicable": true,
+      "disposition": "defer",
+      "reason": "Semantic tokens introduced; remaining fixed state-color extraction is deferred.",
+      "decisionPath": "docs/DESIGN.md",
+      "implementationState": "not_started",
+      "implementationPaths": [],
+      "verificationEvidence": [],
+      "acceptanceEvidence": []
+    },
+    {
+      "id": "appearance.theme-transition",
+      "version": 1,
+      "applicable": false,
+      "disposition": "not_applicable",
+      "reason": "Only one light appearance is shipped; there is no theme transition.",
+      "decisionPath": "docs/DESIGN.md",
+      "implementationState": "not_started",
+      "implementationPaths": [],
+      "verificationEvidence": [],
+      "acceptanceEvidence": []
+    },
+    {
+      "id": "control.action-feedback",
+      "version": 2,
+      "applicable": true,
+      "disposition": "adapt",
+      "reason": "Rendered candidate and automated scenarios exercised; human design and physical iPhone acceptance remain pending.",
+      "decisionPath": "docs/DESIGN.md",
+      "implementationState": "implemented",
+      "implementationPaths": [
+        "src/App.tsx",
+        "src/Library.tsx",
+        "src/Player.tsx",
+        "src/styles.css"
+      ],
+      "verificationEvidence": [
+        "docs/VALIDATION-COHESION-2026-10-06.md"
+      ],
+      "acceptanceEvidence": []
+    },
+    {
+      "id": "iconography.source-integrity",
+      "version": 1,
+      "applicable": true,
+      "disposition": "defer",
+      "reason": "Lucide React 1.52.0 is pinned in the npm lockfile and its ISC/Feather MIT notices retained. Toolbox authenticated archive pilot presently approves Phosphor only; Lucide pilot verification is unclaimed.",
+      "decisionPath": "docs/DESIGN.md",
+      "implementationState": "not_started",
+      "implementationPaths": [],
+      "verificationEvidence": [],
+      "acceptanceEvidence": []
+    },
+    {
+      "id": "interaction.local-response",
+      "version": 1,
+      "applicable": true,
+      "disposition": "defer",
+      "reason": "Interactions use loaded data; catalog latency/network-race receipt work is deferred.",
+      "decisionPath": "docs/DESIGN.md",
+      "implementationState": "not_started",
+      "implementationPaths": [],
+      "verificationEvidence": [],
+      "acceptanceEvidence": []
+    },
+    {
+      "id": "localization.ready",
+      "version": 1,
+      "applicable": true,
+      "disposition": "defer",
+      "reason": "English-only archive; interface string extraction and selectable locale are deferred.",
+      "decisionPath": "docs/DESIGN.md",
+      "implementationState": "not_started",
+      "implementationPaths": [],
+      "verificationEvidence": [],
+      "acceptanceEvidence": []
+    },
+    {
+      "id": "shell.scroll-ownership",
+      "version": 1,
+      "applicable": true,
+      "disposition": "adapt",
+      "reason": "Rendered candidate and automated scenarios exercised; human design and physical iPhone acceptance remain pending.",
+      "decisionPath": "docs/DESIGN.md",
+      "implementationState": "implemented",
+      "implementationPaths": [
+        "src/App.tsx",
+        "src/Library.tsx",
+        "src/Player.tsx",
+        "src/styles.css"
+      ],
+      "verificationEvidence": [
+        "docs/VALIDATION-COHESION-2026-10-06.md"
+      ],
+      "acceptanceEvidence": []
+    },
+    {
+      "id": "composition.mobile-separate",
+      "version": 1,
+      "applicable": true,
+      "disposition": "adapt",
+      "reason": "Rendered candidate and automated scenarios exercised; human design and physical iPhone acceptance remain pending.",
+      "decisionPath": "docs/DESIGN.md",
+      "implementationState": "implemented",
+      "implementationPaths": [
+        "src/App.tsx",
+        "src/Library.tsx",
+        "src/Player.tsx",
+        "src/styles.css"
+      ],
+      "verificationEvidence": [
+        "docs/VALIDATION-COHESION-2026-10-06.md"
+      ],
+      "acceptanceEvidence": []
+    },
+    {
+      "id": "mobile.text-entry-focus",
+      "version": 2,
+      "applicable": true,
+      "disposition": "adapt",
+      "reason": "Rendered candidate and automated scenarios exercised; human design and physical iPhone acceptance remain pending.",
+      "decisionPath": "docs/DESIGN.md",
+      "implementationState": "implemented",
+      "implementationPaths": [
+        "src/App.tsx",
+        "src/Library.tsx",
+        "src/Player.tsx",
+        "src/styles.css"
+      ],
+      "verificationEvidence": [
+        "docs/VALIDATION-COHESION-2026-10-06.md"
+      ],
+      "acceptanceEvidence": []
+    }
+  ]
+}

@@ -1,0 +1,41 @@
+.timeline-comment-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin: 12px 0; }
+.timeline-comment-toolbar button { display: inline-flex; align-items: center; gap: 6px; padding: 6px 9px; font-size: 12px; }
+.timeline-comment-toolbar button[aria-pressed="true"] { background: var(--green-soft, #deead9); color: var(--green, #3b7754); border-color: currentColor; }
+.timeline-comment-toolbar > span { width: 100%; color: var(--muted, #6d7d70); font-size: 12px; }
+.timeline-activity-layout { display: grid; grid-template-columns: minmax(0, 1fr); align-items: start; gap: 16px; }
+.timeline-activity-layout:has(.timeline-comment-pane) { grid-template-columns: minmax(0, 1fr) minmax(245px, 310px); }
+.timeline-activity-layout > * { min-width: 0; }
+.timeline-jams-row { position: relative; }
+.timeline-jams-strip { overflow: hidden; position: relative; min-height: 40px; background: var(--surface, #f4f7f1); }
+.timeline-jam-bar { position: absolute; height: 30px; display: flex; align-items: center; gap: 5px; overflow: hidden; padding: 3px 6px; min-width: 2px; background: #dce4ed; color: #364f65; border: 1px solid #a5b5c5; border-radius: 4px; font-size: 11px; cursor: crosshair; touch-action: pan-y; }
+.timeline-jam-bar > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.timeline-jam-bar.is-selected { border-color: #364f65; box-shadow: inset 0 0 0 1px #364f65; }
+.timeline-jam-open { grid-column: 2; display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 6px 0; font-size: 11px; }
+.timeline-jam-open button { display: inline-flex; gap: 5px; align-items: center; padding: 4px 7px; font-size: 12px; }
+.timeline-comment-pane { padding: 14px; border: 1px solid var(--line, #dce3d8); border-radius: 8px; background: var(--surface, #f4f7f1); position: sticky; top: calc(var(--song-header-height, 76px) + 12px); max-height: calc(100dvh - 180px); overflow: auto; }
+.timeline-comment-pane header { display: flex; justify-content: space-between; gap: 8px; align-items: start; }
+.timeline-comment-pane h3 { display: flex; gap: 6px; align-items: center; font-size: 15px; margin: 0; }
+.timeline-comment-pane header p { font-size: 12px; color: var(--muted, #6d7d70); margin: 6px 0 12px; }
+.timeline-comment-pane header button { padding: 4px; flex: none; }
+.timeline-comment-pane form { display: grid; gap: 9px; }
+.timeline-comment-pane textarea { font: inherit; color: var(--ink); background: var(--paper); border: 1px solid var(--line); border-radius: 7px; padding: 8px; min-height: 105px; resize: vertical; width: 100%; box-sizing: border-box; }
+.timeline-comment-pane small { font-size: 11px; color: var(--muted, #6d7d70); }
+.timeline-comment-timing { display: flex; gap: 8px; }
+.timeline-comment-timing label { min-width: 0; flex: 1; font-size: 11px; }
+.timeline-comment-timing input { width: 100%; box-sizing: border-box; margin-top: 4px; }
+.timeline-nearby-comments h4 { font-size: 12px; margin: 16px 0 8px; }
+.timeline-nearby-comments article { border-top: 1px solid var(--line, #dce3d8); padding: 9px 0; }
+.timeline-nearby-comments article p { margin: 0 0 5px; font-size: 13px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.timeline-nearby-comments article button { display: block; padding: 3px 0; font-size: 11px; margin-top: 5px; }
+@media (max-width: 1050px) { .timeline-activity-layout:has(.timeline-comment-pane) { grid-template-columns: minmax(0, 1fr); } .timeline-comment-pane { position: static; max-height: none; } }
+
+.waveform-comment-surface { position: absolute; inset: 0; width: 100%; height: 100%; padding: 0; border: 0; background: transparent; cursor: crosshair; touch-action: pan-y; z-index: 3; }
+.waveform-comment-surface:hover { background: transparent; }
+.waveform-comment-surface:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.waveform-comment-selection { position: absolute; top: 0; bottom: 0; background: #5579a733; pointer-events: none; z-index: 2; }
+.waveform-comment-mark { position: absolute; top: 2px; height: 17px; min-width: 17px; padding: 0; border: 1px solid #7d93ab; background: #dce4ed; color: #364f65; border-radius: 3px; z-index: 5; font-size: 18px; line-height: 12px; overflow: hidden; }
+@media (max-width: 640px) {
+  .timeline-comment-pane { position: fixed; left: 12px; right: 12px; bottom: calc(var(--dock-height, 150px) + 8px); top: auto; z-index: 15; max-height: 45dvh; overflow: auto; box-shadow: 0 -5px 22px #27392b24; }
+  .timeline-comment-pane textarea { font: inherit; color: var(--ink); background: var(--paper); border: 1px solid var(--line); border-radius: 7px; padding: 8px; min-height: 70px; }
+}
+@media (max-width: 640px) { .timeline-comment-pane textarea, .timeline-comment-pane input { font-size: 16px; } }

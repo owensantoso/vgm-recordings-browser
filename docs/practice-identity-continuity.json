@@ -1,0 +1,222 @@
+{
+  "schemaVersion": 1,
+  "id": "vgm.practice-identity-scroll",
+  "product": "VGM Music Workspace",
+  "interaction": {
+    "kind": "context_sticky",
+    "trigger": "Scroll main practice pane from 0 to 96 pixels and beyond"
+  },
+  "states": {
+    "source": {
+      "id": "expanded",
+      "representation": "60 pixel source art and full-size title in song header"
+    },
+    "target": {
+      "id": "compact",
+      "representation": "40.8 pixel art and 86 percent title in same sticky header"
+    }
+  },
+  "semanticFamily": {
+    "entity": {
+      "key": "song:beneath-mask",
+      "label": "Beneath the Mask practice identity",
+      "identity": {
+        "namespace": "vgm-catalog",
+        "kind": "song",
+        "id": "vgm-beneath-the-mask"
+      }
+    },
+    "facets": [
+      {
+        "key": "song:artwork",
+        "label": "Active source thumbnail or fallback icon"
+      },
+      {
+        "key": "song:title-game",
+        "label": "Song title and game"
+      }
+    ],
+    "relationships": [
+      {
+        "key": "source:recording",
+        "label": "Exact active reference or linked take"
+      }
+    ]
+  },
+  "workingState": [
+    {
+      "key": "main:scroll",
+      "label": "Main pane current scroll position"
+    },
+    {
+      "key": "player:clock-mix",
+      "label": "One source, clock, paused/playing state and saved stem levels"
+    },
+    {
+      "key": "input:focus",
+      "label": "Keyboard focus and current tab"
+    }
+  ],
+  "controls": [
+    {
+      "key": "song:tabs-back",
+      "label": "Back link and Practice/Overview tabs"
+    },
+    {
+      "key": "practice:mixer",
+      "label": "Readable controls and labels independent of waveform brightness"
+    }
+  ],
+  "mappings": [
+    {
+      "key": "song:beneath-mask",
+      "kind": "entity",
+      "role": "persistent",
+      "owner": "SongPage",
+      "source": [
+        "expanded:song:beneath-mask"
+      ],
+      "target": [
+        "compact:song:beneath-mask"
+      ]
+    },
+    {
+      "key": "song:artwork",
+      "kind": "facet",
+      "role": "persistent",
+      "owner": "SongPage",
+      "source": [
+        "expanded:song:artwork"
+      ],
+      "target": [
+        "compact:song:artwork"
+      ]
+    },
+    {
+      "key": "song:title-game",
+      "kind": "facet",
+      "role": "persistent",
+      "owner": "SongPage",
+      "source": [
+        "expanded:song:title-game"
+      ],
+      "target": [
+        "compact:song:title-game"
+      ]
+    },
+    {
+      "key": "source:recording",
+      "kind": "relationship",
+      "role": "persistent",
+      "owner": "SongPage",
+      "source": [
+        "expanded:source:recording"
+      ],
+      "target": [
+        "compact:source:recording"
+      ]
+    },
+    {
+      "key": "main:scroll",
+      "kind": "state",
+      "role": "persistent",
+      "owner": "App.main",
+      "source": [
+        "expanded:main:scroll"
+      ],
+      "target": [
+        "compact:main:scroll"
+      ]
+    },
+    {
+      "key": "player:clock-mix",
+      "kind": "state",
+      "role": "persistent",
+      "owner": "Player",
+      "source": [
+        "expanded:player:clock-mix"
+      ],
+      "target": [
+        "compact:player:clock-mix"
+      ]
+    },
+    {
+      "key": "input:focus",
+      "kind": "state",
+      "role": "persistent",
+      "owner": "browserFocus",
+      "source": [
+        "expanded:input:focus"
+      ],
+      "target": [
+        "compact:input:focus"
+      ]
+    },
+    {
+      "key": "song:tabs-back",
+      "kind": "control",
+      "role": "persistent",
+      "owner": "SongPage",
+      "source": [
+        "expanded:song:tabs-back"
+      ],
+      "target": [
+        "compact:song:tabs-back"
+      ]
+    },
+    {
+      "key": "practice:mixer",
+      "kind": "control",
+      "role": "persistent",
+      "owner": "PracticeWorkspace",
+      "source": [
+        "expanded:practice:mixer"
+      ],
+      "target": [
+        "compact:practice:mixer"
+      ]
+    }
+  ],
+  "paths": {
+    "forward": "One sticky header contracts its real layout at scroll96, preserving existing title/artwork/control nodes and reclaiming viewport height.",
+    "reverse": "Below scroll24 the same nodes return to expanded layout.",
+    "interruption": "Scroll thresholds use hysteresis to avoid resize-induced oscillation.",
+    "fallback": "Without a main scroll pane the unscaled identity remains a static header; missing or failed artwork becomes existing song icon.",
+    "reducedMotion": "Same compact/expanded layout applies immediately without timed transitions."
+  },
+  "context": {
+    "identity": {
+      "mode": "preserve",
+      "commitment": "Song and exact active source remain the same."
+    },
+    "spatial": {
+      "mode": "preserve",
+      "commitment": "Artwork/title share stable header anchors; score gains usable viewport area when header contracts."
+    },
+    "context": {
+      "mode": "preserve",
+      "commitment": "Back, song tabs and source relation stay visible."
+    },
+    "state": {
+      "mode": "preserve",
+      "commitment": "Scroll, focus, current source clock and saved gain survive."
+    },
+    "control": {
+      "mode": "preserve",
+      "commitment": "Same native buttons and readable mixer remain mounted."
+    },
+    "task": {
+      "mode": "preserve",
+      "commitment": "Follow the passage while knowing the song and effective instrument balance."
+    }
+  },
+  "checkpoints": {
+    "start": "One 60 pixel artwork and title at scroll zero.",
+    "midpoint": "Below compact threshold header remains expanded with same mounted nodes.",
+    "settled": "At scroll96+ header height decreases by at least30px; visible timeline area increases.",
+    "reverse": "Below scroll24 restores expanded height and original nodes.",
+    "interrupted": "Rapid180 to0 retains same header/media owner and restores expanded layout.",
+    "fallback": "Failed image dispatch shows icon without losing the header.",
+    "reducedMotion": "Same contracted height without timed transitions."
+  }
+}

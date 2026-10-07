@@ -1,0 +1,13 @@
+# Original section and Logic stem pilot — October 7
+
+Local `npm run check` passes strict TypeScript, 55 domain/catalog/practice/store/engine tests, one React lifecycle test, 59 Chrome browser scenarios and production build, with zero failures/skips. `node scripts/check-assets.mjs` verifies all 22 archive media paths. Private build verifies fourteen reference sources and one six-stem set before staging.
+
+Independent GPT-6 Astra reviewed source/hash ownership, persistence, coverage and transport integration. The pending section-link lookup initially could replace newer manual intent after an API retry; central target retirement corrects it. Regression cases cover untouched retry, newer manual A/B and newer Repeat. The new phone case exposed native full-range input margins causing four-pixel overflow; margin zero corrects it. No unresolved blocking review findings remain.
+
+Synthetic real-browser scenarios use six generated WAV tracks, actual Web Audio clocks/decoding, instrument gain commands and the real SQLite API. They verify equal scheduled starts/offsets, mute/multiple solo/gain without restarts, loop/browse/pause, stable saved UUIDs across rename/reload, stale source/edits, incomplete coverage, decode failure and abort cleanup. Desktop and 375-pixel phone controls are exercised; this is not physical iPhone acceptance.
+
+Actual Logic Pro 12.3.1 GUI produced six raw 90-second stems from Beneath the Mask original seconds 30–120 in a separate task-owned project. All assets fully decode and share 3,969,000 stereo frames at 44.1 kHz. Numerical recombination over source 50–55 seconds has best lag 0 samples and correlation0.999908. The private manifest records exact source identity, hashes, bytes, frame count, coverage and recipe. No new model or hosted upload was used.
+
+The durable existing loopback service now mounts the private practice API and retains the existing Tailnet route. Actual private browser verification saved the descriptive Pilot passage 30–120 section, copied/reloaded its semantic link paused, loaded all real stems, played, changed gain/mute/solo, browsed Sessions, repeated original 58–59 seconds and paused. Console was clean. Live phone-sized rendering showed no horizontal overflow. The final handoff leaves playback paused and mix reset.
+
+Remaining gate: Owen's listening judgment on instrument bleed/artifacts and usefulness; physical phone memory/audio behavior remains unverified. Named Verse/Chorus boundaries are user edits, not generated guesses. Full-source/batch stem generation and bars/chords remain deferred. Public main is unchanged; the feature branch and private runtime are retained for the draft review.
