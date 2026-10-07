@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { JamRecorder } from "./JamRecorder";
+import type { Jam, JamBackingMix } from "./jamData";
 import { PracticeWorkspace } from "./PracticeWorkspace";
 import { nextPlaybackRate, SpeedControl } from "./SpeedControl";
 import { loadChunkedStemPlayback } from "./ChunkedStemPlaybackEngine";
@@ -17,6 +19,7 @@ import {
   AudioLines,
   Download,
   Pause,
+  Square,
   Play,
   Video,
   X,
@@ -112,6 +115,7 @@ export function Player({
   onSong,
   onVideoVisibility,
   onPlayingChange,
+  jamToReplay, jamReplayRequest, jamReplayStart, commentSeek, onJamSaved, onJamCaptureBusy,
   onPracticeTargetChange,
   practiceHost,
 }: {
@@ -135,8 +139,22 @@ export function Player({
   onSong(): void;
   onVideoVisibility(value: boolean): void;
   onPlayingChange?(value: boolean): void;
+  jamToReplay?: Jam | null;
+  jamReplayRequest?: number;
+  jamReplayStart?: number;
+  commentSeek?: { request: number; seconds: number };
+  onJamSaved?(jam: Jam): void;
+  onJamCaptureBusy?(busy: boolean): void;
   onPracticeTargetChange(href: string): void;
 }) {
+  const [jamLocked, setJamLocked] = useState(false);
+  const [jamMixAudition, setJamMixAudition] = useState(false);
+  const jamMixAuditionRef = useRef(false);
+  const jamContinuityError = useRef("");
+  const jamNativeStart = useRef(0);
+  const [stemReload, setStemReload] = useState(0);
+  const jamLockRef = useRef(false), jamStop = useRef<(() => void) | null>(null);
+  const modeRef = useRef<"audio" | "stems" | "video">("audio");
   const [sourceDuration, setSourceDuration] = useState(
     Number(row.duration_seconds) || 0,
   );
@@ -187,6 +205,7 @@ export function Player({
   const [mode, setMode] = useState<"video" | "audio" | "stems">(
     preferredMode || (row.has_audio === "yes" ? "audio" : "video"),
   );
+  modeRef.current = mode;
   const repeatRef = useRef(repeat);
   repeatRef.current = repeat && mode !== "video";
   const stableStemSet = useRef(practiceData?.stemSet ?? null);
@@ -407,6 +426,7 @@ export function Player({
         setRate: rate => { audio.preservesPitch = true; audio.playbackRate = rate; },
       };
       audio.onloadedmetadata = loaded;
+      audio.onwaiting = audio.onstalled = () => { if (!disposed && jamLockRef.current && playingRef.current && audio.currentTime > jamNativeStart.current + .005) jamContinuityError.current = "Backing continuity was interrupted."; };
       audio.onplay = () => {
         if (!disposed && !audio.paused) updatePlaying(true);
       };
@@ -427,6 +447,7 @@ export function Player({
         fail("The audio could not load. Open the source audio below.");
       dispose = () => {
         ++playEpoch;
+        audio.onwaiting = audio.onstalled = null;
         audio.onpause = null;
         audio.onplay = null;
         audio.onended = null;
@@ -577,7 +598,7 @@ export function Player({
       backend.current = null;
       readyRef.current = false;
     };
-  }, [mode, row, providerStemSet]);
+  }, [mode, row, providerStemSet, stemReload]);
 
   useEffect(() => {
     if (!autoPlay || !playRequest || initialAudioSelection.current || (linkedSection.current && !targetHandled.current)) return;
@@ -632,6 +653,7 @@ export function Player({
     onPracticeTargetChange(href);
   }
   function changeRange(next: LoopRange) {
+    if (jamLockRef.current) return;
     const message = validateLoopRange(next, baseRange.full);
     setPracticeError(message);
     if (message) return;
@@ -652,6 +674,7 @@ export function Player({
     writePractice(next, repeat, "");
   }
   function changeRepeat(enabled: boolean) {
+    if (jamLockRef.current) return;
     if (mode === "video" || !row.audio_file || !readyRef.current || error || !stemRangeValid || resolvingSection)
       return;
     const next = { start: range.start, end: range.end };
@@ -683,6 +706,7 @@ export function Player({
     return copy(href, "Practice link");
   }
   function seek(value: number, full = false) {
+    if (jamLockRef.current) return;
     if (!readyRef.current || resolvingSection) return;
     if (mode === "stems" && (!stemSet || !Number.isFinite(value) || value < stemSet.start || value > stemSet.end)) {
       setPracticeError("Stems cover the disclosed preview only. Choose Audio to seek through the full recording."); return;
@@ -704,6 +728,7 @@ export function Player({
     backend.current?.seek(next);
   }
   function toggle() {
+    if (jamLockRef.current) { jamStop.current?.(); return; }
     if (!readyRef.current || initialAudioSelection.current || resolvingSection || !stemRangeValid) return;
     if (mode === "video" && !playingRef.current) setVideoVisible(true);
     if (playingRef.current || wantsPlay.current) {
@@ -720,6 +745,7 @@ export function Player({
     }
   }
   function switchMode(next: "video" | "audio" | "stems") {
+    if (jamLockRef.current) return;
     if (mode === next) {
       if (next === "video") setVideoVisible(true);
       return;
@@ -753,6 +779,7 @@ export function Player({
   }
 
   function selectSection(section: PracticeSection, play = true) {
+    if (jamLockRef.current) return;
     const next = { start: section.start, end: section.end };
     const message = validateLoopRange(next, baseRange.full);
     if (message || (mode === "stems" && !covered(next))) {
@@ -789,6 +816,7 @@ export function Player({
     selectSection(section, false);
   }
   function changeMix(id: string, value: StemMixValue) {
+    if (jamLockRef.current && !jamMixAuditionRef.current) return;
     stemEngine.current?.setMix(id, value);
     setStemMix(current => ({ ...current, [id]: value }));
   }
@@ -861,12 +889,14 @@ export function Player({
   const videoDownload = row.video_file_id ? driveDownload(row.video_file_id) : "";
   const available = ready && !error && !audioRoutingPending && !resolvingSection && stemRangeValid;
   function chooseAudio(original = false) {
+    if (jamLockRef.current) return;
     initialAudioSelection.current = false; setAudioRoutingPending(false);
     setOriginalPreferred(original);
     switchMode(!original && stemSet ? "stems" : "audio");
   }
   const displayedRate = mode === "video" ? videoRate : playbackRate;
   function applySpeed(rate: number) {
+    if (jamLockRef.current) return;
     // Provider controls can change the confirmed speed without changing our
     // preference. A repeated preference must still command the video backend.
     if (mode === "video") backend.current?.setRate?.(rate);
@@ -885,12 +915,67 @@ export function Player({
     const next = Math.max(0, Math.min(baseRange.full, seconds));
     seek(next, !(repeat && next >= range.start && next < range.end));
   }
+  useEffect(() => {
+    if (!commentSeek || jamLockRef.current || !ready) return;
+    updatePlaying(false); backend.current?.pause(); seekTimeline(commentSeek.seconds);
+  }, [commentSeek?.request, ready]);
+  const pauseForJam = () => { updatePlaying(false); backend.current?.pause(); };
+  async function prepareJamCapture() {
+    jamContinuityError.current = "";
+    if (!readyRef.current || modeRef.current === "video") throw new Error("Prepare local Audio before recording a jam.");
+    const set = stemSet;
+    if (modeRef.current === "stems" && set) {
+      const groupFrames = set.chunks ? Math.max(...set.chunks.map(chunk => chunk.frameCount)) * 3 : set.frames;
+      const decodeBudget = groupFrames * set.channels * 4 * set.tracks.length + 120.5 * 48000 * 2 * 4;
+      if (decodeBudget > 300 * 1024 * 1024) throw new Error("This stem set leaves insufficient memory for mic capture. Choose Original mix.");
+    }
+    const captureStart = loopRange ? rangeRef.current.start : Math.max(rangeRef.current.start, Math.min(rangeRef.current.end, backend.current?.time() ?? position.current));
+    pauseForJam(); setRepeat(false); repeatRef.current = false; fullMode.current = false;
+    stemEngine.current?.setLoop(null);
+    jamNativeStart.current = captureStart; position.current = captureStart; setTime(position.current);
+    if (stemEngine.current && modeRef.current === "stems") await stemEngine.current.seek(position.current);
+    else backend.current?.seek(position.current);
+    return { start: captureStart, end: rangeRef.current.end };
+  }
+  async function suspendBackingForMicDecode(): Promise<() => void> {
+    pauseForJam();
+    if (modeRef.current !== "stems" || !stemEngine.current) return () => {};
+    const engine = stemEngine.current;
+    readyRef.current = false; setReady(false); backend.current = null; stemEngine.current = null;
+    await engine.destroy();
+    return () => setStemReload(value => value + 1);
+  }
+  async function prepareJamReplay(mix: JamBackingMix, at: number) {
+    jamContinuityError.current = "";
+    const sourceId = mix.source.recording.kind === "reference" ? `ref:${mix.source.recording.id}` : mix.source.recording.id;
+    if (sourceId !== row.file || !practiceData || mix.source.sha256 !== practiceData.sourceHash) throw new Error("Open the jam's exact backing recording first. Mic only remains available.");
+    if (mix.mode === "stems" && (!stemSet || !mix.stems || stemSet.id !== mix.stems.setId || stemSet.tracks.some(track => mix.stems?.tracks.find(value => value.id === track.id)?.assetHash !== track.sha256))) throw new Error("The captured stem revision is unavailable. Mic only remains available.");
+    pauseForJam(); setRepeat(false); repeatRef.current = false; fullMode.current = true;
+    const desired = mix.mode === "stems" ? "stems" : "audio";
+    setLoopRange(null); rangeRef.current = baseRange;
+    const capturedMix = Object.fromEntries((mix.stems?.tracks || []).map(track => [track.id, { level: track.level, muted: track.muted, solo: track.solo }]));
+    stemMixRef.current = capturedMix; setStemMix(capturedMix);
+    rateRef.current = mix.playbackRate; onRateChange(mix.playbackRate);
+    jamNativeStart.current = at; position.current = at; setTime(at);
+    if (modeRef.current !== desired) { readyRef.current = false; setMode(desired); }
+    const deadline = performance.now() + 20000;
+    while (!readyRef.current || modeRef.current !== desired) {
+      if (!jamLockRef.current) throw new Error("Jam replay cancelled.");
+      if (performance.now() > deadline) throw new Error("The captured backing could not prepare. Mic only remains available.");
+      await new Promise(resolve => setTimeout(resolve, 25));
+    }
+    if (desired === "stems" && stemEngine.current) {
+      stemEngine.current.setLoop(null);
+      for (const [id, value] of Object.entries(capturedMix)) stemEngine.current.setMix(id, value);
+      await stemEngine.current.setRate(mix.playbackRate); await stemEngine.current.seek(at);
+    } else { backend.current?.setRate?.(mix.playbackRate); backend.current?.seek(at); }
+  }
   const workspace = <PracticeWorkspace
     data={practiceData} loading={sectionsLoading} error={sectionsError}
     time={time} duration={baseRange.full} range={{ start: range.start, end: range.end }}
     defaultRange={{ start: baseRange.start, end: baseRange.end }} repeat={repeat && mode !== "video"}
-    activeSectionId={activeSectionId} available={available && mode !== "video"}
-    stemsActive={mode === "stems"} mix={stemMix}
+    activeSectionId={activeSectionId} available={available && mode !== "video" && !jamLocked}
+    stemsActive={mode === "stems"} mix={stemMix} mixAvailable={available && mode !== "video" && (!jamLocked || jamMixAudition)}
     notice={buffering ? "Buffering instruments…" : mode === "stems" && stemSet?.coverage === "excerpt" ? `Instrument preview · original ${formatTime(stemSet.start)}–${formatTime(stemSet.end)}` : ""}
     practiceError={practiceError} onSeek={seekTimeline} onRange={changeRange} onRepeat={changeRepeat}
     onCopy={copyPractice} onSection={section => selectSection(section)}
@@ -902,10 +987,19 @@ export function Player({
     onOriginal={() => chooseAudio(true)} onInstrumentMix={() => chooseAudio(false)}
   />;
   return <>
+    <JamRecorder host={practiceHost} songId={identity.songId}
+      recording={row.file.startsWith("ref:") ? { kind: "reference", id: row.file.slice(4) } : { kind: "archive", id: row.file }}
+      sourceMode={mode} ready={available} activeSectionId={activeSectionId} rate={playbackRate}
+      mix={stemMix}
+      getClock={() => ({ time: backend.current?.time() ?? position.current, playing: playingRef.current, buffering: stemEngine.current && "getStatus" in stemEngine.current ? stemEngine.current.getStatus().buffering : buffering, error: error || jamContinuityError.current, end: rangeRef.current.end, rate: rateRef.current })}
+      prepareCapture={prepareJamCapture} suspendBackingForDecode={suspendBackingForMicDecode} prepareReplay={prepareJamReplay} pauseBacking={pauseForJam} playBacking={() => backend.current?.play()}
+      onMixAudition={value => { jamMixAuditionRef.current = value; setJamMixAudition(value); }}
+      onLocked={value => { jamLockRef.current = value; setJamLocked(value); onJamCaptureBusy?.(value); }} registerStop={stop => { jamStop.current = stop; }}
+      jamToReplay={jamToReplay} jamReplayRequest={jamReplayRequest} jamReplayStart={jamReplayStart} onJamSaved={onJamSaved} />
     <aside className={`player compact-player ${mode === "video" ? "video-mode" : "audio-mode"} ${mode === "stems" ? "stem-mode" : ""} ${videoVisible ? "video-open" : ""}`} aria-label="Music player">
       <header className="player-heading"><div><span className="player-status">{buffering ? "BUFFERING" : playing ? "NOW PLAYING" : "READY TO PLAY"}</span><button className="player-song" disabled={!identity.songId} onClick={onSong}>{identity.title || title(row)}</button><p className="player-game" title={identity.referenceLabel}>{isTake ? "Our take" : identity.referenceLabel || (identity.kind === "original" ? "Original soundtrack" : identity.kind)}{!identity.referenceLabel && identity.artist ? ` · ${identity.artist}` : ""}</p></div></header>
-      <div className="transport"><button className="play-button" onClick={toggle} disabled={!available || !controllable} aria-label={playing || (buffering && wantsPlay.current) ? "Pause selected recording" : "Play selected recording"}>{playing || (buffering && wantsPlay.current) ? <Pause size={19} fill="currentColor" /> : <Play size={19} fill="currentColor" />}</button><SpeedControl rate={displayedRate} disabled={!available || !controllable || (mode === "video" && videoRates.length < 2)} video={mode === "video"} onStep={stepSpeed} onToggle={toggleSpeed} /><span className="time">{formatTime(time)}</span><input aria-label="Seek full recording" type="range" min="0" max={baseRange.full} step="any" value={Math.max(0, Math.min(baseRange.full, time))} disabled={!available || !controllable || !baseRange.full} onChange={event => seekTimeline(Number(event.target.value))} /><span className="time">{baseRange.full ? formatTime(baseRange.full) : "—:—"}</span></div>
-      <div className="media-switch" role="group" aria-label="Playback options"><button aria-pressed={mode !== "video"} disabled={row.has_audio !== "yes"} onClick={() => chooseAudio()}><AudioLines size={15} /> Audio</button><button aria-pressed={mode === "video" && videoVisible} disabled={row.has_video !== "yes"} onClick={() => mode === "video" && videoVisible ? closeVideo() : switchMode("video")}><Video size={15} /> Video</button><button className="open-practice-button" onClick={onSong} aria-label="Open practice">Practice</button>{(audioDownload || videoDownload) && <details className="player-downloads"><summary aria-label="Download files"><Download size={15} /><span>Download</span></summary><div className="player-download-links">{audioDownload && <a href={audioDownload} target="_blank" rel="noopener noreferrer" download><AudioLines size={15} />Download audio</a>}{videoDownload && <a href={videoDownload} target="_blank" rel="noopener noreferrer" download><Video size={15} />Download video</a>}</div></details>}<span className="mode-status" role="status">{error ? "Unavailable" : buffering ? "Buffering…" : audioRoutingPending || !ready ? "Loading…" : playing ? "Playing" : "Paused"}</span></div>
+      <div className="transport"><button className="play-button" onClick={toggle} disabled={!jamLocked && (!available || !controllable)} aria-label={jamLocked ? "Stop jam" : playing || (buffering && wantsPlay.current) ? "Pause selected recording" : "Play selected recording"}>{jamLocked ? <Square size={19} fill="currentColor" /> : playing || (buffering && wantsPlay.current) ? <Pause size={19} fill="currentColor" /> : <Play size={19} fill="currentColor" />}</button><SpeedControl rate={displayedRate} disabled={jamLocked || !available || !controllable || (mode === "video" && videoRates.length < 2)} video={mode === "video"} onStep={stepSpeed} onToggle={toggleSpeed} /><span className="time">{formatTime(time)}</span><input aria-label="Seek full recording" type="range" min="0" max={baseRange.full} step="any" value={Math.max(0, Math.min(baseRange.full, time))} disabled={jamLocked || !available || !controllable || !baseRange.full} onChange={event => seekTimeline(Number(event.target.value))} /><span className="time">{baseRange.full ? formatTime(baseRange.full) : "—:—"}</span></div>
+      <div className="media-switch" role="group" aria-label="Playback options"><button aria-pressed={mode !== "video"} disabled={jamLocked || row.has_audio !== "yes"} onClick={() => chooseAudio()}><AudioLines size={15} /> Audio</button><button aria-pressed={mode === "video" && videoVisible} disabled={jamLocked || row.has_video !== "yes"} onClick={() => mode === "video" && videoVisible ? closeVideo() : switchMode("video")}><Video size={15} /> Video</button><button className="open-practice-button" onClick={onSong} aria-label="Open practice">Practice</button>{(audioDownload || videoDownload) && <details className="player-downloads"><summary aria-label="Download files"><Download size={15} /><span>Download</span></summary><div className="player-download-links">{audioDownload && <a href={audioDownload} target="_blank" rel="noopener noreferrer" download><AudioLines size={15} />Download audio</a>}{videoDownload && <a href={videoDownload} target="_blank" rel="noopener noreferrer" download><Video size={15} />Download video</a>}</div></details>}<span className="mode-status" role="status">{error ? "Unavailable" : buffering ? "Buffering…" : audioRoutingPending || !ready ? "Loading…" : playing ? "Playing" : "Paused"}</span></div>
       {error && <p className="playback-error" role="alert">{error}{row.audio_file && <button onClick={() => chooseAudio(true)}>Original mix</button>}</p>}
       {practiceError && !practiceHost && <p className="practice-link-error" role="alert">{practiceError}</p>}
       <div className="video-float" hidden={mode !== "video" || !videoVisible}>

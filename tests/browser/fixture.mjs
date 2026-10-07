@@ -3,6 +3,7 @@
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { createPracticeHandler } from "../../scripts/practice-store.mjs";
+import { createJamHandler } from "../../scripts/jam-store.mjs";
 import { cp, mkdir, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { extname, join } from "node:path";
@@ -492,10 +493,11 @@ export async function createFixture(directory, {flac=false,seconds=2.5}={}) {
   const waveformBytes=Buffer.from(JSON.stringify(waves));await writeFile(join(directory,'reference-audio/stems/waveforms.json'),waveformBytes);
   stemSet.waveforms={file:'waveforms.json',bytes:waveformBytes.length,sha256:sha256(waveformBytes),bins};
   await writeFile(join(directory,'reference-audio/stems/manifest.json'),JSON.stringify({version:flac?2:1,stemSets:[stemSet]}));
-  let practice;
+  let practice, jams;
   const server = createServer(async (request, response) => {
     const path = decodeURIComponent(new URL(request.url, "http://x").pathname);
     if (practice && await practice(request,response,path)) return;
+    if (jams && await jams(request,response,path)) return;
     const file = join(directory, path === "/" ? "index.html" : path);
     try {
       const info = await stat(file);
@@ -530,12 +532,13 @@ export async function createFixture(directory, {flac=false,seconds=2.5}={}) {
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   const { port } = server.address();
   practice = createPracticeHandler({repoRoot:directory,allowedOrigins:[`http://127.0.0.1:${port}`]});
+  jams = createJamHandler({repoRoot:directory,allowedOrigins:[`http://127.0.0.1:${port}`],storageGuard:()=>{}});
   return {
     origin: `http://127.0.0.1:${port}`,
     referenceAudio,
     sourceHash,
     stemSet,
     youtubeApi: youtubeApi(videoSource),
-    close: () => new Promise((resolve) => server.close(() => {practice.close();resolve();})),
+    close: () => new Promise((resolve) => server.close(() => {practice.close();jams.close();resolve();})),
   };
 }

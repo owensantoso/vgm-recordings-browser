@@ -262,3 +262,13 @@ test("saved link creation rejects missing/invalid UUIDs or source identities", (
   for (const id of ["", "Verse", "../section", "00000000-0000-0000-0000-000000000000", sectionId + "extra"]) assert.throws(() => makeSectionLink(base, source, id, true));
   for (const id of ["", " ", "bad\u0000source"]) assert.throws(() => makeSectionLink(base, id, sectionId, true));
 });
+test('source practice links remove unrelated jam/comment clocks', () => {
+  const href = 'https://example.test/vgm/?view=songs&song=alpha&jam=old&comment=note&clock=mic&at=12';
+  const urls = [makePracticeLink(href, 'ref:alpha', {start:1,end:3}, false), makeSectionLink(href, 'ref:alpha', '555c977f-4ee7-4844-bd06-62ca028cb5f2', false)];
+  for (const value of urls) {
+    const url = new URL(value);
+    for (const key of ['jam','comment','clock','at']) assert.equal(url.searchParams.has(key), false);
+    assert.equal(url.searchParams.get('play'), 'ref:alpha');
+    assert.equal(url.searchParams.get('song'), 'alpha');
+  }
+});

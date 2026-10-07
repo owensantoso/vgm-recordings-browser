@@ -108,6 +108,7 @@ export function makePracticeLink(
   const error = validateLoopRange(range, range.end);
   if (error) throw new Error(error);
   const url = new URL(href);
+  for (const key of ["jam", "comment", "clock", "at"]) url.searchParams.delete(key);
   url.searchParams.set("play", sourceId);
   url.searchParams.delete("section");
   url.searchParams.set(
@@ -124,6 +125,7 @@ export function makeSectionLink(href: string, sourceId: string, sectionId: strin
   if (!validSourceId(sourceId) || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(sectionId))
     throw new Error("Choose a saved section before copying its link.");
   const url = new URL(href);
+  for (const key of ["jam", "comment", "clock", "at"]) url.searchParams.delete(key);
   url.searchParams.set("play", sourceId);
   url.searchParams.set("section", sectionId);
   url.searchParams.delete("t");
