@@ -5,6 +5,7 @@ import { open } from 'node:fs/promises';
 import { resolve, dirname } from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { createPracticeStore } from './practice-store.mjs';
+import { parseCsv } from '../src/recordings.ts';
 
 export const JAM_LIMITS = Object.freeze({ encodedBytes: 32 * 1024 ** 2, durationSeconds: 120.5, captureSeconds: 120, decodedBytes: 120.5 * 48000 * 2 * 4, metadataBytes: 12000 });
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
@@ -120,6 +121,34 @@ export function createJamStore({ repoRoot, storageGuard = jamStorageGuard, valid
     CREATE INDEX IF NOT EXISTS jam_comments_target ON jam_comments(target_key, song_id);`);
   const get = db.prepare('SELECT * FROM jams WHERE id=?');
   const practice = createPracticeStore({ repoRoot });
+  const archiveAudioCache = new Map();
+  function archiveAudio(ref) {
+    try {
+      const item = parseCsv(readFileSync(resolve(repoRoot, 'data/recordings.csv'), 'utf8')).find(row => row.file === ref.id);
+      const name = item?.audio_file;
+      if (!name || /[\\/]/.test(name) || name === '.' || name === '..' || !/\.(?:m4a|mp3|wav|flac|ogg|webm)$/i.test(name)) return null;
+      const canonicalRoot = realpathSync(repoRoot), root = realpathSync(resolve(repoRoot, 'audio'));
+      if (root !== resolve(canonicalRoot, 'audio')) return null;
+      const path = resolve(root, name), stat = lstatSync(path, { bigint: true });
+      if (!stat.isFile() || stat.size <= 0n || stat.size > 512n * 1024n ** 2n || dirname(realpathSync(path)) !== root) return null;
+      const signature = info => [info.dev, info.ino, info.size, info.mtimeNs, info.ctimeNs].join(':');
+      const key = signature(stat), cached = archiveAudioCache.get(path);
+      if (cached?.key === key) return { recording: ref, ...cached.audio };
+      // Metadata-only probing never decodes/copies the complete archive recording.
+      if (!processPreflight('archive-audio-metadata-probe')) return null;
+      const command = process.platform === 'darwin' && existsSync('/opt/homebrew/bin/ffprobe') ? '/opt/homebrew/bin/ffprobe' : 'ffprobe';
+      const probe = spawnSync(command, ['-v', 'error', '-max_alloc', '67108864', '-threads', '1', '-protocol_whitelist', 'file,pipe', '-show_entries', 'stream=codec_type,duration,sample_rate,channels:format=duration', '-of', 'json', path], { timeout: 8000, maxBuffer: 64 * 1024, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+      if (probe.status !== 0 || probe.error) return null;
+      const info = JSON.parse(probe.stdout), stream = info.streams?.[0];
+      if (info.streams?.length !== 1 || stream?.codec_type !== 'audio' || !Number.isFinite(Number(stream.sample_rate)) || Number(stream.sample_rate) <= 0 || !Number.isSafeInteger(Number(stream.channels)) || Number(stream.channels) < 1) return null;
+      const durationSeconds = Number(stream.duration ?? info.format?.duration);
+      if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) return null;
+      const audio = { sha256: fileHash(path), durationSeconds };
+      if (signature(lstatSync(path, { bigint: true })) !== key || dirname(realpathSync(path)) !== root) return null;
+      archiveAudioCache.set(path, { key, audio });
+      return { recording: ref, ...audio };
+    } catch { return null; } // Recording identity remains usable for untimed notes.
+  }
   function catalog() { return JSON.parse(readFileSync(resolve(repoRoot, 'data/catalog.json'), 'utf8')); }
   function song(id) { if (typeof id !== 'string' || !catalog().songs?.some(s => s.id === id)) fail(400, 'Choose an existing song.'); }
   function audioFile(row) {
@@ -141,7 +170,7 @@ export function createJamStore({ repoRoot, storageGuard = jamStorageGuard, valid
     }
     if (ref.kind === 'archive') {
       const rows = data.recordings?.filter(r => r.file === ref.id) ?? []; if (!rows.length) fail(404, 'Archive recording not found.');
-      return { recording: ref, songIds: [...new Set(rows.map(r => r.song_id).filter(Boolean))], label: ref.id, audio: null, stemSet: null, sections: [] };
+      return { recording: ref, songIds: [...new Set(rows.map(r => r.song_id).filter(Boolean))], label: ref.id, audio: archiveAudio(ref), stemSet: null, sections: [] };
     }
     const row = get.get(uuid(ref.id)); if (!row) fail(404, 'Jam not found.');
     let audio = null;

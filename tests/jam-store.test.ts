@@ -124,6 +124,44 @@ test('comments retain song context, explicit recording clocks, all timestamps an
   writeFileSync(join(f.repoRoot,'reference-audio',f.asset.audio_file),'changed');assert.equal(f.store.comment(input).id,untimed.id);assert.equal(f.store.comments(target,'alpha').length,3);
 });
 
+test('archive comments use measured local audio and hash; CSV duration and changed files cannot forge a clock',t=>{
+  const f=fixture(t),ref={kind:'archive',id:'take alpha.wav'},root=join(f.repoRoot,'audio');mkdirSync(root);
+  const writeCsv=(file='take, audio.wav')=>writeFileSync(join(f.repoRoot,'data/recordings.csv'),`file,audio_file,duration_seconds\n"take alpha.wav","${file}",999\n`);
+  writeCsv();assert.equal(f.store.context(ref).audio,null);
+  const bytes=wav({frames:16000}),path=join(root,'take, audio.wav');writeFileSync(path,bytes);
+  const audio=f.store.context(ref).audio;
+  assert.deepEqual(audio,{recording:ref,sha256:hash(bytes),durationSeconds:2});
+  assert.deepEqual(f.store.context(ref).audio,audio);
+  const target={kind:'recording',recording:ref,at:{kind:'point',seconds:1.5,audio}};
+  const input={id:randomUUID(),songId:'alpha',target,instrument:{kind:'custom',label:'Piano'},text:'Our fill here'};
+  const point=f.store.comment(input);assert.deepEqual(point.target,target);
+  const range=f.store.comment({...input,id:randomUUID(),songId:'beta',target:{...target,at:{kind:'range',start:.5,end:1.5,audio}}});assert.equal(range.target.at.end,1.5);
+  assert.throws(()=>f.store.comment({...input,id:randomUUID(),target:{...target,at:{kind:'point',seconds:2.1,audio}}}),status(400));
+  assert.throws(()=>f.store.comment({...input,id:randomUUID(),target:{...target,at:{kind:'point',seconds:1,audio:{...audio,durationSeconds:999}}}}),status(409));
+  const sameSize=Buffer.from(bytes);sameSize[100]=1;writeFileSync(path,sameSize);
+  assert.deepEqual(f.store.context(ref).audio,{recording:ref,sha256:hash(sameSize),durationSeconds:2});
+  assert.throws(()=>f.store.comment({...input,id:randomUUID()}),status(409));
+  const changed=wav({frames:8000});writeFileSync(path,changed);
+  assert.deepEqual(f.store.context(ref).audio,{recording:ref,sha256:hash(changed),durationSeconds:1});
+  assert.throws(()=>f.store.comment({...input,id:randomUUID()}),status(409));
+  assert.equal(f.store.comment(input).id,point.id); // A persisted retry remains the same historical comment.
+  assert.equal(f.store.comments({...target,at:null},'alpha').length,1);
+  writeCsv('missing.wav');assert.equal(f.store.context(ref).audio,null);
+  assert.throws(()=>f.store.comment({...input,id:randomUUID()}),status(409));
+});
+
+test('archive local audio mapping rejects traversal, external paths, symlinks and malformed media',t=>{
+  const f=fixture(t),ref={kind:'archive',id:'take alpha.wav'},root=join(f.repoRoot,'audio');mkdirSync(root);
+  const outside=join(f.repoRoot,'outside.wav');writeFileSync(outside,wav());
+  const map=file=>writeFileSync(join(f.repoRoot,'data/recordings.csv'),`file,audio_file\n"take alpha.wav","${file}"\n`);
+  for(const name of ['../outside.wav',outside,'https://example.test/audio.wav','nested/file.wav','..\\outside.wav','.']) {map(name);assert.equal(f.store.context(ref).audio,null,name);}
+  symlinkSync(outside,join(root,'linked.wav'));map('linked.wav');assert.equal(f.store.context(ref).audio,null);
+  writeFileSync(join(root,'invalid.wav'),'not audio');map('invalid.wav');assert.equal(f.store.context(ref).audio,null);
+  // Missing verification affects timing, not the archive's untimed note identity.
+  const note=f.store.comment({id:randomUUID(),songId:'alpha',target:{kind:'recording',recording:ref,at:null},instrument:null,text:'Untimed rehearsal note'});assert.equal(note.target.at,null);
+  rmSync(root,{recursive:true});mkdirSync(join(f.repoRoot,'external-audio'));writeFileSync(join(f.repoRoot,'external-audio/valid.wav'),wav());symlinkSync(join(f.repoRoot,'external-audio'),root);map('valid.wav');assert.equal(f.store.context(ref).audio,null);
+});
+
 test('free jam can name song-associated stem; its comment keeps saved instrument despite stem drift',async t=>{
   const f=fixture(t),stem=stems(f),ctx=f.store.context(f.source.recording);f.input.instrument={kind:'stem',source:f.source,stemSetId:ctx.stemSet.id,stemSetRevision:ctx.stemSet.revision,trackId:'piano',labelSnapshot:'Piano'};
   const jam=await f.store.saveFile(f.input,f.put(),'audio/wav');writeFileSync(join(stem.root,'piano.wav'),'changed');
