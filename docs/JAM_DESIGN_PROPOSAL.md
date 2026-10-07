@@ -44,22 +44,21 @@ Purpose: **Operate** — recognize the current source while scrolling a practice
 score, and see each instrument's effective contribution without weakening controls.
 
 `SongPage` owns one sticky identity (artwork, title/game, back link and view tabs).
-The header keeps fixed layout geometry; artwork and title scale continuously from
-scroll 0 to 96 px (60→40.8 px art, title 100→86%). Reverse and interrupted scroll
-use the current scroll position, with no completion callbacks or duplicate owners.
-The main pane's actual padding determines its sticky edge on resize. The media
-engine, source, focus, tabs and score offset stay unchanged. Reduced Motion has
-no timed transition: the same derived end geometry applies immediately.
+The header contracts its real layout at scroll 96 px and expands below 24 px.
+Hysteresis prevents header resizing from causing threshold oscillation. Artwork,
+title, tabs and media owner stay mounted; compact layout reclaims viewport space.
+The main pane's actual padding determines its sticky edge. Reduced Motion changes
+the same layout immediately without a timed transition.
 
 Active reference thumbnail wins, then this song's original/reference artwork; an
 active linked take uses its footage thumbnail. Missing/failed reference art falls
 back to the existing song icon. No unrelated playing source supplies this song's art.
 
-Waveform opacity: 18% at effective zero, 34.4% at 20% gain, 59% at 50%, 100% at unity.
-Above unity, brightness/saturation increases through 200%; labels, controls, numeric
-percentages, playhead and seek/focus feedback retain normal readability. Mute/solo
-compute effective silence without altering saved levels. Original-mix mode displays
-unity contribution rather than pretending retained inactive stem controls apply.
+Waveform opacity follows one scale: 18% at effective zero, 26.2% at 20% gain,
+38.5% at 50%, 59% at unity, 79.5% at 150%, and 100% at 200%. The same darker
+ink is used throughout; no brightness filter lightens boosted tracks. Labels,
+controls, playhead and focus retain normal readability. Mute/solo compute effective
+silence without altering saved levels. Original-mix mode displays unity.
 
 Focused verification: desktop, 375 px phone and Reduced Motion; before/midpoint/
 compact/reverse/interruption geometry, single owner, gain levels 20/50/100/150/200,
@@ -155,7 +154,7 @@ Escape or **Cancel** during pre-roll discards. Nothing worth keeping exists yet.
 
 - At punch-in, freeze a snapshot: `{sourceId, sourceFingerprint, stem gains/mute/solo, speed, startSourceTime, loop}`.
 - Replay defaults to that snapshot.
-- The take appears as a **seventh lane** ("Your take · Piano (custom)"). It uses the same 0–200% gain and brightness rules as the stems.
+- The take appears as a **seventh lane** ("Your take · Piano (custom)"). It uses the same 0–200% gain-intensity rules as the stems.
 - Audition edits are **transient**. Show a **Reset to recorded mix** chip whenever the mix deviates. A "save as default" option is deferred.
 
 ## 8. Alignment and latency honesty

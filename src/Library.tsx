@@ -452,12 +452,15 @@ export function SongPage({
     const scrollPane = header?.closest(".workspace-main");
     if (!header || !scrollPane || songTab !== "practice") return;
     let frame = 0;
+    let compact = header.dataset.compact === "true";
     const update = () => {
       frame = 0;
-      const progress = Math.max(0, Math.min(1, scrollPane.scrollTop / 96));
+      // Separate enter/exit thresholds keep the smaller layout from oscillating
+      // when its own height change adjusts the scroll pane's anchor.
+      if (!compact && scrollPane.scrollTop >= 96) compact = true;
+      else if (compact && scrollPane.scrollTop <= 24) compact = false;
+      header.dataset.compact = String(compact);
       header.style.setProperty("--identity-inset", `${-parseFloat(window.getComputedStyle(scrollPane).paddingTop || "0")}px`);
-      header.style.setProperty("--identity-scale", String(1 - progress * .14));
-      header.style.setProperty("--artwork-scale", String(1 - progress * .32));
     };
     const onScroll = () => { if (!frame) frame = window.requestAnimationFrame(update); };
     update();

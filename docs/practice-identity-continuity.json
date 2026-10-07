@@ -178,11 +178,11 @@
     }
   ],
   "paths": {
-    "forward": "One sticky header scales its existing artwork/title by current scroll while keeping reserved geometry and controls.",
-    "reverse": "Upward scroll restores the same nodes and full-scale artwork/title.",
-    "interruption": "A new scroll position directly supersedes the previous progress; cancelled animation frames cannot settle old progress after unmount.",
+    "forward": "One sticky header contracts its real layout at scroll96, preserving existing title/artwork/control nodes and reclaiming viewport height.",
+    "reverse": "Below scroll24 the same nodes return to expanded layout.",
+    "interruption": "Scroll thresholds use hysteresis to avoid resize-induced oscillation.",
     "fallback": "Without a main scroll pane the unscaled identity remains a static header; missing or failed artwork becomes existing song icon.",
-    "reducedMotion": "No timed scale transition runs; the same current-scroll geometry applies immediately, with CSS graphic transitions disabled."
+    "reducedMotion": "Same compact/expanded layout applies immediately without timed transitions."
   },
   "context": {
     "identity": {
@@ -191,7 +191,7 @@
     },
     "spatial": {
       "mode": "preserve",
-      "commitment": "Artwork/title share stable header anchors and fixed score offset."
+      "commitment": "Artwork/title share stable header anchors; score gains usable viewport area when header contracts."
     },
     "context": {
       "mode": "preserve",
@@ -212,11 +212,11 @@
   },
   "checkpoints": {
     "start": "One 60 pixel artwork and title at scroll zero.",
-    "midpoint": "At scroll 48 art is 50.4 pixels, title 93 percent, same header and fixed score offset.",
-    "settled": "At scroll96+ art40.8 title86 percent, header at main scroll edge.",
-    "reverse": "Scroll48 and0 restores exact intermediate/start geometry.",
-    "interrupted": "Rapid180\u21920 retains same header owner and score offset.",
+    "midpoint": "Below compact threshold header remains expanded with same mounted nodes.",
+    "settled": "At scroll96+ header height decreases by at least30px; visible timeline area increases.",
+    "reverse": "Below scroll24 restores expanded height and original nodes.",
+    "interrupted": "Rapid180 to0 retains same header/media owner and restores expanded layout.",
     "fallback": "Failed image dispatch shows icon without losing the header.",
-    "reducedMotion": "Reduced-motion context reaches same derived geometry without timed transitions."
+    "reducedMotion": "Same contracted height without timed transitions."
   }
 }
