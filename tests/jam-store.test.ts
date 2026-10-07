@@ -27,7 +27,7 @@ function fixture(t) {
   writeFileSync(join(repoRoot, 'data/catalog.json'), JSON.stringify({ songs:[{id:'alpha',title:'Alpha'},{id:'beta',title:'Beta'}], references:[{id:asset.reference_id,youtube_id:asset.youtube_id,kind:'original',label:'Alpha original',song_id:'alpha'}], recordings:[{file:'take alpha.wav',song_id:'alpha'},{file:'take alpha.wav',song_id:'beta'},{file:'unknown.wav',song_id:null}] }));
   writeFileSync(join(repoRoot,'reference-audio',asset.audio_file),bytes);
   writeFileSync(join(repoRoot,'reference-audio/manifest.json'),JSON.stringify({version:1,checked_at:'2026-10-07T00:00:00Z',assets:[asset]}));
-  const options = { repoRoot, storageGuard:()=>{}, validateAudio:(path,type)=>validateJamAudio(path,type,{preflight:()=>true}) };
+  const options = { repoRoot, storageGuard:()=>{}, archiveProbePreflight:()=>true, validateAudio:(path,type)=>validateJamAudio(path,type,{preflight:()=>true}) };
   const store=createJamStore(options); t.after(()=>store.close());
   const source={recording:{kind:'reference',id:asset.reference_id},sha256:asset.sha256,durationSeconds:20};
   const input={schemaVersion:1,captureId:randomUUID(),songId:'alpha',title:'Mic take',instrument:{kind:'custom',label:' Piano '},sections:[],alignment:null,backingMix:null,captureEnd:'stopped'};

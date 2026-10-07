@@ -5,6 +5,7 @@ import { enableMicrophone, releaseMicrophone, recordMicrophone, inspectMic, back
 import type { MicClock, StoredMicDraft, CaptureEnd } from './jamCapture';
 import { fetchJamContext, saveJam, updateJamCorrection } from './jamData';
 import type { Jam, JamInput, JamBackingMix, JamContext, RecordingRef, JamInstrument } from './jamData';
+import { correctedJamInterval } from './timelineProjection';
 import { formatTime } from './recordings';
 
 type DraftData = { input: JamInput; duration: number; decoded: boolean };
@@ -192,9 +193,9 @@ export function JamRecorder(props: JamRecorderProps) {
       if (token !== generation.current || !mounted.current) return;
       if (current.audio?.sha256 !== backing.source.sha256 || (backing.stems && (current.stemSet?.id !== backing.stems.setId || current.stemSet?.revision !== backing.stems.revision))) throw new Error('The exact captured backing revision is unavailable. Play microphone only.');
       const bounds = backing.stems && current.stemSet ? current.stemSet : { start: 0, end: backing.source.durationSeconds };
-      const start = Math.max(alignment.coverage.micStart, replayStart, (bounds.start - alignment.sourceAtCaptureZero) / backing.playbackRate + alignment.correctionSeconds);
-      const end = Math.min(alignment.coverage.micEnd, (bounds.end - alignment.sourceAtCaptureZero) / backing.playbackRate + alignment.correctionSeconds);
-      if (end <= start) throw new Error('The corrected take has no backed interval. Play microphone only.');
+      const interval = correctedJamInterval(alignment, saved?.audio.durationSeconds || draft?.metadata.duration || 0, bounds, replayStart);
+      if (!interval) throw new Error('The corrected take has no backed interval. Play microphone only.');
+      const { micStart: start, micEnd: end } = interval;
       lock(true);
       const sourceStart = alignment.sourceAtCaptureZero + (start - alignment.correctionSeconds) * backing.playbackRate;
       await latest.current.prepareReplay(backing, sourceStart);
@@ -225,7 +226,10 @@ export function JamRecorder(props: JamRecorderProps) {
       const current = await fetchJamContext(backing.source.recording);
       if (token !== generation.current || !mounted.current) return;
       if (current.audio?.sha256 !== backing.source.sha256 || (backing.stems && (current.stemSet?.id !== backing.stems.setId || current.stemSet?.revision !== backing.stems.revision))) throw new Error('The captured backing revision is unavailable.');
-      await latest.current.prepareReplay(backing, alignment.coverage.sourceStart); setMessage('Recorded mix restored, paused.'); }
+      const bounds = backing.stems && current.stemSet ? current.stemSet : { start: 0, end: backing.source.durationSeconds };
+      const interval = correctedJamInterval(alignment, saved?.audio.durationSeconds || draft?.metadata.duration || 0, bounds);
+      if (!interval) throw new Error('The corrected take has no backed interval. Play microphone only.');
+      await latest.current.prepareReplay(backing, interval.start); setMessage('Recorded mix restored, paused.'); }
     catch (error) { setMessage(error instanceof Error ? error.message : String(error)); }
     finally { if (token === generation.current) lock(false); }
   }

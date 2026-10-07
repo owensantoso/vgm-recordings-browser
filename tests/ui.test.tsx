@@ -27,6 +27,7 @@ test("one provider survives browsing and empty search, separate sources replace 
       value: dom.window[key],
       configurable: true,
     });
+  Object.defineProperty(globalThis, "ResizeObserver", { value: class { observe() {} disconnect() {} }, configurable: true });
   globalThis.IS_REACT_ACT_ENVIRONMENT = true;
   dom.window.scrollTo = () => {};
   dom.window.HTMLElement.prototype.scrollTo = () => {};
@@ -227,5 +228,6 @@ test("one provider survives browsing and empty search, separate sources replace 
     await act(async () => root.unmount());
     dom.window.close();
     delete globalThis.IS_REACT_ACT_ENVIRONMENT;
+    Reflect.deleteProperty(globalThis, "ResizeObserver");
   }
 });

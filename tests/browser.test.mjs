@@ -4,7 +4,9 @@
 // for every Audio element. Screenshots land in .test-artifacts/browser/.
 import test, { after, before } from "node:test";
 import assert from "node:assert/strict";
-import { execSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
+import { existsSync } from "node:fs";
+import { chromeExecutable } from "./browser/chrome.mjs";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -16,26 +18,7 @@ import {
   initScript,
 } from "./browser/fixture.mjs";
 
-function chromePath() {
-  if (process.env.CHROME_PATH) return process.env.CHROME_PATH;
-  for (const name of [
-    "google-chrome",
-    "google-chrome-stable",
-    "chromium",
-    "chromium-browser",
-  ]) {
-    try {
-      return execSync(`command -v ${name}`, { stdio: "pipe" })
-        .toString()
-        .trim();
-    } catch {
-      /* try the next candidate */
-    }
-  }
-  return "";
-}
-
-const executablePath = chromePath();
+const executablePath = chromeExecutable();
 const artifacts = ".test-artifacts/browser";
 const viewports = {
   desktop: { width: 1280, height: 800 },
@@ -55,7 +38,11 @@ before(async () => {
   });
 });
 after(async () => {
-  await browser?.close();
+  if (browser) {
+    const guard = '/Users/macintoso/.codex/skills/critical-incident-response/scripts/incident_lock.py';
+    const status = existsSync(guard) ? spawnSync('python3', [guard, 'preflight', '--action', 'process-control', '--scope', 'owned archive lifecycle fixture browser handle'], {stdio:'inherit'}).status : process.platform === 'darwin' ? 2 : 0;
+    if (status === 0) await browser.close(); else process.exitCode = 1;
+  }
   await fixture?.close();
   await flacFixture?.close();
   await longFixture?.close();

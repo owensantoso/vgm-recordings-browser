@@ -416,3 +416,23 @@ paused, reload stays paused, active playback survives song browsing, explicit
 Practice switches sources paused, and range/link ownership survives browsing.
 Rendered acceptance surface is the deployed private Bob-omb song URL without a
 play token; physical-phone and human usability judgment remain separate.
+
+## Timeline participation — confirmed 8 October 2026
+
+Primary job: follow a recording while hearing and discussing its passages. The
+header must reclaim real viewport height; transform-only shrinking was an agent
+assumption and is superseded. Gain intensity is monotonic from0–200% using the
+same dark ink. Identity, controls, transport and keyboard focus remain mounted.
+
+One Jams row shows only exact-source, hash-matched aligned takes, with overlapping
+clips stacked. Normal click seeks the original clock; Open jam explicitly opens
+the saved mix. Comment mode selects a point or range directly on Song, instrument
+or jam lanes. The adjacent composer names the recording, clock and instrument.
+Keyboard/touch alternatives use playhead, A–B and editable times. On phone the
+composer attaches above the transport. Wheel gestures remain volume/speed adjustment;
+timeline range selection uses deliberate drag so ordinary page scrolling is
+preserved. General song/recording comments and the legacy list remain available.
+
+Reference tempo estimates require beat verification. Playback speed is separate
+from reference BPM, and one BPM value does not establish a downbeat/bar map.
+See TIMELINE_DESIGN_REVIEW.md and TEMPO_RESEARCH.md for reviewed rationale.

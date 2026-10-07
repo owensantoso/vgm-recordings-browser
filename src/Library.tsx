@@ -463,10 +463,13 @@ export function SongPage({
       header.style.setProperty("--identity-inset", `${-parseFloat(window.getComputedStyle(scrollPane).paddingTop || "0")}px`);
     };
     const onScroll = () => { if (!frame) frame = window.requestAnimationFrame(update); };
-    update();
+    const measure = () => (scrollPane as HTMLElement).style.setProperty("--song-header-height", `${header.getBoundingClientRect().height}px`);
+    const observer = new ResizeObserver(measure);
+    observer.observe(header);
+    update(); measure();
     scrollPane.addEventListener("scroll", onScroll, { passive: true });
     window.addEventListener("resize", onScroll);
-    return () => { scrollPane.removeEventListener("scroll", onScroll); window.removeEventListener("resize", onScroll); window.cancelAnimationFrame(frame); };
+    return () => { observer.disconnect(); (scrollPane as HTMLElement).style.removeProperty("--song-header-height"); scrollPane.removeEventListener("scroll", onScroll); window.removeEventListener("resize", onScroll); window.cancelAnimationFrame(frame); };
   }, [songId, songTab, props.catalog]);
   const { catalog, rows, navigate, playReference, active } = props,
     song = catalog?.songs.find((song) => song.id === songId);

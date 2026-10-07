@@ -23,7 +23,7 @@ import { referenceRow } from "./musicLibrary";
 import { fileFromHash, parseCsv } from "./recordings";
 import type { Recording } from "./recordings";
 import { JamLibrary, jamLink } from './JamLibrary';
-import { fetchJam } from './jamData';
+import { fetchJam, fetchJamContext } from './jamData';
 import type { Jam, JamComment } from './jamData';
 
 export function App() {
@@ -46,12 +46,13 @@ export function App() {
   const [autoPlay, setAutoPlay] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [captureBusy, setCaptureBusy] = useState(false);
+  const captureBusyRef = useRef(captureBusy); captureBusyRef.current = captureBusy;
   const [jamToReplay, setJamToReplay] = useState<Jam | null>(null);
   const [jamReplayRequest, setJamReplayRequest] = useState(0);
   const [jamReplayStart, setJamReplayStart] = useState(0);
   const [jamRefresh, setJamRefresh] = useState(0);
   const [jamNotice, setJamNotice] = useState('');
-  const [commentSeek, setCommentSeek] = useState<{ request: number; seconds: number }>();
+  const [commentSeek, setCommentSeek] = useState<{ request: number; seconds: number; file: string }>();
   const [highlightedComment, setHighlightedComment] = useState(() => new URL(location.href).searchParams.get('comment') || '');
   const initialJamHref = useRef(location.href);
   const [playRequest, setPlayRequest] = useState(0);
@@ -240,7 +241,7 @@ export function App() {
       url.searchParams.delete("repeat");
       url.searchParams.delete("section");
       ['jam', 'comment', 'clock', 'at'].forEach(key => url.searchParams.delete(key));
-      setJamToReplay(null); setHighlightedComment('');
+      setJamToReplay(null); setHighlightedComment(''); setCommentSeek(undefined);
     }
     url.hash = "";
     history.replaceState(history.state, "", url);
@@ -256,15 +257,23 @@ export function App() {
     if (seconds) { url.searchParams.set('clock', 'mic'); url.searchParams.set('at', String(seconds)); }
     history.replaceState(history.state, '', url); setBrowse(route(url.toString()));
   }
-  function openComment(comment: JamComment, jam: Jam | null) {
+  async function openComment(comment: JamComment, jam: Jam | null) {
     if (captureBusy) { setJamNotice('Stop recording before opening a comment.'); return; }
     const at = comment.target.kind === 'recording' ? comment.target.at : null;
     const seconds = at ? at.kind === 'point' ? at.seconds : at.start : 0;
+    if (at) {
+      const selectedBefore = selectedRef.current;
+      try {
+        const context = await fetchJamContext(at.audio.recording);
+        if (captureBusyRef.current || selectedRef.current !== selectedBefore) return;
+        if (!context.audio || context.audio.sha256 !== at.audio.sha256 || context.audio.durationSeconds !== at.audio.durationSeconds) { setJamNotice('This comment belongs to an older or unavailable audio version. Its timestamp has not been applied.'); return; }
+      } catch { setJamNotice('The comment’s exact recording is unavailable. Its timestamp has not been applied.'); return; }
+    }
     if (jam) prepareJam(jam, seconds);
     else if (comment.target.kind === 'recording') {
       const recording = comment.target.recording;
       if (recording.kind !== 'jam') select(recording.kind === 'reference' ? `ref:${recording.id}` : recording.id, false);
-      if (at) setCommentSeek(previous => ({ request: (previous?.request || 0) + 1, seconds }));
+      if (at) setCommentSeek(previous => ({ request: (previous?.request || 0) + 1, seconds, file: recording.kind === "reference" ? `ref:${recording.id}` : recording.id }));
     }
     const href = jamLink(location.href, browse.song, jam, comment);
     history.replaceState(history.state, '', href); setBrowse(route(href)); setHighlightedComment(comment.id);
@@ -283,7 +292,7 @@ export function App() {
       }
     }).catch(error => { if (!disposed) setJamNotice(error.message); });
     else if (clock === 'source' && url.searchParams.has('at') && Number.isFinite(at) && at >= 0)
-      setCommentSeek(previous => ({ request: (previous?.request || 0) + 1, seconds: at }));
+      setCommentSeek(previous => ({ request: (previous?.request || 0) + 1, seconds: at, file: url.searchParams.get("play") || selectedRef.current }));
     return () => { disposed = true; };
   }, [catalog, loading]);
   useEffect(() => {
@@ -528,6 +537,7 @@ export function App() {
             onVideoVisibility={setVideoOpen}
             onPlayingChange={setIsPlaying}
             jamToReplay={jamToReplay} jamReplayRequest={jamReplayRequest} jamReplayStart={jamReplayStart}
+            jamRefresh={jamRefresh} onOpenJam={prepareJam} onCommentOpen={openComment} onCommentSaved={() => setJamRefresh(value => value + 1)}
             commentSeek={commentSeek} onJamCaptureBusy={setCaptureBusy} onJamSaved={jam => {
               setJamRefresh(value => value + 1);
               if (browse.song === jam.songId) { history.replaceState(history.state, '', jamLink(location.href, jam.songId, jam)); setHighlightedComment(''); }

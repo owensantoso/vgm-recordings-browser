@@ -39,12 +39,24 @@ Codec validation allows a bounded half-second tail beyond the capture limit.
 
 ## Notes and links
 
-The **Comments** panel chooses the target independently from what is playing.
-Song-wide notes have no timestamp. Verified reference and mic recordings support
-point/range comments and optional instruments. Archive recordings currently
-support untimed notes: their CSV timing is not an exact audio hash/duration
-receipt, so the app does not claim verified timed archive anchors yet. Authored
-practice chords/notes remain separate from conversational comments.
+Use **Comment mode** above the practice timeline, then click a moment or drag a
+range on Song, an instrument, or an aligned jam. The composer opens beside the
+score on desktop and above the player on phone. **Comment at playhead** and
+**Comment on A–B** offer keyboard/touch alternatives; very short drags become
+points. The composer names the target recording, clock and instrument. Draft text
+keeps its original target across navigation/reload in this browser tab; save or
+close it before choosing a different target.
+
+The shared **Jams** row contains exact-source/hash-matched aligned recordings,
+with overlaps stacked. Normal clicks seek the source; **Open jam** explicitly
+opens the saved backing mix paused. The same corrected coverage bounds are used
+for display and replay. Free or unavailable-backing jams remain in the list.
+
+Whole-song and whole-recording comments remain available. Verified reference,
+mic and locally available archive audio support point/range comments. Archive
+identity uses its canonical local file, SHA hash and measured metadata duration,
+not the CSV duration. Missing/changed audio keeps historical notes; stale timed
+comments cannot seek replacement bytes. Authored chords/notes remain separate.
 
 Mic timestamps use the mic file's clock; reference timestamps use that exact
 reference's clock. A valid aligned mic comment also displays an estimated named
@@ -73,7 +85,7 @@ Copying a source practice/section link removes unrelated jam/comment clock data.
 
 ## Deferred
 
-Accounts/membership, MIDI, musical count-in/bar maps, timed archive receipts,
+Accounts/membership, MIDI, musical count-in/bar maps,
 multi-pass loops, speed changes within a take, trimming and guaranteed playable
 unfinished crash recovery remain separate work. Shared-context PCM capture is an
 upgrade only if real timing/drift cannot be made useful with manual correction.

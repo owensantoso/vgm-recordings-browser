@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { JamRecorder } from "./JamRecorder";
-import type { Jam, JamBackingMix } from "./jamData";
+import { fetchJamContext } from "./jamData";
+import type { Jam, JamBackingMix, JamComment, JamContext } from "./jamData";
 import { PracticeWorkspace } from "./PracticeWorkspace";
 import { nextPlaybackRate, SpeedControl } from "./SpeedControl";
 import { loadChunkedStemPlayback } from "./ChunkedStemPlaybackEngine";
@@ -116,6 +117,7 @@ export function Player({
   onVideoVisibility,
   onPlayingChange,
   jamToReplay, jamReplayRequest, jamReplayStart, commentSeek, onJamSaved, onJamCaptureBusy,
+  jamRefresh = 0, onOpenJam, onCommentOpen, onCommentSaved,
   onPracticeTargetChange,
   practiceHost,
 }: {
@@ -142,7 +144,11 @@ export function Player({
   jamToReplay?: Jam | null;
   jamReplayRequest?: number;
   jamReplayStart?: number;
-  commentSeek?: { request: number; seconds: number };
+  commentSeek?: { request: number; seconds: number; file: string };
+  jamRefresh?: number;
+  onOpenJam?(jam: Jam, seconds?: number): void;
+  onCommentOpen?(comment: JamComment, jam: Jam | null): void;
+  onCommentSaved?(): void;
   onJamSaved?(jam: Jam): void;
   onJamCaptureBusy?(busy: boolean): void;
   onPracticeTargetChange(href: string): void;
@@ -915,10 +921,12 @@ export function Player({
     const next = Math.max(0, Math.min(baseRange.full, seconds));
     seek(next, !(repeat && next >= range.start && next < range.end));
   }
+  const consumedCommentSeek = useRef<number | null>(null);
   useEffect(() => {
-    if (!commentSeek || jamLockRef.current || !ready) return;
+    if (!commentSeek || commentSeek.file !== row.file || consumedCommentSeek.current === commentSeek.request || jamLockRef.current || !ready) return;
+    consumedCommentSeek.current = commentSeek.request;
     updatePlaying(false); backend.current?.pause(); seekTimeline(commentSeek.seconds);
-  }, [commentSeek?.request, ready]);
+  }, [commentSeek?.request, ready, row.file]);
   const pauseForJam = () => { updatePlaying(false); backend.current?.pause(); };
   async function prepareJamCapture() {
     jamContinuityError.current = "";
@@ -970,7 +978,17 @@ export function Player({
       await stemEngine.current.setRate(mix.playbackRate); await stemEngine.current.seek(at);
     } else { backend.current?.setRate?.(mix.playbackRate); backend.current?.seek(at); }
   }
+  const [jamContext, setJamContext] = useState<JamContext | null>(null);
+  useEffect(() => {
+    let disposed = false;
+    setJamContext(null);
+    const recording = row.file.startsWith("ref:") ? { kind: "reference" as const, id: row.file.slice(4) } : { kind: "archive" as const, id: row.file };
+    void fetchJamContext(recording).then(value => { if (!disposed) setJamContext(value); }).catch(() => { /* Unavailable audio cannot receive timed comments. */ });
+    return () => { disposed = true; };
+  }, [row.file, practiceData?.sourceHash]);
   const workspace = <PracticeWorkspace
+    songId={identity.songId} jamContext={jamContext} jamRefresh={jamRefresh}
+    onOpenJam={(jam, seconds) => onOpenJam?.(jam, seconds)} onCommentOpen={(comment, jam) => onCommentOpen?.(comment, jam)} onCommentSaved={() => onCommentSaved?.()}
     data={practiceData} loading={sectionsLoading} error={sectionsError}
     time={time} duration={baseRange.full} range={{ start: range.start, end: range.end }}
     defaultRange={{ start: baseRange.start, end: baseRange.end }} repeat={repeat && mode !== "video"}

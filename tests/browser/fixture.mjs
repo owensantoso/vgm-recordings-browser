@@ -532,7 +532,7 @@ export async function createFixture(directory, {flac=false,seconds=2.5}={}) {
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   const { port } = server.address();
   practice = createPracticeHandler({repoRoot:directory,allowedOrigins:[`http://127.0.0.1:${port}`]});
-  jams = createJamHandler({repoRoot:directory,allowedOrigins:[`http://127.0.0.1:${port}`],storageGuard:()=>{}});
+  jams = createJamHandler({repoRoot:directory,allowedOrigins:[`http://127.0.0.1:${port}`],storageGuard:()=>{},archiveProbePreflight:()=>true});
   return {
     origin: `http://127.0.0.1:${port}`,
     referenceAudio,

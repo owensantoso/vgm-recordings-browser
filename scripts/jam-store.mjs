@@ -110,7 +110,7 @@ export async function validateJamAudio(path, contentType, options = {}) {
   return { mimeType: type, sampleRate, channels, frames, durationSeconds: frames / sampleRate };
 }
 
-export function createJamStore({ repoRoot, storageGuard = jamStorageGuard, validateAudio = validateJamAudio }) {
+export function createJamStore({ repoRoot, storageGuard = jamStorageGuard, validateAudio = validateJamAudio, archiveProbePreflight = processPreflight }) {
   const root = resolve(repoRoot, 'private-data'), audioRoot = resolve(root, 'jam-audio');
   mkdirSync(audioRoot, { recursive: true });
   const db = new DatabaseSync(resolve(root, 'jams.sqlite'));
@@ -135,7 +135,7 @@ export function createJamStore({ repoRoot, storageGuard = jamStorageGuard, valid
       const key = signature(stat), cached = archiveAudioCache.get(path);
       if (cached?.key === key) return { recording: ref, ...cached.audio };
       // Metadata-only probing never decodes/copies the complete archive recording.
-      if (!processPreflight('archive-audio-metadata-probe')) return null;
+      if (!archiveProbePreflight('archive-audio-metadata-probe')) return null;
       const command = process.platform === 'darwin' && existsSync('/opt/homebrew/bin/ffprobe') ? '/opt/homebrew/bin/ffprobe' : 'ffprobe';
       const probe = spawnSync(command, ['-v', 'error', '-max_alloc', '67108864', '-threads', '1', '-protocol_whitelist', 'file,pipe', '-show_entries', 'stream=codec_type,duration,sample_rate,channels:format=duration', '-of', 'json', path], { timeout: 8000, maxBuffer: 64 * 1024, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
       if (probe.status !== 0 || probe.error) return null;
