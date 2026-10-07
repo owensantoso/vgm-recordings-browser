@@ -11,7 +11,7 @@
     "build": "npm run catalog && node scripts/build.mjs",
     "typecheck": "tsc --noEmit",
     "test": "node --experimental-strip-types --test tests/*.test.ts tests/catalog.test.mjs tests/practice-store.test.mjs && node scripts/test-ui.mjs && npm run test:browser",
-    "test:browser": "node --test tests/browser.test.mjs",
+    "test:browser": "node --test tests/browser.test.mjs tests/practice-visuals.browser.mjs",
     "check": "npm run typecheck && npm test && npm run build",
     "catalog": "node --experimental-strip-types scripts/catalog.mjs",
     "build:private": "npm run catalog && node scripts/build.mjs --private-audio"

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
   ArrowUpRight,
@@ -284,7 +284,7 @@ function ReferenceCard({
         {playable && (
           <button
             onClick={() => playReference(refItem)}
-            aria-label={`Play ${refItem.kind} of ${song.title}`}
+            aria-label={`Play ${refItem.kind} of ${song.title} · ${refItem.label}`}
           >
             <Play size={16} /> Listen
           </button>
@@ -446,6 +446,25 @@ export function SongPage({
   songId, songTab = "practice", practiceActive = false, practiceHostRef, onTab,
   ...props
 }: LibraryProps & { songId: string; songTab?: "practice" | "overview"; practiceActive?: boolean; practiceHostRef?: (element: HTMLDivElement | null) => void; onTab?: (tab: "practice" | "overview") => void }) {
+  const identityHeader = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const header = identityHeader.current;
+    const scrollPane = header?.closest(".workspace-main");
+    if (!header || !scrollPane || songTab !== "practice") return;
+    let frame = 0;
+    const update = () => {
+      frame = 0;
+      const progress = Math.max(0, Math.min(1, scrollPane.scrollTop / 96));
+      header.style.setProperty("--identity-inset", `${-parseFloat(window.getComputedStyle(scrollPane).paddingTop || "0")}px`);
+      header.style.setProperty("--identity-scale", String(1 - progress * .14));
+      header.style.setProperty("--artwork-scale", String(1 - progress * .32));
+    };
+    const onScroll = () => { if (!frame) frame = window.requestAnimationFrame(update); };
+    update();
+    scrollPane.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll);
+    return () => { scrollPane.removeEventListener("scroll", onScroll); window.removeEventListener("resize", onScroll); window.cancelAnimationFrame(frame); };
+  }, [songId, songTab, props.catalog]);
   const { catalog, rows, navigate, playReference, active } = props,
     song = catalog?.songs.find((song) => song.id === songId);
   if (!song)
@@ -471,11 +490,17 @@ export function SongPage({
       b.recorded_create_date.localeCompare(a.recorded_create_date),
     );
   const youtubeSearch = `https://www.youtube.com/results?search_query=${encodeURIComponent(`${song.title} ${song.game || ""} original soundtrack`)}`;
+  const activeReference = refs.find(ref => active === `ref:${ref.id}`);
+  const activeTake = records.find(row => active === row.file);
+  const artworkReference = activeReference || originals[0] || refs[0];
   return (
     <section className={`song-content${songTab === "practice" ? " song-practice-page" : ""}`} id="songbook">
+      <div ref={identityHeader} className={songTab === "practice" ? "practice-song-header" : undefined}>
       <EntityLink view="songs" navigate={navigate} className="back-link">
         <ArrowLeft size={16} /> All songs
       </EntityLink>
+      <div className={songTab === "practice" ? "practice-song-identity" : undefined}>
+      {songTab === "practice" && <SongThumbnail imageUrl={activeTake?.thumbnail} videoId={artworkReference ? artworkReference.youtube_id || youtubeId(artworkReference.url) : null} />}
       <PageHeader
         title={song.title}
         meta={[song.game, song.composer].filter(Boolean).join(" · ")}
@@ -489,6 +514,7 @@ export function SongPage({
           <Headphones size={16} /> Find on YouTube <ArrowUpRight size={14} />
         </a>}
       </PageHeader>
+      </div>
       {songTab === "overview" && <div className="song-summary">
         <span>
           {records.length} {records.length === 1 ? "take" : "takes"} ·{" "}
@@ -512,10 +538,11 @@ export function SongPage({
         <button aria-current={songTab === "practice" ? "page" : undefined} onClick={() => onTab?.("practice")}>Practice</button>
         <button aria-current={songTab === "overview" ? "page" : undefined} onClick={() => onTab?.("overview")}>Overview</button>
       </nav>
+      </div>
       {songTab === "practice" ? practiceActive ? <div className="practice-main-host" ref={practiceHostRef} /> : <div className="practice-prepare">
         <SongThumbnail videoId={originals[0] ? originals[0].youtube_id || youtubeId(originals[0].url) : null} />
-        <div><h2>Practice {song.title}</h2><p>Open a recording to work with its timeline, sections and instruments.</p>
-        {refs[0] ? <button onClick={() => props.prepareReference?.(originals[0] || refs[0])}><Headphones size={16} /> {originals.length ? "Prepare original" : "Prepare reference"}</button> : records[0] ? <button onClick={() => props.prepare?.(records[0])}><Headphones size={16} /> Prepare latest take</button> : <p>No recording is available yet.</p>}</div>
+        <div><h2>Practice {song.title}</h2><p>Open a recording to work with its timeline, sections and instruments.</p>{(originals[0] || refs[0]) && <p className="quiet-note">{(originals[0] || refs[0]).label}</p>}
+        {refs[0] ? <button onClick={() => props.prepareReference?.(originals[0] || refs[0])}><Headphones size={16} /> {originals.length ? "Open original" : "Open reference"}</button> : records[0] ? <button onClick={() => props.prepare?.(records[0])}><Headphones size={16} /> Open latest take</button> : <p>No recording is available yet.</p>}</div>
       </div> : <>
       {originals.length > 0 && (
         <section className="library-section">
@@ -1010,7 +1037,8 @@ export function SearchPage({ ...props }: LibraryProps) {
   );
 }
 
-function SongThumbnail({ videoId }: { videoId?: string | null }) {
-  const [failedId, setFailedId] = useState<string | null>(null);
-  return <span className="song-monogram song-thumbnail" aria-hidden="true">{videoId && videoId !== failedId ? <img src={`https://i.ytimg.com/vi/${encodeURIComponent(videoId)}/hqdefault.jpg`} alt="" loading="lazy" onError={() => setFailedId(videoId)} /> : <FileMusic size={21} />}</span>;
+function SongThumbnail({ videoId, imageUrl }: { videoId?: string | null; imageUrl?: string }) {
+  const [failedSource, setFailedSource] = useState<string | null>(null);
+  const source = imageUrl || (videoId ? `https://i.ytimg.com/vi/${encodeURIComponent(videoId)}/hqdefault.jpg` : "");
+  return <span className="song-monogram song-thumbnail" aria-hidden="true">{source && source !== failedSource ? <img src={source} alt="" loading="lazy" onError={() => setFailedSource(source)} /> : <FileMusic size={21} />}</span>;
 }

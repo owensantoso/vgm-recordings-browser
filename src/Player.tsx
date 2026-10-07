@@ -111,6 +111,7 @@ export function Player({
   identity,
   onSong,
   onVideoVisibility,
+  onPlayingChange,
   onPracticeTargetChange,
   practiceHost,
 }: {
@@ -125,6 +126,7 @@ export function Player({
   identity: {
     title?: string;
     kind: string;
+    referenceLabel?: string;
     artist: string;
     songId: string;
     musicalKey?: string | null;
@@ -132,6 +134,7 @@ export function Player({
   };
   onSong(): void;
   onVideoVisibility(value: boolean): void;
+  onPlayingChange?(value: boolean): void;
   onPracticeTargetChange(href: string): void;
 }) {
   const [sourceDuration, setSourceDuration] = useState(
@@ -221,6 +224,9 @@ export function Player({
   } | null>(null);
   const position = useRef(range.start);
   const wantsPlay = useRef(autoPlay && !linkedSection.current);
+  useEffect(() => {
+    onPlayingChange?.(playing || (buffering && wantsPlay.current));
+  }, [playing, buffering, onPlayingChange]);
   const fullMode = useRef(false);
   const seekUntil = useRef(0);
   const readyRef = useRef(false);
@@ -249,7 +255,15 @@ export function Player({
       }
       setPracticeData(previous => previous?.stemSet && data.stemSet && JSON.stringify(previous.stemSet) === JSON.stringify(data.stemSet)
         ? { ...data, stemSet: previous.stemSet } : data);
-      setSourceDuration(data.duration);
+      // Container metadata can round just past the last PCM frame. Use the
+      // verified full-set endpoint when both durations identify that same frame.
+      const fullStem = data.stemSet?.coverage === "full-source" ? data.stemSet : null;
+      const sameEndFrame = fullStem && fullStem.start === 0 &&
+        Number.isSafeInteger(fullStem.sampleRate) && fullStem.sampleRate > 0 &&
+        Number.isSafeInteger(fullStem.frames) && fullStem.frames > 0 &&
+        Math.round(data.duration * fullStem.sampleRate) === fullStem.frames &&
+        Math.round(fullStem.end * fullStem.sampleRate) === fullStem.frames;
+      setSourceDuration(sameEndFrame ? fullStem.end : data.duration);
     }).catch(failure => {
       if (!disposed) setSectionsError(failure instanceof Error ? failure.message : "Sections are unavailable.");
     }).finally(() => { if (!disposed) setSectionsLoading(false); });
@@ -889,7 +903,7 @@ export function Player({
   />;
   return <>
     <aside className={`player compact-player ${mode === "video" ? "video-mode" : "audio-mode"} ${mode === "stems" ? "stem-mode" : ""} ${videoVisible ? "video-open" : ""}`} aria-label="Music player">
-      <header className="player-heading"><div><span className="player-status">{buffering ? "BUFFERING" : playing ? "NOW PLAYING" : "READY TO PLAY"}</span><button className="player-song" disabled={!identity.songId} onClick={onSong}>{identity.title || title(row)}</button><p className="player-game">{isTake ? "Our take" : identity.kind === "original" ? "Original soundtrack" : identity.kind}{identity.artist ? ` · ${identity.artist}` : ""}</p></div></header>
+      <header className="player-heading"><div><span className="player-status">{buffering ? "BUFFERING" : playing ? "NOW PLAYING" : "READY TO PLAY"}</span><button className="player-song" disabled={!identity.songId} onClick={onSong}>{identity.title || title(row)}</button><p className="player-game" title={identity.referenceLabel}>{isTake ? "Our take" : identity.referenceLabel || (identity.kind === "original" ? "Original soundtrack" : identity.kind)}{!identity.referenceLabel && identity.artist ? ` · ${identity.artist}` : ""}</p></div></header>
       <div className="transport"><button className="play-button" onClick={toggle} disabled={!available || !controllable} aria-label={playing || (buffering && wantsPlay.current) ? "Pause selected recording" : "Play selected recording"}>{playing || (buffering && wantsPlay.current) ? <Pause size={19} fill="currentColor" /> : <Play size={19} fill="currentColor" />}</button><SpeedControl rate={displayedRate} disabled={!available || !controllable || (mode === "video" && videoRates.length < 2)} video={mode === "video"} onStep={stepSpeed} onToggle={toggleSpeed} /><span className="time">{formatTime(time)}</span><input aria-label="Seek full recording" type="range" min="0" max={baseRange.full} step="any" value={Math.max(0, Math.min(baseRange.full, time))} disabled={!available || !controllable || !baseRange.full} onChange={event => seekTimeline(Number(event.target.value))} /><span className="time">{baseRange.full ? formatTime(baseRange.full) : "—:—"}</span></div>
       <div className="media-switch" role="group" aria-label="Playback options"><button aria-pressed={mode !== "video"} disabled={row.has_audio !== "yes"} onClick={() => chooseAudio()}><AudioLines size={15} /> Audio</button><button aria-pressed={mode === "video" && videoVisible} disabled={row.has_video !== "yes"} onClick={() => mode === "video" && videoVisible ? closeVideo() : switchMode("video")}><Video size={15} /> Video</button><button className="open-practice-button" onClick={onSong} aria-label="Open practice">Practice</button>{(audioDownload || videoDownload) && <details className="player-downloads"><summary aria-label="Download files"><Download size={15} /><span>Download</span></summary><div className="player-download-links">{audioDownload && <a href={audioDownload} target="_blank" rel="noopener noreferrer" download><AudioLines size={15} />Download audio</a>}{videoDownload && <a href={videoDownload} target="_blank" rel="noopener noreferrer" download><Video size={15} />Download video</a>}</div></details>}<span className="mode-status" role="status">{error ? "Unavailable" : buffering ? "Buffering…" : audioRoutingPending || !ready ? "Loading…" : playing ? "Playing" : "Paused"}</span></div>
       {error && <p className="playback-error" role="alert">{error}{row.audio_file && <button onClick={() => chooseAudio(true)}>Original mix</button>}</p>}
@@ -900,6 +914,6 @@ export function Player({
         {sourceVideo && <a className="video-source-link" href={sourceVideo} target="_blank" rel="noopener noreferrer">Open source video <ArrowUpRight size={14} /></a>}
       </div>
     </aside>
-    {practiceHost && createPortal(<>{workspace}{copied && <p className="copy-status" role="status">{copied}</p>}{manualLink && <details className="practice-link-detail"><summary>Practice link</summary><input aria-label="Practice link" readOnly value={manualLink} onFocus={event => event.target.select()} /></details>}<details className="practice-source-detail"><summary>Recording details</summary><dl><dt>Source</dt><dd>{isTake ? row.file : identity.artist}</dd><dt>{isTake ? "Played key" : "Reference key"}</dt><dd>{identity.musicalKey || "Not recorded"}</dd><dt>Tempo</dt><dd>{identity.bpm ? `${identity.bpm} BPM` : "Not recorded"}</dd></dl><div className="source-actions">{sourceVideo && <a href={sourceVideo} target="_blank" rel="noopener noreferrer"><ArrowUpRight size={15} /> Open video</a>}{row.audio_url && <a href={row.audio_url} target="_blank" rel="noopener noreferrer">Open audio</a>}</div></details></>, practiceHost)}
+    {practiceHost && createPortal(<>{identity.referenceLabel && <p className="quiet-note practice-reference-label">Source: {identity.referenceLabel}</p>}{workspace}{copied && <p className="copy-status" role="status">{copied}</p>}{manualLink && <details className="practice-link-detail"><summary>Practice link</summary><input aria-label="Practice link" readOnly value={manualLink} onFocus={event => event.target.select()} /></details>}<details className="practice-source-detail"><summary>Recording details</summary><dl><dt>Source</dt><dd>{isTake ? row.file : identity.referenceLabel || identity.artist}</dd><dt>{isTake ? "Played key" : "Reference key"}</dt><dd>{identity.musicalKey || "Not recorded"}</dd><dt>Tempo</dt><dd>{identity.bpm ? `${identity.bpm} BPM` : "Not recorded"}</dd></dl><div className="source-actions">{sourceVideo && <a href={sourceVideo} target="_blank" rel="noopener noreferrer"><ArrowUpRight size={15} /> Open video</a>}{row.audio_url && <a href={row.audio_url} target="_blank" rel="noopener noreferrer">Open audio</a>}</div></details></>, practiceHost)}
   </>;
 }

@@ -5,9 +5,14 @@ sections, looping, and deep links to each song, section and bar; eventual linked
 chord-per-bar view and synchronized stem levels/mute/solo. React + TypeScript
 remains the interface. No key, BPM, chord or form is inferred from source titles.
 
+The later cross-product discussion and current Astra comparison are captured in
+[Shared practice capabilities](SHARED_PRACTICE_CORE.md). This is a proposed next
+stage. Its first data-contract package is now consumed by both apps; shared
+playback and broader catalogue changes remain outside the first-slice scope.
+
 ## Implemented first slice
 
-All 14 reviewed listening references have verified local M4A files in the ignored
+The initial 14 reviewed listening references have verified local M4A files in the ignored
 `reference-audio/` directory. They occupy 48,747,455 bytes. FFmpeg fully decoded
 every download; the private manifest records source ID, YouTube ID, duration,
 bytes and SHA-256. No cookies or account credentials were used for downloads.
@@ -172,6 +177,13 @@ Primary references: [Logic Stem Splitter](https://support.apple.com/guide/logicp
 Owen accepted the initial stem playback, then rejected the compressed player
 layout: following and practicing a song belongs in the main page. The default
 song tab is now Practice, with Overview retaining song/reference/take details.
+Opening a song with no active playback selects its original recording paused
+(otherwise its first reference or latest take), so the workbench opens directly.
+A direct URL with an explicit recording retains that source. Opening another
+song while audio is playing shows Overview and preserves playback; selecting
+Practice explicitly switches to that song's source paused. No download or stem
+processing is triggered by opening a song. History traversal retains the live
+source rather than restoring an old player selection.
 One persistent Player owns the transport and portals its practice workspace
 into the current source's main page. Waveform lanes, section/chord ranges and
 playhead all use original recording seconds. The bottom dock remains available
@@ -277,3 +289,23 @@ of the current speed increment.
 Automated tests can establish decoding, source ownership, paused links, loop
 wraps, failures and browser layout. Audible seam quality, actual iPhone/keyboard
 behavior and human design acceptance remain open. Bar identity, staff notation and automatic musical analysis remain unimplemented. Full-source stems, source sections and user-entered timed chords/notes are implemented; audible quality, human design acceptance and physical phone behavior remain open.
+
+## Overnight stem batch — 7 October 2026
+
+Confirmed: separate all existing downloaded references and newly sourced repertoire originals in Logic Pro. Prefer original soundtrack recordings; preserve useful existing covers. Owen authorized the T7 for temporary offload. Task-owned new projects and WAV inputs are under `/Volumes/T7/Codex-VGM-Stems-2026-10-07/`; playable compressed assets stay in the private repository media directory. The T7 is processing/provenance storage, not a required serving dependency after packaging.
+
+The initial user's unsaved Logic project was preserved as `/Users/macintoso/Music/Logic/Untitled 1 - preserved 2026-10-07.logicx` before switching projects. No user tracks were edited or discarded. The first additional Bob-omb cover split uses a separate task-owned project under `work/overnight-stems/`.
+
+Task-local `work/overnight-stems/download-new-references.py` preserves and atomically updates original-audio receipts. `prepare-song.py` validates exact source identity, input frames and all six generated Logic WAVs, produces full/30-second FLAC assets and waveforms, validates the complete candidate manifest with the normal reader, then publishes atomically. Each source has a resumable receipt in `work/overnight-stems/staging/<reference-id>/receipt.json`. Storage and incident preflights remain active. Numerical source/mix alignment is checked separately from human listening quality.
+
+Open: manually authored section boundaries remain preferable to invented form labels; an easier section-marking interface is a later product improvement. This batch does not invent sections, chords, keys or tempo values. Completed: all 20 identified reference recordings have six full-source Logic stems, synchronized playback chunks and waveforms. This includes 19 new sets and the retained Beneath the Mask pilot. All runtime assets resolve to local repository storage; T7 is not a playback dependency. This initial batch retained two unidentified repertoire entries; both were identified and completed in the follow-up below. See [batch validation](VALIDATION-STEM-BATCH-2026-10-07.md) for exact coverage, bytes and evidence boundaries.
+
+## Confirmed repertoire follow-up — 7 October 2026
+
+Owen confirmed Splattack! and supplied `https://youtube.com/watch?v=SYTS2sJWcIs`, which identifies HeartGold & SoulSilver Champion & Red Battle. Existing provisional song IDs and repertoire order were retained. Both exact reference recordings are downloaded and processed with Logic Separate All Stems; the Pokémon upload is labeled as uploader EQ-enhanced.
+
+Current total: 22 reference recordings, 132 full stems, 954 synchronized chunk files in 159 groups, 22 waveform files and 22 source M4As. All 1,130 runtime files total 2,287,251,442 bytes and resolve inside internal repository storage. Both new sets have exact full-source frame coverage, stable source hashes, and six instruments. `work/overnight-stems/batch-receipt-22.json` retains independent verification and authority hashes; the original 20-source receipt remains historical evidence.
+
+Logic procedure correction: close Event List and verify List Editors is off before importing or splitting. Its competing selection can target an older region despite the visible new track selection. A fresh full AX observation must confirm exactly one selected audio region with the expected input basename before Apply. A batch-only wrong-region split was undone before correct processing; no published media changed during the correction. The preserved user project was restored stopped.
+
+Storage briefly reached critical pressure; internal packaging waited until the guard returned warning and the per-source allocation plus 5 GiB reserve passed. A metadata-preserving T7 ZIP backup of the initial Bob-omb raw folder was created and its file contents verified, but no internal raw files were removed or relocated. The other planned offloads were not performed once storage recovered. Runtime serving remains independent of T7.

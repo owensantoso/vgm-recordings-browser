@@ -393,3 +393,26 @@ Current agent evidence is recorded in [October 6 validation](VALIDATION-2026-10-
 Real YouTube testing also found cued-seek autoplay; the combined candidate fixes
 it. The unmodified migration baseline must not be merged alone on the strength
 of its synthetic provider checks.
+
+## Song-entry correction — 7 October 2026
+
+Owen rejected the default Bob-omb page's "Prepare original" gate. It merely
+selected a recording paused, but sounded like unfinished download/separation
+work and hid the actual practice workspace behind an empty introduction. Cause:
+agent assumption that avoiding autoplay required a separate setup action.
+
+Operate intent: opening a song should expose its timeline and instruments ready
+to play. App owns source selection and route intent; Player retains one playback
+clock and reports activity; SongPage hosts the existing workspace. Reuse the
+actual practice components and tokens, with no new prototype or visual skin.
+Paused navigation selects the song's original; active playback keeps running
+while the other song's Overview is browsed. Explicit Practice switches paused.
+Explicit source links and normal history traversal retain their source ownership.
+Unavailable-source recovery says "Open original/reference/latest take" rather
+than "Prepare". No model processing happens when opening a song.
+
+Regression evidence: desktop/phone cold entry displays six original stem lanes
+paused, reload stays paused, active playback survives song browsing, explicit
+Practice switches sources paused, and range/link ownership survives browsing.
+Rendered acceptance surface is the deployed private Bob-omb song URL without a
+play token; physical-phone and human usability judgment remain separate.

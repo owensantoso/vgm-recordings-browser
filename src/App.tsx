@@ -41,6 +41,7 @@ export function App() {
     section: new URL(location.href).searchParams.get("section"),
   });
   const [autoPlay, setAutoPlay] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
   const [playRequest, setPlayRequest] = useState(0);
   const [preferredMode, setPreferredMode] = useState<"audio" | "video" | undefined>();
   const [playbackRate, setPlaybackRate] = useState(1);
@@ -152,10 +153,30 @@ export function App() {
   }, [rows]);
   function navigate(view: View, song = "", session = "") {
     scrolls.current.set(routeKey, main.current?.scrollTop || 0);
-    const href = catalogHref(location.href, view, song, session);
+    const url = new URL(catalogHref(location.href, view, song, session));
+    if (view === "songs" && song && activeSong?.id !== song && isPlaying)
+      url.searchParams.set("tab", "overview");
+    const href = url.toString();
     history.pushState(null, "", href);
+    if (view === "songs" && song && activeSong?.id !== song && !isPlaying)
+      openSongSource(song);
     setBrowse(route(href));
   }
+  function openSongSource(songId: string) {
+    const references = catalog?.references.filter(ref => ref.song_id === songId) || [];
+    const reference = references.find(ref => ref.kind === "original") || references[0];
+    if (reference) {
+      select(`ref:${reference.id}`, false);
+      return;
+    }
+    const take = rows.filter(row => catalog?.recordings.some(link => link.song_id === songId && link.file === row.file))
+      .sort((a, b) => b.recorded_create_date.localeCompare(a.recorded_create_date))[0];
+    if (take) select(take.file, false);
+  }
+  useEffect(() => {
+    if (catalog && !loading && !selected && browse.view === "songs" && browse.song && browse.songTab === "practice")
+      openSongSource(browse.song);
+  }, [catalog, loading, selected, browse.view, browse.song, browse.songTab]);
   function searchFor(q: string) {
     if (!q.trim()) {
       if (browse.view === "search") clearSearch();
@@ -369,7 +390,9 @@ export function App() {
               practiceActive={Boolean(active && activeSong?.id === browse.song)} practiceHostRef={setPracticeHost}
               onTab={tab => {
                 const url = new URL(location.href); url.searchParams.set("tab", tab);
-                history.pushState(null, "", url); setBrowse(route(url.toString()));
+                history.pushState(null, "", url);
+                if (tab === "practice" && activeSong?.id !== browse.song) openSongSource(browse.song);
+                setBrowse(route(url.toString()));
               }} />
           ) : (
             <SongsPage {...props} />
@@ -406,6 +429,7 @@ export function App() {
             identity={{
               title: activeSong?.title,
               kind: refItem ? refItem.kind : "our take",
+              referenceLabel: refItem?.label,
               artist: refItem?.artist || "",
               songId: activeSong?.id || "",
               musicalKey: refItem
@@ -429,6 +453,7 @@ export function App() {
               setBrowse((current) => ({ ...current }));
             }}
             onVideoVisibility={setVideoOpen}
+            onPlayingChange={setIsPlaying}
             onSong={() => activeSong && navigate("songs", activeSong.id)}
           />
         ) : (

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { CSSProperties } from "react";
 import { AudioLines, Check, Copy, Drum, Guitar, MicVocal, Music2, Piano, Repeat2, Volume2, VolumeX, Headphones } from "lucide-react";
 import type { PracticeAnnotation, PracticeSection, PracticeSource } from "./practiceData";
 import type { StemMixValue } from "./StemMixer";
@@ -93,9 +94,11 @@ export function PracticeWorkspace(props: PracticeWorkspaceProps) {
       {tracks.map(track => {
         const value = mix[track.id] || { level: 1, muted: false, solo: false };
         const silenced = value.muted || (anySolo && !value.solo);
-        return <div className={`score-row instrument-lane${silenced ? " is-muted" : ""}`} key={track.id}>
+        const effectiveGain = props.stemsActive ? silenced ? 0 : Math.max(0, Math.min(2, value.level)) : 1;
+        const laneStyle = { "--waveform-opacity": .18 + .82 * Math.min(1, effectiveGain), "--waveform-brightness": 1 + Math.max(0, effectiveGain - 1) * .35, "--waveform-saturation": 1 + Math.max(0, effectiveGain - 1) * .3 } as CSSProperties;
+        return <div className={`score-row instrument-lane${silenced && props.stemsActive ? " is-muted" : ""}`} key={track.id} style={laneStyle} data-effective-gain={effectiveGain}>
           <div className="instrument-controls"><strong><InstrumentIcon label={track.label} />{track.label}</strong><div className="instrument-buttons"><button className="instrument-mute" title={`${value.muted ? "Unmute" : "Mute"} ${track.label}`} aria-label={`${value.muted ? "Unmute" : "Mute"} ${track.label}`} aria-pressed={value.muted} disabled={!props.stemsActive || !available} onClick={() => props.onMix(track.id, { ...value, muted: !value.muted })}>{value.muted ? <VolumeX size={16} /> : <Volume2 size={16} />}</button><button title={`Solo ${track.label}`} aria-label={`Solo ${track.label}`} aria-pressed={value.solo} disabled={!props.stemsActive || !available} onClick={() => props.onMix(track.id, { ...value, solo: !value.solo })}><Headphones size={16} /></button><InstrumentGain label={track.label} value={value.level} disabled={!props.stemsActive || !available} onChange={level => props.onMix(track.id, { ...value, level })} /><output>{Math.round(value.level * 100)}%</output></div></div>
-          <WaveformLane peaks={data?.waveforms?.tracks.find(wave => wave.id === track.id)?.peaks} duration={duration} time={time} range={range} repeat={repeat} muted={silenced} label={`${track.label} timeline`} onSeek={onSeek} disabled={!available} />
+          <WaveformLane peaks={data?.waveforms?.tracks.find(wave => wave.id === track.id)?.peaks} duration={duration} time={time} range={range} repeat={repeat} muted={silenced && props.stemsActive} label={`${track.label} timeline`} onSeek={onSeek} disabled={!available} />
         </div>;
       })}
     </div>

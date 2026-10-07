@@ -48,10 +48,54 @@ header contracts gently as the main pane scrolls with reduced-motion support;
 waveform brightness follows effective audible gain from 0–200%, keeping labels
 and controls legible and accounting for mute/solo.
 
-Model and recording UX remain proposed until Astra and a fresh reviewer examine
-the original request and existing implementation. First human gate is a real mic
-jam recording/replay, including acoustic latency/alignment judgment. Browser
-simulation alone will not establish that gate.
+The Astra proposal and independent adversarial review are complete. The accepted
+implementation contract below governs their differences; neither consultation is
+an implementation or human acceptance receipt. First human gate is a real mic jam
+at 0.75×, saved/reloaded/replayed, including acoustic latency and longer-take drift.
+Browser simulation alone will not establish that gate.
+
+## Accepted implementation contract — 7 October 2026
+
+- Reuse the private runtime and catalogue authorities; add bounded private jam
+  persistence and linked comments. Do not migrate existing reference/archive
+  recordings or expand the unrelated shared-core extraction.
+- Native MediaRecorder captures microphone input after explicit permission and
+  an honest three-second countdown. No capture during the countdown, automatic
+  permission request, live mic monitoring, or fabricated musical count-in.
+- Overdubs freeze the exact backing source/hash, original/stems mode, stem
+  revision and gains/mute/solo, range and fixed 0.5–2× speed. Instrument selection
+  can reference a source stem or a custom label without changing that mix.
+- Keep raw finalized mic audio and its measured duration independently from the
+  valid aligned mic/source interval. Alignment uses estimated audible media time
+  with provenance and manual ±2 real-second Earlier/Later correction; no sample
+  accuracy claim. A positive correction moves mic earlier by correction × rate
+  on the source clock. Never subtract the engine's output delay twice.
+- One pass, maximum 120 seconds / 32 MiB. Freeze transport/mix changes during
+  recording; Space/Pause stops. A stall, clock jump, hidden page or ended track
+  stops/finalizes raw audio rather than claiming alignment across a gap. Release
+  mic tracks on Stop/Cancel/error. Preserve natural codec/finalization tails.
+- Persist finalized drafts locally, with honest quota/error state and Download;
+  encoded unfinished fragments are preserved bytes, not guaranteed playable
+  recovery. Server saves are idempotent by capture ID, validate encoded audio
+  using existing local tooling, and retain drafts until durable save is confirmed.
+- Replay defaults to captured backing settings/rate, mic naturally at 1× and
+  independent mic gain. Alternate mix audition does not mutate the snapshot.
+  Missing backing revisions retain the association and permit mic-only playback
+  with a reason; never silently substitute a source or all-on mix.
+- Free jams belong to a song without alignment. Explicit existing-section
+  associations are independent of alignment. Comments target song or exact
+  reference/archive/jam recording with an optional point/range and instrument;
+  clocks are named and deep links prepare paused. Existing authored chords and
+  practice notes keep their own owner. Local displayed authors are unverified.
+- Accounts, public sharing, MIDI, variable-rate takes, multi-pass loops, trimming,
+  automatic latency calibration and guaranteed unfinished crash recovery are
+  deferred. Shared-context PCM becomes justified only if measured timing/drift
+  prevents useful replay after manual correction.
+
+References: JAM_DOMAIN_PROPOSAL.md, JAM_MODEL_REVIEW.md (including Opus addendum),
+and JAM_DESIGN_PROPOSAL.md. The first usable capture test precedes polishing, but
+free jams, section associations and range/instrument/archive comments remain in
+the full requested feature scope.
 
 ## Checkpoint before this feature
 

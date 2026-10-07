@@ -8,6 +8,7 @@ import { App } from "../src/App";
 // DOM lifecycle coverage; actual media/geometry is exercised in browser tests.
 test("one provider survives browsing and empty search, separate sources replace it", async () => {
   const dom = new JSDOM('<div id="root"></div>', {
+    pretendToBeVisual: true,
     url: "https://example.test/?session=2026-05-31-shimokitazawa-first-vgm-session#IMG_7796",
   });
   for (const key of [
@@ -166,10 +167,12 @@ test("one provider survives browsing and empty search, separate sources replace 
     assert.equal(audios.length, 1);
     assert.equal(audios[0].paused, false);
     await click('.workspace-nav a[href*="view=repertoire"]');
-    assert.match(
-      document.querySelector(".catalog-empty")!.textContent!,
-      /No repertoire selected/,
+    assert.deepEqual(
+      [...document.querySelectorAll('.song-list .song-row-copy > a')].map(node => node.textContent),
+      ['Dire, Dire Docks', 'When Mother Was There', 'You Will Know Our Names', 'Beneath the Mask', 'Splattack!', 'Champion & Red Battle', 'BOX 16'],
     );
+    assert.equal(document.querySelector('.catalog-empty'), null);
+    assert.match(document.querySelector('.song-list')!.textContent!, /Owen supplied the exact recording/);
     assert.equal(audios[0].paused, false);
     await act(async () => {
       const input = document.querySelector(
@@ -200,6 +203,24 @@ test("one provider survives browsing and empty search, separate sources replace 
     });
     assert.equal(document.querySelector(".mode-status")!.textContent, "Unavailable");
     assert.match(document.querySelector(".playback-error")!.textContent!, /Playback could not start/);
+    await click('.workspace-nav a[href*="view=songs"]');
+    await click('.song-list a[href*="song=vgm-meta-knights-revenge"]');
+    assert.equal(document.querySelector('.practice-prepare'), null);
+    assert.equal(new URL(location.href).searchParams.get('play'), 'ref:meta-knight-halberd-soundtrack');
+    assert.match(document.querySelector('.practice-reference-label')!.textContent!, /Halberd ~ Nightmare Warship/);
+    await click('.song-tabs button:nth-child(2)');
+    const cueButtons = [...document.querySelectorAll('.reference-card button')];
+    const cueNames = cueButtons.map(button => button.getAttribute('aria-label'));
+    assert.equal(new Set(cueNames).size, cueNames.length, 'source cues have distinct accessible names');
+    const themeLabel = "Kirby Super Star original source cue · Meta Knight's Theme · fan upload";
+    const themeButton = cueButtons.find(button => button.getAttribute('aria-label') === `Play original of Meta Knight's Revenge · ${themeLabel}`);
+    assert.ok(themeButton, 'exact cue is available by name');
+    await act(async () => { (themeButton as HTMLElement).click(); await settle(); });
+    assert.equal(new URL(location.href).searchParams.get('play'), 'ref:meta-knight-theme-soundtrack');
+    assert.equal(document.querySelector('.player-game')!.textContent, themeLabel);
+    await click('.song-tabs button:first-child');
+    assert.equal(document.querySelector('.practice-reference-label')!.textContent, `Source: ${themeLabel}`);
+    assert.equal(document.querySelector('.practice-source-detail dd')!.textContent, themeLabel);
     await act(async () => root.unmount());
     assert.equal(players[0].destroyed, true);
   } finally {
