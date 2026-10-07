@@ -117,15 +117,16 @@ the full requested feature scope.
 
 ## Live frontier / ownership
 
-1. Finish disabled-Play diagnosis and checkpoint scoped completed work.
-2. Astra: minimal domain model, recording synchronization and storage contracts.
-3. Design worker: artwork/header/gain feedback, bounded Opus consultation.
-4. Fresh adversarial review of model against verbatim request before implementing
-   capture/persistence and synced jam playback.
-5. Implement a microphone vertical slice, then notes/linking; review contract
-   compliance and code, commit independently useful slices, create/update draft PR.
-6. Actual private deployment plus desktop/phone browser checks; request the
-   smallest real mic acceptance packet only after the path is usable.
+Capture/persistence/comments implementation is committed at c1d63d1, independently
+of the preserved shared-core experiment. Astra/Opus consultation and independent
+model/code review are complete. See JAMS.md and VALIDATION-JAMS-2026-10-07.md.
+
+1. The complete staged checks and final focused regressions passed.
+2. The private durable runtime/artifact is deployed and verified at desktop/375px.
+3. Publish/update the existing owned draft PR with the final checkpoint receipts.
+4. Remaining acceptance: a real headphones/mic take, save/reload/replay with the
+   captured mix, manual timing judgment and longer-take drift. The runnable UI
+   packet uses0.8× because the first-class speed control has0.1× steps.
 
 Capture permission remains user-owned: do not select an OS privacy picker resource,
 record silently, or synthesize microphone approval. Existing backing assets remain
