@@ -61,3 +61,14 @@ Accounts/MIDI, timed archive audio receipts and unfinished crash recovery remain
 explicitly deferred in `JAMS.md`. Archive comments currently support untimed notes.
 Keep this draft PR pending the real mic verdict. Main stays unchanged; the dirty
 shared-core experiment remains preserved and unintegrated in this worktree.
+
+## Generated-asset correction
+
+GitHub run37611215402 passed all tests/build on Linux, then rejected the stale
+committed assets/app.css in its existing rebuild-freshness check. Root had staged
+only the rebuilt JavaScript while isolating the unrelated shared-core experiment.
+The deployed private build already included the correct stylesheet. The correction
+compares every tracked emitted asset against the verified build, stages the missing
+CSS and retains the unrelated working JavaScript. Source behavior is unchanged;
+all emitted asset comparisons pass. The published successor check remains the
+final generated-output gate.
